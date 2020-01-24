@@ -37,7 +37,6 @@ tf_cc_test(
         "//tensorflow/lite:framework",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
     ],
@@ -74,7 +73,6 @@ cc_library(
         "//tensorflow/lite/schema:schema_fbs",
         "//third_party/eigen3",
         "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -145,7 +143,6 @@ tf_cc_test(
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/testing:util",
         "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
     ],
@@ -159,7 +156,6 @@ cc_library(
         ":quantization_utils",
         ":model_utils",
         "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/container:flat_hash_map",
         "@flatbuffers",
         "//tensorflow/lite:framework",
