@@ -501,6 +501,7 @@ bool IsWhiteListedOpTypeForEvaluateNode(const string& op_type) {
           "Sign",
           // Binary arithmetic ops
           "Add",
+          "AddV2",
           "Div",
           "FloorDiv",
           "FloorMod",
@@ -1167,7 +1168,7 @@ class SymbolicShapeRefiner {
     std::vector<ShapeHandle> input_tensors_as_shapes;
 
     node_ctx.inference_context.reset(new InferenceContext(
-        graph_def_version_, node, node_ctx.op_data->op_def, input_shapes,
+        graph_def_version_, *node, node_ctx.op_data->op_def, input_shapes,
         input_tensors, input_tensors_as_shapes,
         std::move(input_handle_shapes_and_types)));
     const Status s = node_ctx.inference_context->construction_status();
@@ -1910,7 +1911,7 @@ Status GraphProperties::UpdateMerge(SymbolicShapeRefiner* shape_refiner,
     // Infer the shape of the second output once and for all since it never
     // changes.
     ShapeHandle out1 = ic->Scalar();
-    ic->set_output(1, out1);
+    if (ic->num_outputs() >= 2) ic->set_output(1, out1);
   }
 
   ShapeHandle out;

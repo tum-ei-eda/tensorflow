@@ -259,13 +259,11 @@ def embedding_lookup(
     max_norm=None):
   """Looks up `ids` in a list of embedding tensors.
 
-  This function is used to perform parallel lookups on the list of
-  tensors in `params`.  It is a generalization of
-  `tf.gather`, where `params` is
+  This function is used to perform parallel lookups on the list of tensors in
+  `params`.  It is a generalization of `tf.gather`, where `params` is
   interpreted as a partitioning of a large embedding tensor.  `params` may be
   a `PartitionedVariable` as returned by using `tf.compat.v1.get_variable()`
-  with a
-  partitioner.
+  with a partitioner.
 
   If `len(params) > 1`, each element `id` of `ids` is partitioned between
   the elements of `params` according to the `partition_strategy`.
@@ -520,13 +518,13 @@ def embedding_lookup_sparse(params,
       elif combiner == "mean":
         embeddings = math_ops.segment_sum(embeddings, segment_ids)
         weight_sum = math_ops.segment_sum(weights, segment_ids)
-        embeddings = math_ops.div(embeddings, weight_sum, name=name)
+        embeddings = math_ops.divide(embeddings, weight_sum, name=name)
       elif combiner == "sqrtn":
         embeddings = math_ops.segment_sum(embeddings, segment_ids)
         weights_squared = math_ops.pow(weights, 2)
         weight_sum = math_ops.segment_sum(weights_squared, segment_ids)
         weight_sum_sqrt = math_ops.sqrt(weight_sum)
-        embeddings = math_ops.div(embeddings, weight_sum_sqrt, name=name)
+        embeddings = math_ops.divide(embeddings, weight_sum_sqrt, name=name)
       else:
         assert False, "Unrecognized combiner"
     else:

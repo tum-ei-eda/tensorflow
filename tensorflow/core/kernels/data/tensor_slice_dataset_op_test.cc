@@ -15,6 +15,7 @@ limitations under the License.
 #include "tensorflow/core/kernels/data/tensor_slice_dataset_op.h"
 
 #include "tensorflow/core/kernels/data/dataset_test_base.h"
+#include "tensorflow/core/kernels/data/dataset_utils.h"
 
 namespace tensorflow {
 namespace data {
@@ -22,7 +23,7 @@ namespace {
 
 constexpr char kNodeName[] = "tensor_slice_dataset";
 
-class TensorSliceDatasetOpTest : public DatasetOpsTestBaseV2 {};
+class TensorSliceDatasetOpTest : public DatasetOpsTestBase {};
 
 TensorSliceDatasetParams PlainTensorSliceDatasetParams() {
   std::vector<Tensor> components = {
@@ -99,10 +100,9 @@ TEST_P(ParameterizedGetNextTest, GetNext) {
   auto test_case = GetParam();
   TF_ASSERT_OK(Initialize(test_case.dataset_params));
 
-  std::vector<string> input_placeholder;
-  TF_ASSERT_OK(
-      test_case.dataset_params.GetInputPlaceholder(&input_placeholder));
-  size_t num_tensors_per_slice = input_placeholder.size();
+  std::vector<string> input_names;
+  TF_ASSERT_OK(test_case.dataset_params.GetInputNames(&input_names));
+  size_t num_tensors_per_slice = input_names.size();
   bool end_of_sequence = false;
   std::vector<Tensor> out_tensors;
   int cur_slice = 0;
@@ -267,10 +267,10 @@ TEST_P(ParameterizedIteratorSaveAndRestoreTest, SaveAndRestore) {
   int cur_iteration = 0;
   bool end_of_sequence = false;
 
-  gtl::InlinedVector<TensorValue, 4> inputs;
-  TF_ASSERT_OK(test_case.dataset_params.GetInputs(&inputs));
-  int64 num_slices = inputs[0].tensor->dim_size(0);
-  size_t num_tensors_per_slice = inputs.size();
+  auto params =
+      static_cast<TensorSliceDatasetParams&>(test_case.dataset_params);
+  int64 num_slices = params.num_slices();
+  size_t num_tensors_per_slice = params.num_tensors_per_slice();
   std::vector<Tensor> out_tensors;
   const std::vector<int>& breakpoints = test_case.breakpoints;
   for (int breakpoint : breakpoints) {
@@ -305,11 +305,11 @@ TEST_P(ParameterizedIteratorSaveAndRestoreTest, SaveAndRestore) {
       EXPECT_TRUE(end_of_sequence);
     }
 
-    VariantTensorData data;
-    VariantTensorDataWriter writer(&data);
+    VariantTensorDataWriter writer;
     TF_ASSERT_OK(iterator_->Save(serialization_context.get(), &writer));
-    TF_ASSERT_OK(writer.Flush());
-    VariantTensorDataReader reader(&data);
+    std::vector<const VariantTensorData*> data;
+    writer.GetData(&data);
+    VariantTensorDataReader reader(data);
     TF_EXPECT_OK(RestoreIterator(iterator_ctx_.get(), &reader, "Iterator",
                                  *dataset_, &iterator_));
   }

@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/core/kernels/data/rewrite_utils.h"
 
 #include "tensorflow/core/common_runtime/graph_runner.h"
+#include "tensorflow/core/common_runtime/metrics.h"
 #include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/function.h"
 #include "tensorflow/core/framework/op_def_util.h"
@@ -30,6 +31,7 @@ limitations under the License.
 #include "tensorflow/core/grappler/optimizers/data/graph_utils.h"
 #include "tensorflow/core/grappler/optimizers/meta_optimizer.h"
 #include "tensorflow/core/kernels/data/dataset_utils.h"
+#include "tensorflow/core/kernels/data/serialization_utils.h"
 #include "tensorflow/core/lib/core/errors.h"
 #include "tensorflow/core/lib/hash/hash.h"
 #include "tensorflow/core/lib/strings/proto_serialization.h"
@@ -141,14 +143,16 @@ Status ApplyRewrites(OpKernelContext* ctx,
 
 Status RewriteDataset(OpKernelContext* ctx, const DatasetBase* input,
                       std::function<RewriterConfig(void)> config_factory,
-                      bool optimize_function_library,
+                      bool optimize_function_library, bool record_fingerprint,
                       DatasetBase** rewritten_input) {
   SerializationContext::Params params;
   std::vector<std::pair<string, Tensor>> input_list;
   params.input_list = &input_list;
-  params.check_external_state = false;
+  params.external_state_policy =
+      SerializationContext::ExternalStatePolicy::kIgnore;
   params.fail_if_unimplemented = false;
   params.serialize_data_tensors = false;
+  params.preserve_random_seeds = false;
   SerializationContext serialization_ctx(params);
   GraphDef graph_def;
   TF_RETURN_IF_ERROR(
@@ -175,9 +179,8 @@ Status RewriteDataset(OpKernelContext* ctx, const DatasetBase* input,
   TF_RETURN_IF_ERROR(
       ctx->function_library()->Clone(&lib_def, &pflr, &flr, true));
 
-  // Some functions may have been modified without having their names
-  // changed (for example, nested dataset graphs from FlatMap or
-  // Interleave).
+  // Some functions may have been modified without having their names changed
+  // (for example, nested dataset graphs from FlatMap or Interleave).
   TF_RETURN_IF_ERROR(AddToFunctionLibrary(lib_def.get(), graph_def.library()));
 
   Graph graph(OpRegistry::Global());
@@ -189,6 +192,42 @@ Status RewriteDataset(OpKernelContext* ctx, const DatasetBase* input,
       graph_runner.Run(&graph, flr, input_list, {output_node}, &outputs));
   TF_RETURN_IF_ERROR(GetDatasetFromVariantTensor(outputs[0], rewritten_input));
   (*rewritten_input)->Ref();
+
+  if (record_fingerprint) {
+    (*ctx->runner())([graph_def = std::move(graph_def),
+                      input_list = std::move(input_list),
+                      output_node = std::move(output_node)]() {
+      const NodeDef* node_def = nullptr;
+      for (const auto& node : graph_def.node()) {
+        if (node.name() == output_node) {
+          node_def = &node;
+        }
+      }
+      if (node_def == nullptr) {
+        VLOG(3) << "Failed to find node: " << output_node;
+      }
+      uint64 hash = 0;
+      Status s = HashNode(graph_def, *node_def, &hash);
+      if (!s.ok()) {
+        VLOG(3) << "Failed to hash graph: " << s.ToString();
+        return;
+      }
+      for (const auto& pair : input_list) {
+        hash = Hash64CombineUnordered(hash, Hash64(pair.first));
+        uint64 tensor_hash = 0;
+        Status s = HashTensor(pair.second, &tensor_hash);
+        if (s.ok()) {
+          hash = Hash64CombineUnordered(hash, tensor_hash);
+        } else {
+          VLOG(3) << "Failed to hash tensor: " << s.ToString();
+        }
+      }
+      string graph_hash =
+          strings::StrCat(strings::Hex(hash, strings::kZeroPad16));
+      metrics::RecordTFDataFingerprint(graph_hash);
+    });
+  }
+
   return Status::OK();
 }
 
