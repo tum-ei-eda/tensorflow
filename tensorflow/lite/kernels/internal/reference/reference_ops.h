@@ -341,7 +341,7 @@ inline void L2Normalization(const tflite::L2NormalizationParams& op_params,
       int32 rescaled_diff = MultiplyByQuantizedMultiplierSmallerThanOneExp(
           128 * diff, inv_l2norm_multiplier, inv_l2norm_shift);
       int32 unclamped_output_val = 128 + rescaled_diff;
-      int32 output_val = std::min(255, std::max(0, unclamped_output_val));
+      int32 output_val = std::min((int32)255, std::max((int32)0, unclamped_output_val));
       output_data[depth * i + c] = static_cast<uint8>(output_val);
     }
   }
@@ -1094,10 +1094,10 @@ void PackWithScaling(const PackParams& params,
         auto input_ptr = input_data[i];
         for (int j = 0; j < copy_size; ++j) {
           const int32_t value =
-              static_cast<int32_t>(std::round(input_ptr[j] * scale + bias)) +
+              static_cast<int32_t>(::round(input_ptr[j] * scale + bias)) +
               output_zeropoint;
           output_ptr[j] =
-              static_cast<uint8_t>(std::max(std::min(255, value), 0));
+              static_cast<uint8_t>(std::max(std::min((int32)255, value), (int32)0));
         }
       }
       output_ptr += copy_size;
@@ -1430,7 +1430,7 @@ inline void LstmCell(const LstmCellParams& params,
       accum =
           MultiplyByQuantizedMultiplier(accum, accum_multiplier, accum_shift);
       // Saturate, cast to int16, and store to the temporary activations array.
-      accum = std::max(-32768, std::min(32767, accum));
+      accum = std::max((int32)-32768, std::min((int32)32767, accum));
       activ_temp_data_int16[out_c + fc_output_depth * b] = accum;
     }
   }
@@ -1569,8 +1569,8 @@ inline void LocalResponseNormalization(
 
   for (int i = 0; i < outer_size; ++i) {
     for (int c = 0; c < depth; ++c) {
-      const int begin_input_c = std::max(0, c - op_params.range);
-      const int end_input_c = std::min(depth, c + op_params.range);
+      const int begin_input_c = std::max((int32)0, c - op_params.range);
+      const int end_input_c = std::min((int32)depth, c + op_params.range);
       float accum = 0.f;
       for (int input_c = begin_input_c; input_c < end_input_c; ++input_c) {
         const float input_val = input_data[i * depth + input_c];
@@ -1676,7 +1676,7 @@ inline void LogSoftmax(const SoftmaxParams& params,
     const int rescaled_diff_min =
         fixed_log_sum_of_exps + std::numeric_limits<int32>::lowest();
     const int adjusted_diff_min =
-        std::max(diff_min - 1,  // Note use of > below instead of >= above.
+        std::max((int32)diff_min - 1,  // Note use of > below instead of >= above.
                  MultiplyByQuantizedMultiplierSmallerThanOneExp(
                      rescaled_diff_min, reverse_scaling_divisor,
                      -reverse_scaling_right_shift));
@@ -1695,7 +1695,7 @@ inline void LogSoftmax(const SoftmaxParams& params,
             255;
 
         output_data[i * depth + c] = static_cast<uint8>(
-            std::max(std::min(unsat_output, static_cast<int32>(255)), 0));
+            std::max(std::min(unsat_output, static_cast<int32>(255)), (int32)0));
       } else {
         // Set output to smallest value.
         output_data[i * depth + c] = 0;

@@ -276,8 +276,8 @@ inline void Mean(const tflite::MeanParams& op_params,
   TFLITE_CHECK_EQ(output_height, 1);
   TFLITE_CHECK_EQ(output_width, 1);
 
-  constexpr int32_t kMinValue = std::numeric_limits<uint8_t>::min();
-  constexpr int32_t kMaxValue = std::numeric_limits<uint8_t>::max();
+  constexpr int kMinValue = std::numeric_limits<uint8_t>::min();
+  constexpr int kMaxValue = std::numeric_limits<uint8_t>::max();
 
   int32 bias =
       output_zero_point -
@@ -285,7 +285,7 @@ inline void Mean(const tflite::MeanParams& op_params,
   float real_scale = input_scale / (num_elements_in_axis * output_scale);
 
   int32 multiplier, shift;
-  QuantizeMultiplier(real_scale, &multiplier, &shift);
+  QuantizeMultiplier(real_scale, &multiplier, (int*)&shift);
   for (int out_b = 0; out_b < output_batch; ++out_b) {
     for (int out_d = 0; out_d < output_depth; ++out_d) {
       int acc = 0;
@@ -368,7 +368,7 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
       const float bias = -input_zero_point * scale * num_elements_in_axis + 0.5;
       for (size_t idx = 0; idx < num_outputs; ++idx) {
         const U value =
-            static_cast<U>(std::round(temp_sum[idx] * scale + bias)) +
+            static_cast<U>(::round(temp_sum[idx] * scale + bias)) +
             output_zero_point;
         output_data[idx] = static_cast<T>(value);
       }
@@ -378,7 +378,7 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
         float float_mean = static_cast<float>(temp_sum[idx]) /
                            static_cast<float>(num_elements_in_axis);
         float result =
-            std::min(std::round(float_mean * scale + bias) + output_zero_point,
+            std::min((float)::round(float_mean * scale + bias) + output_zero_point,
                      static_cast<float>(std::numeric_limits<T>::max()));
         result =
             std::max(result, static_cast<float>(std::numeric_limits<T>::min()));

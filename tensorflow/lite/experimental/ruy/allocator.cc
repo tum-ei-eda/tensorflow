@@ -22,6 +22,10 @@ limitations under the License.
 #include <malloc.h>
 #endif
 
+extern "C" {
+int posix_memalign(void **, size_t, size_t);
+}
+
 namespace ruy {
 
 namespace detail {
