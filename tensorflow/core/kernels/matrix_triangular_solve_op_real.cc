@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors All Rights Reserved.
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,23 +13,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_CORE_PROFILER_RPC_CLIENT_TRACE_EVENTS_TO_JSON_H_
-#define TENSORFLOW_CORE_PROFILER_RPC_CLIENT_TRACE_EVENTS_TO_JSON_H_
+#include "tensorflow/core/kernels/matrix_triangular_solve_op_impl.h"
 
-#include "tensorflow/core/platform/types.h"
-#include "tensorflow/core/protobuf/trace_events.pb.h"
+#if GOOGLE_CUDA
+#include "third_party/gpus/cuda/include/cuda.h"
+#endif  // GOOGLE_CUDA
 
 namespace tensorflow {
 
-namespace profiler {
-namespace client {
+TF_CALL_float(REGISTER_BATCH_MATRIX_TRIANGULAR_SOLVE_CPU);
+TF_CALL_double(REGISTER_BATCH_MATRIX_TRIANGULAR_SOLVE_CPU);
 
-// Converts trace events in the trace proto to a JSON string that can be
-// consumed by catapult trace viewer.
-string TraceEventsToJson(const Trace &trace);
+#if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+TF_CALL_float(REGISTER_BATCH_MATRIX_TRIANGULAR_SOLVE_GPU);
+TF_CALL_double(REGISTER_BATCH_MATRIX_TRIANGULAR_SOLVE_GPU);
+#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
-}  // namespace client
-}  // namespace profiler
 }  // namespace tensorflow
-
-#endif  // TENSORFLOW_CORE_PROFILER_RPC_CLIENT_TRACE_EVENTS_TO_JSON_H_

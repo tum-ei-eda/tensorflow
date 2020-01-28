@@ -77,6 +77,9 @@ const HostEventTypeMap& GetHostEventTypeMap() {
       {"WhileOp-StartBody", kWhileOpStartBody},
       {"ForOp", kForOp},
       {"PartitionedCallOp", kPartitionedCallOp},
+      // GPU related.
+      {"KernelLaunch", kKernelLaunch},
+      {"KernelExecute", kKernelExecute},
   });
   DCHECK_EQ(host_event_type_map->size(), kNumHostEventTypes);
   return *host_event_type_map;
@@ -113,6 +116,7 @@ const StatTypeMap& GetStatTypeMap() {
       {"memcpy_details", kMemcpyDetails},
       {"memalloc_details", kMemallocDetails},
       {"kernel_details", kKernelDetails},
+      {"annotation", kKernelAnnotation},
       {"stream", kStream},
       // Stats added when processing traces.
       {"group_id", kGroupId},
