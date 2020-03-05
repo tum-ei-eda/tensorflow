@@ -112,7 +112,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
 
     Status Initialize(IteratorContext* ctx) override {
       TF_RETURN_IF_ERROR(
-          dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_));
+          dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
       return dataset()->captured_func_->Instantiate(
           ctx, &instantiated_captured_func_);
     }
@@ -127,7 +127,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
           return Status::OK();
         }
         if (current_element_iterator_) {
-          // We are currently precessing a mapped element, so try to get the
+          // We are currently processing a mapped element, so try to get the
           // next subelement.
           bool end_of_element;
           TF_RETURN_IF_ERROR(current_element_iterator_->GetNext(
@@ -163,6 +163,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
     }
 
     Status SaveInternal(IteratorStateWriter* writer) override {
+      TF_RETURN_IF_ERROR(dataset()->captured_func_->CheckExternalState());
       mutex_lock l(mu_);
       if (input_impl_) {
         TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
@@ -197,7 +198,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
       captured_func_inputs_.clear();
       if (!reader->Contains(full_name(kExhausted))) {
         TF_RETURN_IF_ERROR(
-            dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_));
+            dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
         TF_RETURN_IF_ERROR(RestoreInput(ctx, reader, input_impl_));
         {
           int64 temp;
@@ -234,7 +235,7 @@ class FlatMapDatasetOp::Dataset : public DatasetBase {
     Status BuildCurrentElementIteratorLocked(IteratorContext* ctx)
         EXCLUSIVE_LOCKS_REQUIRED(mu_) {
       return MakeIteratorFromInputElement(
-          ctx, captured_func_inputs_, element_index_++,
+          ctx, this, captured_func_inputs_, element_index_++,
           *instantiated_captured_func_, prefix(), &current_element_iterator_);
     }
 

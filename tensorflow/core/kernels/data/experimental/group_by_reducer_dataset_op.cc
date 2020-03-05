@@ -201,7 +201,7 @@ class GroupByReducerDatasetOp : public UnaryDatasetOpKernel {
 
       Status Initialize(IteratorContext* ctx) override {
         TF_RETURN_IF_ERROR(
-            dataset()->input_->MakeIterator(ctx, prefix(), &input_impl_));
+            dataset()->input_->MakeIterator(ctx, this, prefix(), &input_impl_));
         TF_RETURN_IF_ERROR(dataset()->captured_key_func_->Instantiate(
             ctx, &instantiated_key_func_));
         TF_RETURN_IF_ERROR(dataset()->captured_init_func_->Instantiate(
@@ -285,6 +285,13 @@ class GroupByReducerDatasetOp : public UnaryDatasetOpKernel {
       }
 
       Status SaveInternal(IteratorStateWriter* writer) override {
+        TF_RETURN_IF_ERROR(dataset()->captured_key_func_->CheckExternalState());
+        TF_RETURN_IF_ERROR(
+            dataset()->captured_init_func_->CheckExternalState());
+        TF_RETURN_IF_ERROR(
+            dataset()->captured_reduce_func_->CheckExternalState());
+        TF_RETURN_IF_ERROR(
+            dataset()->captured_finalize_func_->CheckExternalState());
         mutex_lock l(mu_);
         TF_RETURN_IF_ERROR(SaveInput(writer, input_impl_));
 
