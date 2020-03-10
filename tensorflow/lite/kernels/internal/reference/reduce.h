@@ -298,7 +298,7 @@ inline void Mean(const tflite::MeanParams& op_params,
       }
       acc = MultiplyByQuantizedMultiplier(acc, multiplier, shift);
       acc += bias;
-      acc = std::min(std::max(acc, kMinValue), kMaxValue);
+      acc = std::min(std::max((int)acc, kMinValue), kMaxValue);
       output_data[Offset(output_shape, out_b, 0, 0, out_d)] =
           static_cast<uint8_t>(acc);
     }
