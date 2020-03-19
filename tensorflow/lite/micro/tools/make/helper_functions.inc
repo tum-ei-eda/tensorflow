@@ -9,10 +9,10 @@ getmacros = $(patsubst -D%,%,$(filter -D%,$(sort $(filter -D%, $(1)) $(filter -D
 # implementations with, given a tag. These are expected to occur in subfolders
 # of a directory where a reference implementation exists, and have the same
 # interface and header file. For example,
-# tensorflow/lite/micro/examples/micro_speech/audio_provider.cc
+# $(EXAMPLES_DIR)/micro_speech/audio_provider.cc
 # defines a module for supplying audio data, but since no platform or OS can be
 # presumed, it just always returns zeroes for its samples. The MacOS-specific
-# tensorflow/lite/micro/examples/micro_speech/osx/audio_provider.cc
+# $(EXAMPLES_DIR)/micro_speech/osx/audio_provider.cc
 # has an implementation that relies on CoreAudio, and there are equivalent
 # versions for other operating systems.
 # The specific implementation yielded by the first tag in the list that produces
@@ -72,11 +72,11 @@ $(PRJDIR)$(3)/$(1)/%: % third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(3)/$(1)/third_party/%: tensorflow/lite/micro/tools/make/downloads/% third_party_downloads
+$(PRJDIR)$(3)/$(1)/third_party/%: $(MAKEFILE_DIR)/downloads/% third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(3)/$(1)/%: tensorflow/lite/micro/tools/make/templates/%.tpl
+$(PRJDIR)$(3)/$(1)/%: $(MAKEFILE_DIR)/templates/%.tpl
 	@mkdir -p $$(dir $$@)
 	@sed -E 's#\%\{SRCS\}\%#$(4)#g' $$< | \
 	sed -E 's#\%\{EXECUTABLE\}\%#$(3)#g' | \
@@ -84,13 +84,13 @@ $(PRJDIR)$(3)/$(1)/%: tensorflow/lite/micro/tools/make/templates/%.tpl
 	sed -E 's#\%\{CXX_FLAGS\}\%#$(7)#g' | \
 	sed -E 's#\%\{CC_FLAGS\}\%#$(8)#g' > $$@
 
-$(PRJDIR)$(3)/$(1)/keil_project.uvprojx: tensorflow/lite/micro/tools/make/templates/keil_project.uvprojx.tpl
+$(PRJDIR)$(3)/$(1)/keil_project.uvprojx: $(MAKEFILE_DIR)/templates/keil_project.uvprojx.tpl
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/generate_keil_project.py \
+	@python $(MAKEFILE_DIR)/generate_keil_project.py \
         --input_template=$$< --output_file=$$@ --executable=$(3) \
         --srcs="$(4)" --hdrs="$(5)" --include_paths="$$(PROJECT_INCLUDES)"
 
-$(PRJDIR)$(3)/$(1)/.vscode/tasks.json : tensorflow/lite/micro/tools/make/templates/tasks.json.$(1).tpl
+$(PRJDIR)$(3)/$(1)/.vscode/tasks.json : $(MAKEFILE_DIR)/templates/tasks.json.$(1).tpl
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
@@ -125,7 +125,7 @@ endef
 define generate_arc_project
 
 ifeq ($(TARGET_ARCH), arc)
-$(PRJDIR)$(3)/$(1)/Makefile: tensorflow/lite/micro/tools/make/templates/Makefile.tpl
+$(PRJDIR)$(3)/$(1)/Makefile: $(MAKEFILE_DIR)/templates/Makefile.tpl
 	@mkdir -p $$(dir $$@)
 	@sed -E 's#\%\{SRCS\}\%#$(4)#g' $$< | \
 	sed -E '1 i\CC = ccac\nCXX = ccac\nLD = ccac\n' | \
@@ -157,25 +157,25 @@ endef
 # can invoke to create the standalone project.
 define generate_arduino_project
 
-$(PRJDIR)$(2)/arduino/examples/%.cpp: tensorflow/lite/micro/examples/%.cc
+$(PRJDIR)$(2)/arduino/examples/%.cpp: $(EXAMPLES_DIR)/%.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_source \
         --source_path="$$<" \
         --third_party_headers="$(4)" < $$< > $$@
 
-$(PRJDIR)$(2)/arduino/examples/%.h: tensorflow/lite/micro/examples/%.h
+$(PRJDIR)$(2)/arduino/examples/%.h: $(EXAMPLES_DIR)/%.h
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_source \
         --source_path="$$<" \
         --third_party_headers="$(4)" < $$< > $$@
 
-$(PRJDIR)$(2)/arduino/examples/%/main.ino: tensorflow/lite/micro/examples/%/main_functions.cc
+$(PRJDIR)$(2)/arduino/examples/%/main.ino: $(EXAMPLES_DIR)/%/main_functions.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_ino \
         --source_path="$$<" \
@@ -183,13 +183,13 @@ $(PRJDIR)$(2)/arduino/examples/%/main.ino: tensorflow/lite/micro/examples/%/main
 
 $(PRJDIR)$(2)/arduino/src/%.cpp: %.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< > $$@
 
 $(PRJDIR)$(2)/arduino/src/%.h: %.h third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< > $$@
 
@@ -199,37 +199,37 @@ $(PRJDIR)$(2)/arduino/LICENSE: LICENSE
 
 $(PRJDIR)$(2)/arduino/src/%: % third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< > $$@
 
-$(PRJDIR)$(2)/arduino/src/third_party/%: tensorflow/lite/micro/tools/make/downloads/% third_party_downloads
+$(PRJDIR)$(2)/arduino/src/third_party/%: $(MAKEFILE_DIR)/downloads/% third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< > $$@
 
-$(PRJDIR)$(2)/arduino/src/third_party/%.cpp: tensorflow/lite/micro/tools/make/downloads/%.cc third_party_downloads
+$(PRJDIR)$(2)/arduino/src/third_party/%.cpp: $(MAKEFILE_DIR)/downloads/%.cc third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< > $$@
 
-$(PRJDIR)$(2)/arduino/src/third_party/flatbuffers/include/flatbuffers/base.h: tensorflow/lite/micro/tools/make/downloads/flatbuffers/include/flatbuffers/base.h third_party_downloads
+$(PRJDIR)$(2)/arduino/src/third_party/flatbuffers/include/flatbuffers/base.h: $(MAKEFILE_DIR)/downloads/flatbuffers/include/flatbuffers/base.h third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< | \
         sed -E 's/utility\.h/utility/g' > $$@
 
-$(PRJDIR)$(2)/arduino/src/third_party/kissfft/kiss_fft.h: tensorflow/lite/micro/tools/make/downloads/kissfft/kiss_fft.h third_party_downloads
+$(PRJDIR)$(2)/arduino/src/third_party/kissfft/kiss_fft.h: $(MAKEFILE_DIR)/downloads/kissfft/kiss_fft.h third_party_downloads
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --third_party_headers="$(4)" < $$< | \
         sed -E 's@#include <string.h>@//#include <string.h> /* Patched by helper_functions.inc for Arduino compatibility */@g' > $$@
 
-$(PRJDIR)$(2)/arduino/%: tensorflow/lite/micro/tools/make/templates/%
+$(PRJDIR)$(2)/arduino/%: $(MAKEFILE_DIR)/templates/%
 	@mkdir -p $$(dir $$@)
 	@sed -E 's#\%\{SRCS\}\%#$(3)#g' $$< | \
 	sed -E 's#\%\{EXECUTABLE\}\%#$(2)#g' | \
@@ -237,11 +237,11 @@ $(PRJDIR)$(2)/arduino/%: tensorflow/lite/micro/tools/make/templates/%
 	sed -E 's#\%\{CXX_FLAGS\}\%#$(6)#g' | \
 	sed -E 's#\%\{CC_FLAGS\}\%#$(7)#g' > $$@
 
-$(PRJDIR)$(2)/arduino/examples/$(2)/$(2).ino: tensorflow/lite/micro/tools/make/templates/arduino_example.ino
+$(PRJDIR)$(2)/arduino/examples/$(2)/$(2).ino: $(MAKEFILE_DIR)/templates/arduino_example.ino
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/arduino/src/TensorFlowLite.h: tensorflow/lite/micro/tools/make/templates/TensorFlowLite.h
+$(PRJDIR)$(2)/arduino/src/TensorFlowLite.h: $(MAKEFILE_DIR)/templates/TensorFlowLite.h
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
@@ -253,19 +253,19 @@ $(addprefix $(PRJDIR)$(2)/arduino/,         \
 $(patsubst tensorflow/%,src/tensorflow/%,\
 $(patsubst examples/%/main_functions.cpp,examples/%/main.ino,\
 $(patsubst examples/%_test.cpp,examples/%_test.ino,\
-$(patsubst tensorflow/lite/micro/examples/%,examples/%,\
+$(patsubst $(EXAMPLES_DIR)/%,examples/%,\
 $(patsubst third_party/%,src/third_party/%,\
 $(patsubst %.cc,%.cpp,$(3))))))))                                     \
 $(addprefix $(PRJDIR)$(2)/arduino/, \
 $(patsubst tensorflow/%,src/tensorflow/%,\
-$(patsubst tensorflow/lite/micro/examples/%,examples/%,\
+$(patsubst $(EXAMPLES_DIR)/%,examples/%,\
 $(patsubst third_party/%,src/third_party/%,$(4))))) \
 $(addprefix $(PRJDIR)$(2)/arduino/,$(1)) \
 $(PRJDIR)$(2)/arduino/src/TensorFlowLite.h
 
 generate_$(2)_arduino_library_zip: generate_$(2)_arduino_project
 	cp -r $(PRJDIR)$(2)/arduino $(PRJDIR)$(2)/tensorflow_lite
-	python tensorflow/lite/micro/tools/make/fix_arduino_subfolders.py $(PRJDIR)$(2)/tensorflow_lite
+	python $(MAKEFILE_DIR)/fix_arduino_subfolders.py $(PRJDIR)$(2)/tensorflow_lite
 	@cd $(PRJDIR)$(2) && zip -q -r tensorflow_lite.zip tensorflow_lite
 
 ALL_PROJECT_TARGETS += $(if $(findstring _test,$(2)),,generate_$(2)_arduino_library_zip)
@@ -293,27 +293,27 @@ $(PRJDIR)$(2)/esp-idf/LICENSE: LICENSE
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/esp-idf/%: tensorflow/lite/micro/examples/$(2)/esp/%
+$(PRJDIR)$(2)/esp-idf/%: $(EXAMPLES_DIR)/$(2)/esp/%
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/esp-idf/main/%.cc: tensorflow/lite/micro/examples/$(2)/%.cc
+$(PRJDIR)$(2)/esp-idf/main/%.cc: $(EXAMPLES_DIR)/$(2)/%.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=esp \
         --is_example_source \
         --source_path="$$<" \
         < $$< > $$@
 
-$(PRJDIR)$(2)/esp-idf/main/%.h: tensorflow/lite/micro/examples/$(2)/%.h
+$(PRJDIR)$(2)/esp-idf/main/%.h: $(EXAMPLES_DIR)/$(2)/%.h
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=esp \
         --is_example_source \
         --source_path="$$<" \
         < $$< > $$@
 
-$(PRJDIR)$(2)/esp-idf/main/%: tensorflow/lite/micro/examples/$(2)/%
+$(PRJDIR)$(2)/esp-idf/main/%: $(EXAMPLES_DIR)/$(2)/%
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
@@ -321,21 +321,21 @@ $(PRJDIR)$(2)/esp-idf/components/tfmicro/%: % third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/esp-idf/components/tfmicro/third_party/%: tensorflow/lite/micro/tools/make/downloads/% third_party_downloads
+$(PRJDIR)$(2)/esp-idf/components/tfmicro/third_party/%: $(MAKEFILE_DIR)/downloads/% third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/esp-idf/sdkconfig.defaults: tensorflow/lite/micro/examples/$(2)/esp/sdkconfig.defaults
+$(PRJDIR)$(2)/esp-idf/sdkconfig.defaults: $(EXAMPLES_DIR)/$(2)/esp/sdkconfig.defaults
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(2)/esp-idf/%: tensorflow/lite/micro/tools/make/templates/esp/%.tpl
+$(PRJDIR)$(2)/esp-idf/%: $(MAKEFILE_DIR)/templates/esp/%.tpl
 # Split the sources into 2 components:
 # - Main component contains only the example's sources, relative from its dir.
 # - TFL Micro component contains everything but the example sources.
-  $(eval MAIN_SRCS := $(filter tensorflow/lite/micro/examples/%,$(5)))
-  $(eval MAIN_SRCS_RELATIVE := $(patsubst tensorflow/lite/micro/examples/$(2)/%,%,$(MAIN_SRCS)))
-  $(eval TFLM_SRCS := $(filter-out tensorflow/lite/micro/examples/%,$(5)) $(3))
+  $(eval MAIN_SRCS := $(filter $(EXAMPLES_DIR)/%,$(5)))
+  $(eval MAIN_SRCS_RELATIVE := $(patsubst $(EXAMPLES_DIR)/$(2)/%,%,$(MAIN_SRCS)))
+  $(eval TFLM_SRCS := $(filter-out $(EXAMPLES_DIR)/%,$(5)) $(3))
 
 	@mkdir -p $$(dir $$@)
 	@sed -E 's#\%\{COMPONENT_SRCS\}\%#$(TFLM_SRCS)#g' $$< | \
@@ -350,7 +350,7 @@ generate_$(2)_esp_project: \
 $(addprefix $(PRJDIR)$(2)/esp-idf/,\
 $(patsubst tensorflow/%,components/tfmicro/tensorflow/%,\
 $(patsubst third_party/%,components/tfmicro/third_party/%,\
-$(patsubst tensorflow/lite/micro/examples/$(2)/%,main/%,$(3) $(4) $(5) $(6))))) \
+$(patsubst $(EXAMPLES_DIR)/$(2)/%,main/%,$(3) $(4) $(5) $(6))))) \
 $(addprefix $(PRJDIR)$(2)/esp-idf/,$(1))
 
 ALL_PROJECT_TARGETS += generate_$(2)_esp_project
@@ -417,7 +417,7 @@ endef
 # These arguments are packed into a single '!' separated string, so no element
 # can contain a '!'.
 define add_third_party_download
-THIRD_PARTY_DOWNLOADS += $(1)!$(2)!tensorflow/lite/micro/tools/make/downloads/$(3)!$(4)!$(5)
+THIRD_PARTY_DOWNLOADS += $(1)!$(2)!$(MAKEFILE_DIR)/downloads/$(3)!$(4)!$(5)
 endef
 
 # Unpacks an entry in a list of strings created by add_third_party_download, and
@@ -426,7 +426,7 @@ endef
 # 1 - Information about the library, separated by '!'s.
 define create_download_rule
 $(word 3, $(subst !, ,$(1))):
-	tensorflow/lite/micro/tools/make/download_and_extract.sh $(subst !, ,$(1))
+	$(MAKEFILE_DIR)/download_and_extract.sh $(subst !, ,$(1))
 THIRD_PARTY_TARGETS += $(word 3, $(subst !, ,$(1)))
 endef
 
