@@ -79,9 +79,12 @@ void TestUnpackThreeOutputsFloat(
   if (registration->init) {
     user_data = registration->init(&context, nullptr, 0);
   }
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({1, 0});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({3, 1, 2, 3});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {1, 0};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {3, 1, 2, 3};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
@@ -156,9 +159,13 @@ void TestUnpackOneOutputFloat(std::initializer_list<int> input_dims_data,
   if (registration->init) {
     user_data = registration->init(&context, nullptr, 0);
   }
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({1, 0});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({1, 1});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+
+  int inputs_array_data[] = {1, 0};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {1, 1};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
@@ -248,9 +255,12 @@ void TestUnpackThreeOutputsQuantized(
   if (registration->init) {
     user_data = registration->init(&context, nullptr, 0);
   }
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({1, 0});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({3, 1, 2, 3});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {1, 0};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {3, 1, 2, 3};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
@@ -344,9 +354,12 @@ void TestUnpackThreeOutputsQuantized32(
   if (registration->init) {
     user_data = registration->init(&context, nullptr, 0);
   }
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({1, 0});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({3, 1, 2, 3});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {1, 0};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {3, 1, 2, 3};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;

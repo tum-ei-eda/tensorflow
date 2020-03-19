@@ -39,6 +39,10 @@ void TestReshapeImpl(TfLiteTensor* input_tensor, TfLiteTensor* shape_tensor,
   TfLiteContext context;
   TfLiteTensor tensors[3];
   TfLiteNode node;
+  int inputs_0[] = {1, 0};
+  int outputs_1[] = {1, 1};
+  int inputs_0_1[] = {2, 0, 1};
+  int outputs_2[] = {1, 2};
   if (shape_tensor == nullptr) {
     constexpr int inputs_size = 1;
     constexpr int outputs_size = 1;
@@ -46,8 +50,9 @@ void TestReshapeImpl(TfLiteTensor* input_tensor, TfLiteTensor* shape_tensor,
     tensors[0] = *input_tensor;
     tensors[1] = *output_tensor,
     PopulateContext(tensors, tensors_size, &context);
-    node.inputs = IntArrayFromInitializer({1, 0});
-    node.outputs = IntArrayFromInitializer({1, 1});
+
+    node.inputs = IntArrayFromInts(inputs_0);
+    node.outputs = IntArrayFromInts(outputs_1);
   } else {
     constexpr int inputs_size = 2;
     constexpr int outputs_size = 1;
@@ -56,8 +61,8 @@ void TestReshapeImpl(TfLiteTensor* input_tensor, TfLiteTensor* shape_tensor,
     tensors[1] = *shape_tensor;
     tensors[2] = *output_tensor;
     PopulateContext(tensors, tensors_size, &context);
-    node.inputs = IntArrayFromInitializer({2, 0, 1});
-    node.outputs = IntArrayFromInitializer({1, 2});
+    node.inputs = IntArrayFromInts(inputs_0_1);
+    node.outputs = IntArrayFromInts(outputs_2);
   }
 
   ::tflite::ops::micro::AllOpsResolver resolver;
@@ -190,9 +195,9 @@ TF_LITE_MICRO_TEST(TooManySpecialDimensions) {
 // shape ends up being hardcoded as a flat vector.
 TF_LITE_MICRO_TEST(InvalidShape) {
   using tflite::testing::CreateFloatTensor;
-  using tflite::testing::IntArrayFromInitializer;
   using tflite::testing::IntArrayFromInts;
-  TfLiteIntArray* input_dims = IntArrayFromInitializer({3, 1, 2, 2});
+  int dims_data[] = {3, 1, 2, 2};
+  TfLiteIntArray* input_dims = IntArrayFromInts(dims_data);
   auto input_data = {3.0f};
   auto input_tensor = CreateFloatTensor(input_data, input_dims, "input_tensor");
   float output_data[4];
@@ -254,9 +259,9 @@ TF_LITE_MICRO_TEST(ScalarOutput) {
 // and output are scalars.
 TF_LITE_MICRO_TEST(LegacyScalarOutput) {
   using tflite::testing::CreateFloatTensor;
-  using tflite::testing::IntArrayFromInitializer;
   using tflite::testing::IntArrayFromInts;
-  TfLiteIntArray* input_dims = IntArrayFromInitializer({1, 1});
+  int input_dims_data[2] = {1, 1};
+  TfLiteIntArray* input_dims = IntArrayFromInts(input_dims_data);
   auto input_data = {3.0f};
   auto input_tensor = CreateFloatTensor(input_data, input_dims, "input_tensor");
   float output_data[1];
@@ -264,7 +269,8 @@ TF_LITE_MICRO_TEST(LegacyScalarOutput) {
   TfLiteIntArray* output_dims = IntArrayFromInts(output_dims_data);
   auto output_tensor =
       CreateFloatTensor(output_data, output_dims, "input_tensor");
-  TfLiteIntArray* shape_dims = tflite::testing::IntArrayFromInitializer({1, 0});
+  int shape_dims_data[2] = {1, 0};
+  TfLiteIntArray* shape_dims = tflite::testing::IntArrayFromInts(shape_dims_data);
   auto shape_tensor = tflite::testing::CreateTensor<int32_t, kTfLiteInt32>(
       {0}, shape_dims, "shape_tensor");
   tflite::testing::TestReshapeImpl<float>(&input_tensor,   // input_tensor

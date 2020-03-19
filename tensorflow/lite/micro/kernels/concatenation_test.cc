@@ -57,9 +57,12 @@ void TestConcatenateTwoInputs(std::initializer_list<int> input1_dims_data,
       .activation = kTfLiteActNone  // Only activation supported in this impl
   };
 
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({2, 0, 1});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({1, 2});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {2, 0, 1};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {1, 2};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
@@ -119,9 +122,12 @@ void TestConcatenateQuantizedTwoInputs(
       .activation = kTfLiteActNone  // Only activation supported in this impl
   };
 
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({2, 0, 1});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({1, 2});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {2, 0, 1};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {1, 2};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;

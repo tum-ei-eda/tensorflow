@@ -51,9 +51,12 @@ void TestLogicalOp(tflite::BuiltinOperator op,
   const TfLiteRegistration* registration = resolver.FindOp(op, 1);
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
 
-  TfLiteIntArray* inputs_array = IntArrayFromInitializer({2, 0, 1});
-  TfLiteIntArray* outputs_array = IntArrayFromInitializer({1, 2});
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int inputs_array_data[] = {2, 0, 1};
+  TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
+  int outputs_array_data[] = {1, 2};
+  TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;

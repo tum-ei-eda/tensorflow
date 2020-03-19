@@ -28,6 +28,7 @@ void TestNegFloat(std::initializer_list<int> input_dims_data,
                   std::initializer_list<float> expected_output_data,
                   std::initializer_list<int> output_dims_data,
                   float* output_data) {
+  using tflite::testing::IntArrayFromInitializer;
   TfLiteIntArray* input_dims = IntArrayFromInitializer(input_dims_data);
   TfLiteIntArray* output_dims = IntArrayFromInitializer(output_dims_data);
   const int output_dims_count = ElementCount(*output_dims);
@@ -50,7 +51,8 @@ void TestNegFloat(std::initializer_list<int> input_dims_data,
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 1};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  TfLiteIntArray* temporaries_array = IntArrayFromInitializer({0});
+  int temporaries_array_data[] = {0};
+  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
