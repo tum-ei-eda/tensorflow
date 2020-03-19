@@ -88,7 +88,7 @@ TEST_SCRIPT := $(TESTING_DIR)/test_linux_binary.sh
 MICROLITE_LIBS := -lm
 
 # TODO(b/150240249): Add in -fno-rtti once that works for the Xtensa toolchain.
-CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY
+CXXFLAGS := -std=c++14 -DTF_LITE_STATIC_MEMORY
 CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY
 ARFLAGS := -r
 TARGET_TOOLCHAIN_PREFIX :=
@@ -97,15 +97,15 @@ CC_PREFIX :=
 ifeq ($(BUILD_TYPE), debug)
 	CXXFLAGS += -DDEBUG -g
 	CCFLAGS  += -DDEBUG -g
-        BUILD_SUFFIX := _debug
+    BUILD_SUFFIX := _debug
 else ifeq ($(BUILD_TYPE), release)
 	CXXFLAGS += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
-        BUILD_SUFFIX := _release
+    BUILD_SUFFIX := _release
 else
 	CXXFLAGS += -O3
 	CCFLAGS  += -O3
-        BUILD_SUFFIX := 
+    BUILD_SUFFIX := 
 endif
 
 # This library is the main target for this makefile. It will contain a minimal
@@ -359,20 +359,16 @@ generate_non_test_projects: $(filter-out %_test%,$(ALL_PROJECT_TARGETS))
 generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
 	python tensorflow/lite/micro/tools/make/merge_arduino_zips.py $(PRJDIR)/tensorflow_lite.zip $(ARDUINO_LIBRARY_ZIPS)
 
-
 # Removes third-party downloads.
 clean_downloads:
 	rm -rf $(MAKEFILE_DIR)/downloads
 
-dump:
-	echo $(MICROLITE_CC_SRCS)
+endif
 
-else
 
 # Gets rid of all generated files.
 clean:
-	rm -rf $(MAKEFILE_DIR)/gen
-endif
+	rm -rf $(GENDIR)
 
 
 $(DEPDIR)/%.d: ;

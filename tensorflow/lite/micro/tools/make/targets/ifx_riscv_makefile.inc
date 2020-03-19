@@ -1,0 +1,156 @@
+# Settings for RISCV 32-bit MCU toolchain target Variants
+
+#
+# Common settings (derived from pulpine via TUM / ETISSS examples
+#
+
+ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
+  TARGET_ARCH ?= rv32imac
+  TARGET_ABI ?= ilp32
+
+  # Fetch common settings if not already set...
+ifndef IFX_TOOLSPREFIX
+  $(error IFX_TOOLSPREFIX not set - called without aiml_deployment/GET_PROJECT_SETTINGS.sh settings? Currentmy unsupported!) 
+endif
+  
+  CC_PREFIX:=$(IFX_TOOLSPREFIX)/$(IFX_RV_TOOLCHAIN_ID)-$(IFX_RV_TOOLCHAIN_VERSION)/bin/
+  SWERV_ISS_HOME := $(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION)
+
+ifeq ($(BUILD),DEBUG)
+	  PLATFROM_OPT_FLAGS := -g
+else
+	  PLATFORM_OPT_FLAGS := -Os
+endif
+
+  
+  TARGET_TOOLCHAIN_PREFIX := $(IFX_RV_TOOLCHAIN_TRIPLET)-
+  PLATFORM_FLAGS = \
+    -march=$(TARGET_ARCH) \
+    -mabi=$(TARGET_ABI) \
+    -DTF_LITE_MCU_DEBUG_LOG \
+    -DTF_LITE_USE_GLOBAL_ROUND \
+    -DWORKAROUND_RISCV_GCC_BUG \
+    -fno-exceptions \
+    -fno-unwind-tables \
+    -ffunction-sections \
+    -fdata-sections \
+    -funsigned-char \
+    -Wvla \
+    -Wall \
+    -Wextra \
+    -Wno-unused-parameter \
+    -Wno-missing-field-initializers \
+    -Wno-write-strings \
+    -Wno-sign-compare \
+    -fno-delete-null-pointer-checks \
+    -fomit-frame-pointer \
+    $(PLATFORM_OPT_FLAGS)
+
+
+
+
+  BUILD_TYPE := micro
+
+endif
+
+ifeq ($(TARGET), ifx_riscv32_install_only)
+  IFX_RISCV32_RECOGNIZED:=1
+endif
+
+#
+# ----------------------------------------------------------------------
+# Settings for RISCV 32-bit MCU toolchain semi-hosted ELF (SWERV simulator).
+# -----------------------------------------------------------------------
+#
+
+ifeq ($(TARGET), ifx_riscv32_mcu)
+  
+  IFX_RISCV32_RECOGNIZED=1
+
+  TEST_SCRIPT := $(MAKEFILE_DIR)/gen/test_swerv_iss_binary.sh
+  
+  
+  CXXFLAGS += $(PLATFORM_FLAGS) 
+
+  CCFLAGS += -std=gnu99 $(PLATFORM_FLAGS)
+  
+  
+endif
+
+#
+# ----------------------------------------------------------------------
+# Settings for RISCV 32-bit MCU toolchain semi-hosted ELF (SWERV simulator).
+# -----------------------------------------------------------------------
+#
+
+ifeq ($(TARGET), ifx_riscv32_ovp)
+  
+  IFX_RISCV32_RECOGNIZED=1
+
+  TEST_SCRIPT := $(TESTING_DIR)/test_ovp_iss_binary.sh
+  
+  
+  CXXFLAGS += $(PLATFORM_FLAGS) 
+
+  CCFLAGS += -std=gnu99 $(PLATFORM_FLAGS)
+  
+  
+endif
+
+#
+# ----------------------------------------------------------------------
+# Settings for RISCV 32-bit MCU toolchain idealized pulpino-like bare-metal
+# -----------------------------------------------------------------------
+#
+
+ifeq ($(TARGET), ifx_riscv32_pulpino)
+
+  IFX_RISCV32_RECOGNIZED=1
+  PULPINO_CRT ?= $(ETISS_HOME)/crt_cmake
+  LDFLAGS += -nostartfiles -T $(PULPINO_CRT)/pulpino_tumeda/link.ld -Wl,--no-relax
+
+  ROM_SIZE_KB ?= 4096
+  RAM_SIZE_KB ?= 1024
+  STACK_SIZE_KB ?= 128
+
+  ROM_SIZE := $(shell expr $(ROM_SIZE_KB) '*' 1024)
+  RAM_SIZE := $(shell expr $(RAM_SIZE_KB) '*' 1024)
+  STACK_SIZE := $(shell expr $(STACK_SIZE_KB) '*' 1024)
+  LDFLAGS += -Xlinker --defsym=PULPINO_RAM_START="$(ROM_SIZE)"
+  LDFLAGS += -Xlinker --defsym=PULPINO_RAM_SIZE="$(RAM_SIZE)"
+  LDFLAGS += -Xlinker --defsym=PULPINO_STACK_SIZE="$(STACK_SIZE)"
+
+
+  PLATFORM_FLAGS += \
+    -fno-builtin \
+	-ffreestanding \
+    -fno-builtin-printf 
+
+  INCLUDES += -I$(PULPINO_CRT)/pulpino/sw/libs/sys_lib/inc -I$(PULPINO_CRT)/pulpino/sw/libs/string_lib/inc
+
+
+  # paths relative to TF-lite(u) installation ...
+  SYS_LIB_CC_FILES := uart.c int.c exceptions.c i2c.c gpio.c spi.c timer.c
+
+  PLATFORM_CC_SRCS := \
+   $(PULPINO_CRT)/pulpino_tumeda/crt0.riscv.S \
+   $(PULPINO_CRT)/pulpino_tumeda/syscalls.c \
+   $(foreach f,$(SYS_LIB_CC_FILES),$(PULPINO_CRT)/pulpino/sw/libs/sys_lib/src/$(f))
+
+$(BINDIR)%.bin: $(BINDIR)%
+	@mkdir -p $(dir $@)
+	$(OBJCOPY) $< $@ -O binary
+	$(READELF) -a $< > "$*.txt"
+	dd bs=1024 count=$(ROM_SIZE_KB) if=$@ of="$*.rom"
+	dd bs=1024 skip=$(ROM_SIZE_KB) if=$@ of="$*.ram"
+	$(CC_PREFIX)$(TARGET_TOOLCHAIN_PREFIX)size $<
+
+  TEST_SCRIPT :=  $(MAKEFILE_DIR)/gen/test_etiss_binary.sh
+  TEST_BIN_TARGET_SUFFIX := .bin
+endif
+
+ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
+ifeq ($(IFX_RISCV32_RECOGNIZED),)
+error("Unorecognised ifx_riscv32* target $(TARGET))
+endif
+endif

@@ -24,6 +24,9 @@ namespace tflite {
 namespace ops {
 namespace micro {
 
+#ifdef WORKAROUND_RISCV_GCC_BUG
+#define std
+#endif
 // Returns the floating point value for a fused activation:
 inline float ActivationValFloat(TfLiteFusedActivation act, float a) {
   switch (act) {
@@ -46,6 +49,7 @@ inline float ActivationValFloat(TfLiteFusedActivation act, float a) {
                 // activation is added to the enum and not handled here).
 }
 
+#undef std
 }  // namespace micro
 }  // namespace ops
 }  // namespace tflite
