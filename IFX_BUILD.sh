@@ -78,9 +78,9 @@ then
 fi
 
 
-make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD=DEBUG clean
+#make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD=DEBUG clean
+echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD=DEBUG microlite
 make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD=DEBUG microlite
-make clean
 make -j 4 microlite
 
 # Actual payload - installed confiured copy of tflite(u) library and makefiles

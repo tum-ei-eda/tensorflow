@@ -16,13 +16,7 @@ endif
   CC_PREFIX:=$(IFX_TOOLSPREFIX)/$(IFX_RV_TOOLCHAIN_ID)-$(IFX_RV_TOOLCHAIN_VERSION)/bin/
   SWERV_ISS_HOME := $(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION)
 
-ifeq ($(BUILD),DEBUG)
-	  PLATFROM_OPT_FLAGS := -g
-else
-	  PLATFORM_OPT_FLAGS := -Os
-endif
 
-  
   TARGET_TOOLCHAIN_PREFIX := $(IFX_RV_TOOLCHAIN_TRIPLET)-
   PLATFORM_FLAGS = \
     -march=$(TARGET_ARCH) \
@@ -44,9 +38,7 @@ endif
     -Wno-sign-compare \
     -fno-delete-null-pointer-checks \
     -fomit-frame-pointer \
-    $(PLATFORM_OPT_FLAGS)
-
-
+    $(PLATFORM_OPT_FLAGS) 
 
 
   BUILD_TYPE := micro
@@ -68,7 +60,7 @@ ifeq ($(TARGET), ifx_riscv32_mcu)
   IFX_RISCV32_RECOGNIZED=1
 
   TEST_SCRIPT := $(MAKEFILE_DIR)/gen/test_swerv_iss_binary.sh
-  
+  THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
   
   CXXFLAGS += $(PLATFORM_FLAGS) 
 

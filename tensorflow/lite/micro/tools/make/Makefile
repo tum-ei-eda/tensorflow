@@ -88,7 +88,7 @@ TEST_SCRIPT := $(TESTING_DIR)/test_linux_binary.sh
 MICROLITE_LIBS := -lm
 
 # TODO(b/150240249): Add in -fno-rtti once that works for the Xtensa toolchain.
-CXXFLAGS := -std=c++14 -DTF_LITE_STATIC_MEMORY
+CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY
 CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY
 ARFLAGS := -r
 TARGET_TOOLCHAIN_PREFIX :=
