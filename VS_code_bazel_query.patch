@@ -1,0 +1,33 @@
+diff --git a/third_party/ortools/BUILD.bazel b/third_party/ortools/BUILD.bazel
+index 61191e3d27..61fdb6b1f0 100644
+--- a/third_party/ortools/BUILD.bazel
++++ b/third_party/ortools/BUILD.bazel
+@@ -4,7 +4,7 @@ licenses(["notice"])  # Apache2 license
+ 
+ exports_files(["LICENSE-2.0.txt"])
+ 
+-native.cc_library(
++cc_library(
+     name = "linear_solver_glop",
+     deps = [
+         "@ortools_archive//linear_solver:linear_solver_glop",
+diff --git a/third_party/toolchains/cpus/arm/BUILD b/third_party/toolchains/cpus/arm/BUILD
+index 023a9203c8..bdddb23119 100644
+--- a/third_party/toolchains/cpus/arm/BUILD
++++ b/third_party/toolchains/cpus/arm/BUILD
+@@ -46,8 +46,7 @@ cc_toolchain(
+     strip_files = ":empty",
+     supports_param_files = 1,
+     toolchain_config = ":local_config",
+-    toolchain_identifier = "local_linux",
+-    toolchain_config = "DUMMY_cc_compiler_local",
++    toolchain_identifier = "local_linux"
+ )
+ 
+ cc_toolchain_config(
+@@ -66,5 +65,4 @@ cc_toolchain(
+     supports_param_files = 1,
+     toolchain_config = ":armeabi_config",
+     toolchain_identifier = "arm-linux-gnueabihf",
+-    toolchain_config = "DUMMY_armeabi_compiler_local",
+ )
