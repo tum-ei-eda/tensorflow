@@ -1,7 +1,6 @@
 
 $(foreach setting, $(shell ../GET_PROJECT_SETTINGS.sh --makefile --id_prefix IFX_), $(eval $(setting)))
   
-IFX_TFLITE_MICRO_VERSION=testing
 SWERV_ISS_HOME:=$(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION))
 ETISS_HOME:=$(IFX_TOOLSPREFIX)/etiss-$(IFX_ETISS_VERSION)
 PREFIX:=$(IFX_TOOLSPREFIX)/tflite_u-${IFX_TFLITE_MICRO_VERSION}
