@@ -21,10 +21,10 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/types.h"
 
 
-#ifdef WORKAROUND_RISCV_GCC_BUG
-#define FIXED_stdround ::round
+#ifdef TF_LITE_USE_GLOBAL_MATH
+#define TF_LITE_round ::round
 #else
-#define FIXED_stdround std::round
+#define TF_LITE_round std::round
 #endif
 
 namespace tflite {
@@ -130,7 +130,7 @@ inline void ConcatenationWithScaling(const ConcatenationParams& params,
         const float bias = -input_zeropoint[i] * scale;
         for (int j = 0; j < copy_size; ++j) {
           const int32_t value =
-              static_cast<int32_t>(FIXED_stdround(input_ptr[j] * scale + bias)) +
+              static_cast<int32_t>(TF_LITE_round(input_ptr[j] * scale + bias)) +
               output_zeropoint;
           output_ptr[j] = static_cast<uint8_t>(
               std::max<int32_t>(std::min<int32_t>(255, value), 0));
@@ -142,7 +142,7 @@ inline void ConcatenationWithScaling(const ConcatenationParams& params,
 }
 
 
-#undef FIXED_stdround
+#undef TF_LITE_round
 
 }  // namespace reference_ops
 }  // namespace tflite

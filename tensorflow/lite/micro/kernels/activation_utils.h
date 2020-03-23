@@ -24,8 +24,10 @@ namespace tflite {
 namespace ops {
 namespace micro {
 
-#ifdef WORKAROUND_RISCV_GCC_BUG
-#define std
+#ifdef TF_LITE_USE_GLOBAL_MATH
+#define TF_LITE_CMATH_NS
+#else
+#define TF_LITE_CMATH_NS std
 #endif
 // Returns the floating point value for a fused activation:
 inline float ActivationValFloat(TfLiteFusedActivation act, float a) {
@@ -33,23 +35,24 @@ inline float ActivationValFloat(TfLiteFusedActivation act, float a) {
     case kTfLiteActNone:
       return a;
     case kTfLiteActRelu:
-      return std::fmax(0.0f, a);
+      return TF_LITE_CMATH_NS::fmax(0.0f, a);
     case kTfLiteActRelu1:
-      return std::fmax(-1.0f, std::fmin(a, 1.0f));
+      return TF_LITE_CMATH_NS::fmax(-1.0f, TF_LITE_CMATH_NS::fmin(a, 1.0f));
     case kTfLiteActRelu6:
-      return std::fmax(0.0f, std::fmin(a, 6.0f));
+      return TF_LITE_CMATH_NS::fmax(0.0f, TF_LITE_CMATH_NS::fmin(a, 6.0f));
     case kTfLiteActTanh:
-      return std::tanh(a);
+      return TF_LITE_CMATH_NS::tanh(a);
     case kTfLiteActSignBit:
-      return std::signbit(a);
+      return TF_LITE_CMATH_NS::signbit(a);
     case kTfLiteActSigmoid:
-      return 1.0f / (1.0f + std::exp(-a));
+      return 1.0f / (1.0f + TF_LITE_CMATH_NS::exp(-a));
   }
   return 0.0f;  // To indicate an unsupported activation (i.e. when a new fused
                 // activation is added to the enum and not handled here).
 }
 
-#undef std
+#undef TF_LITE_CMATH_NS
+
 }  // namespace micro
 }  // namespace ops
 }  // namespace tflite

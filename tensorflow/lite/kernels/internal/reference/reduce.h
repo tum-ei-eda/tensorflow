@@ -20,10 +20,10 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 
-#ifdef WORKAROUND_RISCV_GCC_BUG
-#define FIXED_stdround ::round
+#ifdef TF_LITE_USE_GLOBAL_MATH
+#define TF_LITE_round ::round
 #else
-#define	FIXED_stdround std::round
+#define	TF_LITE_round std::round
 #endif
 namespace tflite {
 
@@ -376,7 +376,7 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
           -input_zero_point * scale * num_elements_in_axis + 0.5f;
       for (size_t idx = 0; idx < num_outputs; ++idx) {
         const U value =
-            static_cast<U>(FIXED_stdround(temp_sum[idx] * scale + bias)) +
+            static_cast<U>(TF_LITE_round(temp_sum[idx] * scale + bias)) +
             output_zero_point;
         output_data[idx] = static_cast<T>(value);
       }
@@ -401,6 +401,6 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
 
 }  // namespace tflite
 
-#undef FIXED_stdround
+#undef TF_LITE_round
 
 #endif  // TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_REDUCE_H_
