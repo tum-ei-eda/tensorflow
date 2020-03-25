@@ -12,6 +12,9 @@ do
     "--no_toco")
         NOBUILD=1
         ;;
+    "--verbose")
+       VERBOSE=( --subcommands=true )
+       ;;
     "*")
         break
         ;;
@@ -71,8 +74,8 @@ TFLITE_MICRO_ROOT=${TOOLSPREFIX}/tflite_u-${TFLITE_MICRO_VERSION}
 
 if [ -z "$NOBUILD" ]
 then
-  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic --subcommands=true //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic --subcommands=true //tensorflow/lite/toco:toco
+  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic --ccopt=-g "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic "${VERBOSE[@]}"  //tensorflow/lite/toco:toco
   mkdir -p ${TFLITE_MICRO_ROOT}/bin  
   echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
   cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
@@ -84,9 +87,11 @@ fi
 make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug clean
 make BUILD_TYPE=debug clean
 make -j 4 microlite
+make -j 4 test_executables
 echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
 make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-echo make -j 4 BUILD_TYPE=debug microlite
+make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+echo make -j 4 BUILD_TYPE=debug test_executables
 make -j 4 BUILD_TYPE=debug microlite
 
 # Actual payload - installed confiured copy of tflite(u) library and makefiles

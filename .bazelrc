@@ -160,6 +160,11 @@ build:dbg --config=opt -c dbg
 # for now, disable arm_neon. see: https://github.com/tensorflow/tensorflow/issues/33360
 build:dbg --cxxopt -DTF_LITE_DISABLE_X86_NEON
 
+
+build:monodbg -c dbg
+build:monodbg --cxxopt -DTF_LITE_DISABLE_X86_NEON
+build:monodbg --define framework_shared_object=false
+
 build:tensorrt --action_env TF_NEED_TENSORRT=1
 
 build:rocm --crosstool_top=@local_config_rocm//crosstool:toolchain
@@ -193,7 +198,7 @@ build --define=use_fast_cpp_protos=true
 build --define=allow_oversize_protos=true
 
 build --spawn_strategy=standalone
-build -c opt
+#build -c opt
 
 # Make Bazel print out all options from rc files.
 build --announce_rc
