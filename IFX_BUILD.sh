@@ -74,11 +74,16 @@ TFLITE_MICRO_ROOT=${TOOLSPREFIX}/tflite_u-${TFLITE_MICRO_VERSION}
 
 if [ -z "$NOBUILD" ]
 then
-  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic --ccopt=-g "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic "${VERBOSE[@]}"  //tensorflow/lite/toco:toco
-  mkdir -p ${TFLITE_MICRO_ROOT}/bin  
+  sed -e'1,$s/"+[cd]/"+g/g' -i bazel-tensorflow/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
+  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config opt --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  #bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
   echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
   cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
+  #bazel build --local_cpu_resources=HOST_CPUS*0.7 --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  # 
+  bazel build --local_cpu_resources=HOST_CPUS*0.7 --config opt --config=monolithic "${VERBOSE[@]}"  //tensorflow/lite/toco:toco
+  mkdir -p ${TFLITE_MICRO_ROOT}/bin  
+
   echo cp bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} ${TFLITE_MICRO_ROOT}/bin
   cp -f bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX}  ${TFLITE_MICRO_ROOT}/bin
 fi
