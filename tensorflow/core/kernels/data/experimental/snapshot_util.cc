@@ -208,14 +208,14 @@ SnapshotReader::SnapshotReader(RandomAccessFile* file,
   } else if (compression_type_ == io::compression::kSnappy) {
     if (version_ == 0) {
       input_stream_ = absl::make_unique<io::SnappyInputBuffer>(
-          file_, /*input_buffer_bytes=*/kSnappyReaderInputBufferSizeBytes,
-          /*output_buffer_bytes=*/kSnappyReaderOutputBufferSizeBytes);
+          file_, /*input_buffer_bytes=*/SnapshotReader::kSnappyReaderInputBufferSizeBytes,
+          /*output_buffer_bytes=*/SnapshotReader::kSnappyReaderOutputBufferSizeBytes);
     } else {
       input_stream_ =
           absl::make_unique<io::BufferedInputStream>(file_, 64 << 20);
     }
   }
-#endif  // IS_SLIM_BUILD
+#endif  // IS_SLIM_BUILD  
   simple_tensor_mask_.reserve(dtypes.size());
   for (const auto& dtype : dtypes) {
     if (DataTypeCanUseMemcpy(dtype)) {
@@ -227,6 +227,12 @@ SnapshotReader::SnapshotReader(RandomAccessFile* file,
     }
   }
 }
+
+ const int64 SnapshotReader::kSnappyReaderInputBufferSizeBytes =
+      1 << 30;  // 1 GiB
+  // TODO(b/148804377): Set this in a smarter fashion.
+const int64 SnapshotReader::kSnappyReaderOutputBufferSizeBytes =
+      32 << 20;  // 32 MiB
 
 Status SnapshotReader::ReadTensors(std::vector<Tensor>* read_tensors) {
   profiler::TraceMe activity(
