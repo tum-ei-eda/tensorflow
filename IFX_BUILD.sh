@@ -10,6 +10,9 @@ do
         echo "`basename $0`: [--no_toco]"
         exit 1
         ;;
+    "--no_config")
+        NOCONFIG=1
+        ;;
     "--no_toco")
         NOBUILD=1
         ;;
@@ -40,7 +43,8 @@ TFLITE_MICRO_ROOT=${TOOLSPREFIX}/tflite_u-${TFLITE_MICRO_VERSION}
 # Note need matching VC or VC build tools installation to build
 # MinGW is NOT (visibly) supported.
 # --subcommands logs compiler commands
-
+if [ -z "$NOCONFIG" ]
+then
 (
   export PYTHON_BIN_PATH=$(which python)
   if [ -n "$MINGW64_HOST" ] 
@@ -76,17 +80,32 @@ TFLITE_MICRO_ROOT=${TOOLSPREFIX}/tflite_u-${TFLITE_MICRO_VERSION}
   export TF_DOWNLOAD_CLANG=0
   ./configure
 )
+else
+  echo Skipping configure...
+fi
+
+if [ -n "$RD_CLUSTER_LINUX_HOST" ]
+then
+  BAZEL_DISTDIR_OPTIONS=( --distdir /home/aifordes.work/share/bazel-distdir )
+fi
+BAZEL_OPTIONS=(
+  --verbose_failures --local_cpu_resources="$JOBS" --config opt --config=monolithic "${VERBOSE[@]}"
+  "${BAZEL_DISTDIR_OPTIONS[@]}" 
+)
 
 if [ -z "$NOBUILD" ]
 then
-  sed -e'1,$s/"+[cd]/"+g/g' -i bazel-tensorflow/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
-  bazel build --local_cpu_resources="$JOBS" --config opt --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  #  bazel fetch "${BAZEL_DISTDIR_OPTIONS[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
+  sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
+  echo bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
+  bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
   #bazel build --local_cpu_resources="$JOBS" --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
   echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
   cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
   #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
   # 
-  bazel build --local_cpu_resources="$JOBS" --config opt --config=monolithic "${VERBOSE[@]}"  //tensorflow/lite/toco:toco
+  bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/lite/toco:toco
   mkdir -p ${TFLITE_MICRO_ROOT}/bin  
 
   echo cp bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} ${TFLITE_MICRO_ROOT}/bin
