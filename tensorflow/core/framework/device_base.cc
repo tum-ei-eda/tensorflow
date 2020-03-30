@@ -35,10 +35,14 @@ DeviceBase::~DeviceBase() {
 
 const DeviceAttributes& DeviceBase::attributes() const {
   LOG(FATAL) << "Device does not implement attributes()";
+  // Infineon local fix: stevensa: Suppress errors for more recent, pickier MSVC...
+  return *(DeviceAttributes *)(0xdeadbeef);
 }
 
 const string& DeviceBase::name() const {
   LOG(FATAL) << "Device does not implement name()";
+  // Infineon local fix: stevensa: Suppress errors for more recent, pickier MSVC...
+  return string("deadbeef");
 }
 
 void DeviceBase::set_eigen_cpu_device(Eigen::ThreadPoolDevice* d) {
