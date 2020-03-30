@@ -51,33 +51,35 @@ then
   then
       PYTHON_BIN_PATH=$(cygpath --windows "${PYTHON_BIN_PATH}" )
       EXE_SUFFIX=.exe
+      export CC_OPT_FLAGS="/arch:AVX"
+  else
+    export TF_NEED_GCP=0
+    export TF_NEED_HDFS=0
+    export TF_NEED_OPENCL=0
+    export TF_ENABLE_XLA=0
+    export TF_NEED_VERBS=0
+    export TF_CUDA_CLANG=0
+    export TF_NEED_MKL=0
+    export TF_DOWNLOAD_MKL=0
+    export TF_NEED_AWS=0
+    export TF_NEED_MPI=0
+    export TF_NEED_GDR=0
+    export TF_NEED_S3=0
+    export TF_NEED_OPENCL_SYCL=0
+    export TF_SET_ANDROID_WORKSPACE=0
+    export TF_NEED_COMPUTECPP=0
+    export GCC_HOST_COMPILER_PATH=$(which gcc)
+    export CC_OPT_FLAGS="-march=native"
+    export TF_SET_ANDROID_WORKSPACE=0
+    export TF_NEED_KAFKA=0
+    export TF_NEED_TENSORRT=0 
+    export TF_DOWNLOAD_CLANG=0
   fi
 #  export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'import site; print(site.getsitepackages()[0])')"
-  export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'from distutils.sysconfig import get_python_lib;print(get_python_lib())')"
-  export TF_NEED_GCP=0
-  export TF_NEED_CUDA=0
-  export TF_NEED_HDFS=0
-  export TF_NEED_OPENCL=0
-  export TF_ENABLE_XLA=0
-  export TF_NEED_VERBS=0
-  export TF_CUDA_CLANG=0
   export TF_NEED_ROCM=0
-  export TF_NEED_MKL=0
-  export TF_DOWNLOAD_MKL=0
-  export TF_NEED_AWS=0
-  export TF_NEED_MPI=0
-  export TF_NEED_GDR=0
-  export TF_NEED_S3=0
-  export TF_NEED_OPENCL_SYCL=0
-  export TF_SET_ANDROID_WORKSPACE=0
-  export TF_NEED_COMPUTECPP=0
-  export GCC_HOST_COMPILER_PATH=$(which gcc)
-  export CC_OPT_FLAGS="-march=native"
-  export TF_SET_ANDROID_WORKSPACE=0
-  export TF_NEED_KAFKA=0
-  export TF_NEED_TENSORRT=0 
+  export TF_NEED_CUDA=0
   export TF_OVERRIDE_EIGEN_STRONG_INLINE=1
-  export TF_DOWNLOAD_CLANG=0
+  export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'from distutils.sysconfig import get_python_lib;print(get_python_lib())')"
   ./configure
 )
 else
@@ -88,6 +90,7 @@ if [ -n "$RD_CLUSTER_LINUX_HOST" ]
 then
   BAZEL_DISTDIR_OPTIONS=( --distdir /home/aifordes.work/share/bazel-distdir )
 fi
+
 BAZEL_OPTIONS=(
   --verbose_failures --local_cpu_resources="$JOBS" --config opt --config=monolithic "${VERBOSE[@]}"
   "${BAZEL_DISTDIR_OPTIONS[@]}" 
@@ -95,14 +98,18 @@ BAZEL_OPTIONS=(
 
 if [ -z "$NOBUILD" ]
 then
-  #  bazel fetch "${BAZEL_DISTDIR_OPTIONS[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
-  sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
-  echo bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  #bazel build --local_cpu_resources="$JOBS" --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
-  cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
+  # Attempting to build TF2.2 translator with gcc-8 or 9 or MSVC is a horror show... forget it for now
+  if false
+  then
+    #  bazel fetch "${BAZEL_DISTDIR_OPTIONS[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
+    sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
+    echo bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    #bazel build --local_cpu_resources="$JOBS" --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
+    cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
+  fi
   #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
   # 
   bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/lite/toco:toco
