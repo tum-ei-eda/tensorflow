@@ -52,6 +52,9 @@ then
       PYTHON_BIN_PATH=$(cygpath --windows "${PYTHON_BIN_PATH}" )
       EXE_SUFFIX=.exe
       export CC_OPT_FLAGS="/arch:AVX"
+      # Wild patching orgy is needed... including yes in 2020
+      # workarounds for pathname/command-line length limitations.
+     source msys_env.sh
   else
     export TF_NEED_GCP=0
     export TF_NEED_HDFS=0
@@ -110,9 +113,17 @@ then
     echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
     cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
   fi
-  #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-  # 
-  bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/lite/toco:toco
+  (
+    # Wild patching orgy is needed... including yes in 2020
+    # workarounds for pathname/command-line length limitations.
+    if [ -n "$MINGW64_HOST" ] 
+    then
+       source msys_env.sh
+    fi
+    #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    # 
+    bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/lite/toco:toco
+  )
   mkdir -p ${TFLITE_MICRO_ROOT}/bin  
 
   echo cp bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} ${TFLITE_MICRO_ROOT}/bin
