@@ -10,10 +10,10 @@ do
         echo "`basename $0`: [--no_toco]"
         exit 1
         ;;
-    "--no_config")
+    "--noconfig")
         NOCONFIG=1
         ;;
-    "--no_toco")
+    "--notoco")
         NOBUILD=1
         ;;
     "--jobs")
