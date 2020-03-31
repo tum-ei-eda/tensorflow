@@ -5,8 +5,11 @@
 #
 
 ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
-  TARGET_ARCH ?= rv32imac
-  TARGET_ABI ?= ilp32
+
+  IFX_RV_TARGET_ARCH ?= rv32imac
+  IFX_RV_TARGET_ABI ?= ilp32
+  TARGET_ARCH := $(IFX_RV_TARGET_ARCH)
+  TARGET_ABI := $(IFX_RV_TARGET_ABI)
 
   # Fetch common settings if not already set...
 ifndef IFX_TOOLSPREFIX
