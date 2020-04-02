@@ -198,7 +198,7 @@ build --define=use_fast_cpp_protos=true
 build --define=allow_oversize_protos=true
 
 build --spawn_strategy=standalone
-#build -c opt
+build -c opt
 
 # Make Bazel print out all options from rc files.
 build --announce_rc
