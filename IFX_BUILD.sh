@@ -16,13 +16,16 @@ do
     "--notoco")
         NOBUILD=1
         ;;
+    "--nottflite")
+        NOTFLITE=1
+        ;;
     "--jobs")
-       JOBS="$2"
-       shift
-       ;;
+        JOBS="$2"
+        shift
+        ;;
     "--verbose")
-       VERBOSE=( --subcommands=true )
-       ;;
+        VERBOSE=( --subcommands=true )
+        ;;
     "*")
         break
         ;;
@@ -72,7 +75,7 @@ then
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_COMPUTECPP=0
     export GCC_HOST_COMPILER_PATH=$(which gcc)
-    export CC_OPT_FLAGS="-march=native"
+    export CC_OPT_FLAGS="-march=native -Wno-sign-compare"
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_KAFKA=0
     export TF_NEED_TENSORRT=0 
@@ -99,20 +102,15 @@ BAZEL_OPTIONS=(
   "${BAZEL_DISTDIR_OPTIONS[@]}" 
 )
 
+BAZEL_TARGETS=( //tensorflow/lite/toco:toco //tensorflow/compiler/mlir/lite:tf_tfl_translate )
+
 if [ -z "$NOBUILD" ]
 then
-  # Attempting to build TF2.2 translator with gcc-8 or 9 or MSVC is a horror show... forget it for now
-  if false
-  then
+    # Some useful recipes from the past... comment out in case needed
     #  bazel fetch "${BAZEL_DISTDIR_OPTIONS[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-    bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
-    sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
-    echo bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
-    bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/compiler/mlir/lite:tf_tfl_translate
-    #bazel build --local_cpu_resources="$JOBS" --config=monolithic "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
-    echo cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
-    cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate ${TFLITE_MICRO_ROOT}/bin
-  fi
+    #bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
+    #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    #sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
   (
     # Wild patching orgy is needed... including yes in 2020
     # workarounds for pathname/command-line length limitations.
@@ -120,32 +118,34 @@ then
     then
        source msys_env.sh
     fi
-    #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
     # 
-    bazel build "${BAZEL_OPTIONS[@]}"  //tensorflow/lite/toco:toco
+    echo bazel build "${BAZEL_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
+    bazel build  --local_cpu_resources="$JOBS" --config=monolithic "${BAZEL_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
+    mkdir -p ${TFLITE_MICRO_ROOT}/bin  
+    rm -f ${TFLITE_MICRO_ROOT}/bin/*
+    cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
+        bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} \
+        ${TFLITE_MICRO_ROOT}/bin
   )
-  mkdir -p ${TFLITE_MICRO_ROOT}/bin  
-
-  echo cp bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} ${TFLITE_MICRO_ROOT}/bin
-  cp -f bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX}  ${TFLITE_MICRO_ROOT}/bin
 fi
 
+if [ -z "$NOTFLITE" ] 
+then
+    make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug clean
+    make BUILD_TYPE=debug clean
+    make -j 4 microlite
+    make -j 4 test_executables
+    echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    echo make -j 4 BUILD_TYPE=debug test_executables
+    make -j 4 BUILD_TYPE=debug microlite
 
-make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug clean
-make BUILD_TYPE=debug clean
-make -j 4 microlite
-make -j 4 test_executables
-echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-echo make -j 4 BUILD_TYPE=debug test_executables
-make -j 4 BUILD_TYPE=debug microlite
-
-# Actual payload - installed confiured copy of tflite(u) library and makefiles
-make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
-
-# Clean up afterwards because bugs in downlaods from tflite(u)
-# poison VS-code bazel target discovery
-make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} clean
-make -j 4 BUILD_TYPE=debug clean
-
+    # Actual payload - installed confiured copy of tflite(u) library and makefiles
+    make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
+    
+    # Clean up afterwards because bugs in downlaods from tflite(u)
+    # poison VS-code bazel target discovery
+    make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} clean
+    make -j 4 BUILD_TYPE=debug clean
+fi
