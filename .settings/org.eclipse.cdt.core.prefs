@@ -9,6 +9,14 @@ environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642/TO
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642/TOOLSPREFIX/value=${TOOLSPREFIX}
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642/append=true
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642/appendContributed=true
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TARGET/delimiter=\:
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TARGET/operation=append
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TARGET/value=ifx_riscv32_mcu
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TOOLSPREFIX/delimiter=;
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TOOLSPREFIX/operation=append
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/TOOLSPREFIX/value=${TOOLSPREFIX}
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/append=true
+environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196/appendContributed=true
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1578665674/TOOLSPREFIX/delimiter=;
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1578665674/TOOLSPREFIX/operation=append
 environment/project/cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1578665674/TOOLSPREFIX/value=${TOOLSPREFIX}
