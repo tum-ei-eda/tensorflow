@@ -50,14 +50,14 @@ constexpr int kOutputTensor = 0;
 TfLiteStatus CalculateOpData(TfLiteContext* context,
                              TfLiteFullyConnectedParams* params,
                              TfLiteType data_type, const TfLiteTensor* input,
-                             const TfLiteTensor* filter,
+                             const TfLiteTensor* weights,
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              OpData* data) {
   TfLiteStatus status = kTfLiteOk;
   if (data_type != kTfLiteFloat32) {
     double real_multiplier = 0.0;
     TF_LITE_ENSURE_STATUS(GetQuantizedConvolutionMultipler(
-        context, input, filter, bias, output, &real_multiplier));
+        context, input, weights, bias, output, &real_multiplier));
     int exponent;
     QuantizeMultiplier(real_multiplier, &data->output_multiplier, &exponent);
     data->output_shift = -exponent;
@@ -80,134 +80,132 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
+inline void CalculateOutputNode(const int8_t *weights, const int8_t *input, const int32_t *bias, int8_t *output,
+		int32_t accum_depth, int32_t weights_offset, int32_t input_offset, int32_t output_offset,
+		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+
+	// Add bias
+	int32_t accum = bias ? *bias : 0;
+
+	// Multiply and accumulate
+	MultiplyAccumulate(weights, input, &accum, weights_offset, input_offset, accum_depth);
+
+	// Quantize down
+	accum = MultiplyByQuantizedMultiplier(accum, output_multiplier, output_shift);
+
+	// Add offset
+	accum += output_offset;
+
+	// Clamp the result
+	accum = ActivationFunctionWithMinMax(accum, activation_min, activation_max);
+
+	*output = static_cast<int8_t>(accum);
+}
+
+inline void CalculateTwoOutputNodes(const int8_t *weights, const int8_t *input, const int32_t *bias, int8_t *output,
+		int32_t accum_depth, int32_t weights_offset, int32_t input_offset, int32_t output_offset,
+		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+
+	// Add bias
+	int32_t accum[2] = {0, 0};
+	if(bias)
+	{
+		accum[0] = bias[0];
+		accum[1] = bias[1];
+	}
+
+	// Multiply and accumulate
+	MultiplyAccumulateTwo(weights, input, accum, weights_offset, input_offset, accum_depth);
+
+	// Quantize down
+	accum[0] = MultiplyByQuantizedMultiplier(accum[0], output_multiplier, output_shift);
+	accum[1] = MultiplyByQuantizedMultiplier(accum[1], output_multiplier, output_shift);
+
+	// Add offset
+	accum[0] += output_offset;
+	accum[1] += output_offset;
+
+	// Clamp the result
+	accum[0] = ActivationFunctionWithMinMax(accum[0], activation_min, activation_max);
+	accum[1] = ActivationFunctionWithMinMax(accum[1], activation_min, activation_max);
+
+	output[0] = static_cast<int8_t>(accum[0]);
+	output[1] = static_cast<int8_t>(accum[1]);
+}
+
 TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
                                TfLiteFullyConnectedParams* params, OpData* data,
                                const TfLiteTensor* input,
-                               const TfLiteTensor* filter,
+                               const TfLiteTensor* weights,
 							   const TfLiteTensor* bias, TfLiteTensor* output) {
 	//Get input info
 	const int8_t* input_data = GetTensorData<int8_t>(input);
-	const int32 input_offset = -input->params.zero_point;
+	const int32_t input_offset = -input->params.zero_point;
 
 	//Get weights info
-	const int8_t* filter_data = GetTensorData<int8_t>(filter);
-	const int32 filter_offset = -filter->params.zero_point;
-	RuntimeShape filter_shape = GetTensorShape(filter);
-	TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
-	const int filter_dim_count = filter_shape.DimensionsCount();
-	const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
+	const int8_t* weights_data = GetTensorData<int8_t>(weights);
+	const int32_t weights_offset = -weights->params.zero_point;
+	RuntimeShape weights_shape = GetTensorShape(weights);
+	TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
+	const int weights_dim_count = weights_shape.DimensionsCount();
+	const int accum_depth = weights_shape.Dims(weights_dim_count - 1);
 
 	//Get bias info
 	const int32* bias_data = GetTensorData<int32_t>(bias);
 
 	//Get output info
 	int8_t* output_data = GetTensorData<int8_t>(output);
-	const int32 output_offset = output->params.zero_point;
+	const int32_t output_offset = output->params.zero_point;
 	RuntimeShape output_shape = GetTensorShape(output);
 	TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 2);
-	const int32 output_multiplier = data->output_multiplier;
+	const int32_t output_multiplier = data->output_multiplier;
 	// TODO(b/138810107): Figure out whether output shift should be inverted
 	const int output_shift = -data->output_shift;
-	const int32 output_activation_min = data->output_activation_min;
-	const int32 output_activation_max = data->output_activation_max;
+	const int32_t output_activation_min = data->output_activation_min;
+	const int32_t output_activation_max = data->output_activation_max;
 	TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
 	const int batches = output_shape.Dims(0);
 	const int output_depth = output_shape.Dims(1);
-	TFLITE_DCHECK_LE(output_depth, filter_shape.Dims(filter_dim_count - 2));
+	TFLITE_DCHECK_LE(output_depth, weights_shape.Dims(weights_dim_count - 2));
 
-	for (int b = 0; b < batches; ++b)
-	{
-		const int8_t *input_ptr = &input_data[b * accum_depth];
-		const int32_t *bias_ptr = &bias_data[0];
-		int8_t* output_ptr = &output_data[b* output_depth];
+	const int8_t *input_ptr = input_data;
+	int8_t* output_ptr = output_data;
+	for (int b = 0; b < batches; ++b) {
+		const int8_t *weights_ptr = weights_data;
+		const int32_t *bias_ptr = bias_data;
+		for (int32_t out_c = 0; out_c <= (output_depth - 2); out_c += 2) {
 
-		int32_t out_c = 0;
-		for (; out_c <= (output_depth - 2); out_c += 2)
-		{
-			const int8_t *filter_ptr = &filter_data[out_c * accum_depth];
-
-			int32 acc0 = 0;
-			int32 acc1 = 0;
-			for (int32_t d = 0; d < accum_depth; ++d)
-			{
-				int32 filter_value0 = filter_ptr[d] + filter_offset;
-				int32 filter_value1 = filter_ptr[accum_depth + d] + filter_offset;
-				int32 input_value  = input_ptr[d] + input_offset;
-
-				acc0 += input_value * filter_value0;
-				acc1 += input_value * filter_value1;
-			}
-
-			if (bias_ptr)
-			{
-				acc0 += bias_ptr[out_c];
-				acc1 += bias_ptr[out_c + 1];
-			}
-			// Quantize down
-			acc0 = MultiplyByQuantizedMultiplier(acc0, output_multiplier, output_shift);
-			acc1 = MultiplyByQuantizedMultiplier(acc1, output_multiplier, output_shift);
-
-			// Add offset
-			acc0 += output_offset;
-			acc1 += output_offset;
-
-			// Clamp the result
-			acc0 = std::max(acc0, output_activation_min);
-			acc0 = std::min(acc0, output_activation_max);
-			acc1 = std::max(acc1, output_activation_min);
-			acc1 = std::min(acc1, output_activation_max);
-
-			*output_ptr++ = static_cast<int8_t>(acc0);
-			*output_ptr++ = static_cast<int8_t>(acc1);
+			CalculateTwoOutputNodes(weights_ptr, input_ptr, bias_ptr, output_ptr,
+					accum_depth, weights_offset, input_offset, output_offset,
+					output_multiplier, output_shift, output_activation_min, output_activation_max);
+			weights_ptr += 2 * accum_depth;
+			bias_ptr += 2;
+			output_ptr += 2;
 		}
+		if (output_depth % 2){
 
-		if (output_depth % 2)
-		{
-			const int8_t *filter_ptr = &filter_data[out_c * accum_depth];
-
-			int32 acc = 0;
-			for (int32_t d = 0; d < accum_depth; ++d)
-			{
-				int32 input_value  = input_ptr[d] + input_offset;
-				int32 filter_value0 = filter_ptr[d] + filter_offset;
-
-				acc += input_value * filter_value0;
-			}
-
-			if (bias_ptr)
-			{
-				acc += bias_ptr[out_c];
-			}
-
-			// Quantize down
-			acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
-
-			// Add offset
-			acc += output_offset;
-
-			// Clamp the result
-			acc = std::max(acc, output_activation_min);
-			acc = std::min(acc, output_activation_max);
-
-			*output_ptr++ = static_cast<int8_t>(acc);
+			CalculateOutputNode(weights_ptr, input_ptr, bias_ptr, output_ptr,
+					accum_depth, weights_offset, input_offset, output_offset,
+					output_multiplier, output_shift, output_activation_min, output_activation_max);
+			output_ptr++;
 		}
+		input_ptr += accum_depth;
 	}
-
 	return kTfLiteOk;
 }
 
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                            TfLiteFullyConnectedParams* params, OpData* data,
                            const TfLiteTensor* input,
-                           const TfLiteTensor* filter, const TfLiteTensor* bias,
+                           const TfLiteTensor* weights, const TfLiteTensor* bias,
                            TfLiteTensor* output) {
   const int32_t input_offset = -input->params.zero_point;
-  const int32_t filter_offset = -filter->params.zero_point;
+  const int32_t weights_offset = -weights->params.zero_point;
   const int32_t output_offset = output->params.zero_point;
 
   tflite::FullyConnectedParams op_params;
   op_params.input_offset = input_offset;
-  op_params.weights_offset = filter_offset;
+  op_params.weights_offset = weights_offset;
   op_params.output_offset = output_offset;
   op_params.output_multiplier = data->output_multiplier;
   // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
@@ -218,7 +216,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
 #define TF_LITE_FULLY_CONNECTED(output_data_type)                      \
   reference_ops::FullyConnected(                                       \
       op_params, GetTensorShape(input), GetTensorData<uint8_t>(input), \
-      GetTensorShape(filter), GetTensorData<uint8_t>(filter),          \
+      GetTensorShape(weights), GetTensorData<uint8_t>(weights),          \
       GetTensorShape(bias), GetTensorData<int32_t>(bias),              \
       GetTensorShape(output), GetTensorData<output_data_type>(output))
   switch (output->type) {
@@ -240,7 +238,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
 
 TfLiteStatus EvalFloat(TfLiteContext* context, TfLiteNode* node,
                        TfLiteFullyConnectedParams* params, OpData* data,
-                       const TfLiteTensor* input, const TfLiteTensor* filter,
+                       const TfLiteTensor* input, const TfLiteTensor* weights,
                        const TfLiteTensor* bias, TfLiteTensor* output) {
   float output_activation_min, output_activation_max;
   CalculateActivationRange(params->activation, &output_activation_min,
@@ -250,7 +248,7 @@ TfLiteStatus EvalFloat(TfLiteContext* context, TfLiteNode* node,
   op_params.float_activation_max = output_activation_max;
   tflite::reference_ops::FullyConnected(
       op_params, GetTensorShape(input), GetTensorData<float>(input),
-      GetTensorShape(filter), GetTensorData<float>(filter),
+      GetTensorShape(weights), GetTensorData<float>(weights),
       GetTensorShape(bias), GetTensorData<float>(bias), GetTensorShape(output),
       GetTensorData<float>(output));
   return kTfLiteOk;
@@ -261,7 +259,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
 
   const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-  const TfLiteTensor* filter = GetInput(context, node, kWeightsTensor);
+  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
   const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
@@ -270,23 +268,23 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   OpData local_data_object;
   OpData* data = &local_data_object;
   TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, data_type, input,
-                                        filter, bias, output, data));
+                                        weights, bias, output, data));
 										
-  switch (filter->type) {  // Already know in/out types are same.
+  switch (weights->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
-      return EvalFloat(context, node, params, data, input, filter, bias,
+      return EvalFloat(context, node, params, data, input, weights, bias,
                        output);
     case kTfLiteInt8:
-      return EvalQuantizedInt8(context, node, params, data, input, filter, bias,
+      return EvalQuantizedInt8(context, node, params, data, input, weights, bias,
                                output);
 
     case kTfLiteUInt8:
-      return EvalQuantized(context, node, params, data, input, filter, bias,
+      return EvalQuantized(context, node, params, data, input, weights, bias,
                            output);
 
     default:
       TF_LITE_KERNEL_LOG(context, "Type %d not currently supported.",
-                         filter->type);
+                         weights->type);
       return kTfLiteError;
   }
   

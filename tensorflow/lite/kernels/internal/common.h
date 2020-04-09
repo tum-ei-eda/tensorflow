@@ -50,8 +50,9 @@ inline void GetActivationMinMax(FusedActivationFunctionType ac,
   }
 }
 
-inline float ActivationFunctionWithMinMax(float x, float output_activation_min,
-                                          float output_activation_max) {
+template <typename T>
+inline T ActivationFunctionWithMinMax(T x, T output_activation_min,
+		T output_activation_max) {
   return std::min(std::max(x, output_activation_min), output_activation_max);
 }
 
@@ -154,6 +155,28 @@ inline int32 MultiplyByQuantizedMultiplier(int32 x, int32 quantized_multiplier,
   return RoundingDivideByPOT(SaturatingRoundingDoublingHighMul(
                                  x * (1 << left_shift), quantized_multiplier),
                              right_shift);
+}
+
+inline void MultiplyAccumulate(const int8 *lhs, const int8 *rhs, int32 *accum,
+	int32 lhs_offset, int32 rhs_offset, int32 depth) {
+
+	for (int32 d = 0; d < depth; ++d) {
+		int32 lhs_value = lhs[d] + lhs_offset;
+		int32 rhs_value = rhs[d] + rhs_offset;
+		*accum += lhs_value * rhs_value;
+	}
+}
+
+inline void MultiplyAccumulateTwo(const int8 *lhs, const int8 *rhs, int32 *accum,
+	int32 lhs_offset, int32 rhs_offset, int32 depth) {
+
+	for (int32 d = 0; d < depth; ++d) {
+		int32 lhs_value0 = lhs[d] + lhs_offset;
+		int32 lhs_value1 = lhs[depth + d] + lhs_offset;
+		int32 rhs_value = rhs[d] + rhs_offset;
+		accum[0] += (lhs[d] + lhs_offset) * rhs_value;
+		accum[1] += lhs_value1 * rhs_value;
+	}
 }
 
 template <typename T>
