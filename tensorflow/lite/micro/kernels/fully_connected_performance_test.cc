@@ -26,6 +26,29 @@ namespace tflite {
 namespace testing {
 namespace {
 
+struct
+{
+	int bufferIndex = 0;
+	uint32_t buffer[1024/4];
+} MockAllocator;
+
+TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
+{
+	(*ptr) = &MockAllocator.buffer[MockAllocator.bufferIndex];
+	MockAllocator.bufferIndex += bytes/4 + 1;
+	return kTfLiteOk;
+}
+TfLiteStatus RequestScratchBufferInArena(struct TfLiteContext* ctx, size_t bytes, int* buffer_idx)
+{
+	*buffer_idx = MockAllocator.bufferIndex;
+	MockAllocator.bufferIndex += bytes/4 + 1;
+	return kTfLiteOk;
+}
+void* GetScratchBuffer(struct TfLiteContext* ctx, int buffer_idx)
+{
+	return &MockAllocator.buffer[buffer_idx];
+}
+
 template <typename T>
 void TestFullyConnectedQuantized(
     const int* input_dims_data, const T* input_data, const float input_min,
@@ -56,6 +79,9 @@ void TestFullyConnectedQuantized(
 
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, &context);
+  context.AllocatePersistentBuffer = AllocatePersistentBuffer;
+  context.RequestScratchBufferInArena = RequestScratchBufferInArena;
+  context.GetScratchBuffer = GetScratchBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
@@ -90,14 +116,18 @@ void TestFullyConnectedQuantized(
   node.custom_initial_data_size = 0;
   node.delegate = nullptr;
 
+  auto start = std::chrono::high_resolution_clock::now();
+
   if (registration->prepare) {
     TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, registration->prepare(&context, &node));
   }
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
 
-  auto start = std::chrono::high_resolution_clock::now();
-
-  registration->invoke(&context, &node);
+  //Perform inference several times after preparation is done
+  const int number_of_invocations = 100;
+  for (int n = 0; n < number_of_invocations; n++) {
+	  registration->invoke(&context, &node);
+  }
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -118,6 +148,7 @@ void TestFullyConnectedQuantized(
 TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8) {
+
   using tflite::testing::F2Q32;
   using tflite::testing::F2QS;
 

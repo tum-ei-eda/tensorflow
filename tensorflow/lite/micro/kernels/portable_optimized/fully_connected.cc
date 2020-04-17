@@ -40,6 +40,8 @@ struct OpData {
   int32_t output_activation_max;
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
+  // The index of a temporary buffer containing the sum-of-weights factor
+  int sum_of_weights_factor;
 };
 
 constexpr int kInputTensor = 0;
@@ -70,67 +72,156 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
 
 }  // namespace
 
+inline void PrecomputeSumOfWeightsFactor(const int32* bias, const int8_t *weights, int32_t *sum_of_weights_factor,
+		int cols, int rows, int32_t weights_offset, int32_t input_offset) {
+	for (int row = 0; row < rows; row++) {
+		int32_t sum_of_weights = 0;
+		for (int col = 0; col < cols; col++) {
+			sum_of_weights += weights[col];
+		}
+		weights += cols;
+		sum_of_weights_factor[row] = (sum_of_weights + cols * weights_offset) * input_offset;
+		if (bias) {
+			sum_of_weights_factor[row] += bias[row];
+		}
+	}
+}
+
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
-  return nullptr;
+    void* raw;
+    context->AllocatePersistentBuffer(context, sizeof(OpData), &raw);
+    OpData* data = reinterpret_cast<OpData*>(raw);
+    *data = {};
+    return raw;
 }
 
 void Free(TfLiteContext* context, void* buffer) {}
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  return kTfLiteOk;
+	OpData* data = reinterpret_cast<OpData*>(node->user_data);
+	const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
+	if (weights->type == kTfLiteInt8) {
+
+		const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
+		const int32* bias_data = GetTensorData<int32_t>(bias);
+
+		const int8_t* weights_data = GetTensorData<int8_t>(weights);
+		const int32_t weights_offset = -weights->params.zero_point;
+		RuntimeShape weights_shape = GetTensorShape(weights);
+		TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
+		const int rows = weights_shape.Dims(0);
+		const int cols = weights_shape.Dims(1);
+
+		TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
+				context, sizeof(int32_t) * rows,
+				&data->sum_of_weights_factor));
+
+		int32_t* sum_of_weights_buffer = reinterpret_cast<int32_t*>(
+		        context->GetScratchBuffer(context, data->sum_of_weights_factor));
+
+		const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+		const int32_t input_offset = -input->params.zero_point;
+
+		PrecomputeSumOfWeightsFactor(bias_data, weights_data, sum_of_weights_buffer,
+				cols, rows, weights_offset, input_offset);
+	}
+	return kTfLiteOk;
 }
 
-inline void CalculateOutputNode(const int8_t *weights, const int8_t *input, const int32_t *bias, int8_t *output,
-		int32_t accum_depth, int32_t weights_offset, int32_t input_offset, int32_t output_offset,
-		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+inline int32_t MultiplyAccumulateAndComputeSumOfInputs(const int8_t *weights, const int8_t *input, int32_t &accum,
+		int32_t weights_offset, int32_t depth) {
+	int32_t sum_of_inputs_factor = 0;
+	for (int32 d = 0; d < depth; ++d) {
+		accum += weights[d] * input[d];
+		sum_of_inputs_factor += input[d];
+	}
+	sum_of_inputs_factor *= weights_offset;
+	accum += sum_of_inputs_factor;
+	return sum_of_inputs_factor;
+}
 
-	// Add bias
-	int32_t accum = bias ? *bias : 0;
+inline void MultiplyAccumulate(const int8_t *weights, const int8_t *input, int32_t &accum, int32_t depth) {
+	for (int32 d = 0; d < depth; ++d) {
+		accum += weights[d] * input[d];
+	}
+}
 
-	// Multiply and accumulate
-	MultiplyAccumulate(weights, input, &accum, weights_offset, input_offset, accum_depth);
+inline void MultiplyAccumulateTwo(const int8_t *weights, const int8_t *input, int32_t accum[2], int32_t depth) {
+	for (int32 d = 0; d < depth; ++d) {
+		accum[0] += weights[d] * input[d];
+		accum[1] += weights[d + depth] * input[d];
+	}
+}
 
+inline void RequantizeAndClamp(int32_t accum, int8_t *output,
+		int32_t output_offset, int32_t output_multiplier, int32_t output_shift,
+		int32_t activation_min, int32_t activation_max) {
 	// Quantize down
 	accum = MultiplyByQuantizedMultiplier(accum, output_multiplier, output_shift);
-
 	// Add offset
 	accum += output_offset;
-
 	// Clamp the result
 	accum = ActivationFunctionWithMinMax(accum, activation_min, activation_max);
-
 	*output = static_cast<int8_t>(accum);
 }
 
-inline void CalculateTwoOutputNodes(const int8_t *weights, const int8_t *input, const int32_t *bias, int8_t *output,
-		int32_t accum_depth, int32_t weights_offset, int32_t input_offset, int32_t output_offset,
-		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
-
-	// Add bias
-	int32_t accum[2] = {0, 0};
-	if(bias)
-	{
-		accum[0] = bias[0];
-		accum[1] = bias[1];
-	}
-
-	// Multiply and accumulate
-	MultiplyAccumulateTwo(weights, input, accum, weights_offset, input_offset, accum_depth);
-
+inline void RequantizeAndClampTwo(int32_t accum[2], int8_t *output,
+		int32_t output_offset, int32_t output_multiplier, int32_t output_shift,
+		int32_t activation_min, int32_t activation_max) {
 	// Quantize down
 	accum[0] = MultiplyByQuantizedMultiplier(accum[0], output_multiplier, output_shift);
 	accum[1] = MultiplyByQuantizedMultiplier(accum[1], output_multiplier, output_shift);
-
 	// Add offset
 	accum[0] += output_offset;
 	accum[1] += output_offset;
-
 	// Clamp the result
 	accum[0] = ActivationFunctionWithMinMax(accum[0], activation_min, activation_max);
 	accum[1] = ActivationFunctionWithMinMax(accum[1], activation_min, activation_max);
-
 	output[0] = static_cast<int8_t>(accum[0]);
 	output[1] = static_cast<int8_t>(accum[1]);
+}
+
+inline int32_t CalculateOutputNodeAndSumOfInputsFactor(const int8_t *weights, const int8_t *input,
+		const int32_t *sum_of_weights_factor, int8_t *output,
+		int32_t accum_depth, int32_t weights_offset, int32_t output_offset,
+		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+	// Load  pre-calculated factor
+	int32_t accum = *sum_of_weights_factor;
+
+	int32_t sum_of_inputs_factor = MultiplyAccumulateAndComputeSumOfInputs(weights, input, accum,
+			weights_offset, accum_depth);
+
+	RequantizeAndClamp(accum, output, output_offset, output_multiplier, output_shift,
+			activation_min, activation_max);
+
+	return sum_of_inputs_factor;
+}
+
+inline void CalculateOutputNode(const int8_t *weights, const int8_t *input,
+		const int32_t *sum_of_weights_factor, int32_t sum_of_inputs_factor, int8_t *output,
+		int32_t accum_depth, int32_t output_offset,
+		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+	// Load  pre-calculated factors
+	int32_t accum = *sum_of_weights_factor + sum_of_inputs_factor;
+
+	MultiplyAccumulate(weights, input, accum, accum_depth);
+
+	RequantizeAndClamp(accum, output, output_offset, output_multiplier, output_shift,
+			activation_min, activation_max);
+}
+
+inline void CalculateTwoOutputNodes(const int8_t *weights, const int8_t *input, const int32_t *sum_of_weights_factor,
+		int32_t sum_of_inputs_factor, int8_t *output, int32_t accum_depth, int32_t output_offset,
+		int32_t output_multiplier, int32_t output_shift, int32_t activation_min, int32_t activation_max) {
+	// Load  pre-calculated factors
+	int32_t accum[2];
+	accum[0] = sum_of_weights_factor[0] + sum_of_inputs_factor;
+	accum[1] = sum_of_weights_factor[1] + sum_of_inputs_factor;
+
+	MultiplyAccumulateTwo(weights, input, accum, accum_depth);
+
+	RequantizeAndClampTwo(accum, output, output_offset, output_multiplier, output_shift,
+			activation_min, activation_max);
 }
 
 TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
@@ -140,7 +231,6 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 							   const TfLiteTensor* bias, TfLiteTensor* output) {
 	//Get input info
 	const int8_t* input_data = GetTensorData<int8_t>(input);
-	const int32_t input_offset = -input->params.zero_point;
 
 	//Get weights info
 	const int8_t* weights_data = GetTensorData<int8_t>(weights);
@@ -150,8 +240,9 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 	const int weights_dim_count = weights_shape.DimensionsCount();
 	const int accum_depth = weights_shape.Dims(weights_dim_count - 1);
 
-	//Get bias info
-	const int32* bias_data = GetTensorData<int32_t>(bias);
+	//Get pre-calculated factor
+	const int32_t* sum_of_weights_factor = reinterpret_cast<const int32_t*>(
+	        context->GetScratchBuffer(context, data->sum_of_weights_factor));
 
 	//Get output info
 	int8_t* output_data = GetTensorData<int8_t>(output);
@@ -172,20 +263,30 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 	int8_t* output_ptr = output_data;
 	for (int b = 0; b < batches; ++b) {
 		const int8_t *weights_ptr = weights_data;
-		const int32_t *bias_ptr = bias_data;
-		for (int32_t out_c = 0; out_c <= (output_depth - 2); out_c += 2) {
+		const int32_t *sum_of_weights_factor_ptr = sum_of_weights_factor;
 
-			CalculateTwoOutputNodes(weights_ptr, input_ptr, bias_ptr, output_ptr,
-					accum_depth, weights_offset, input_offset, output_offset,
+		int32_t sum_of_inputs_factor = CalculateOutputNodeAndSumOfInputsFactor(
+				weights_ptr, input_ptr, sum_of_weights_factor_ptr, output_ptr,
+				accum_depth, weights_offset, output_offset, output_multiplier,
+				output_shift, output_activation_min, output_activation_max);
+		weights_ptr += accum_depth;
+		sum_of_weights_factor_ptr++;
+		output_ptr++;
+
+		for (int32_t out_c = 1; out_c <= ((output_depth -1) - 2); out_c += 2) {
+
+			CalculateTwoOutputNodes(weights_ptr, input_ptr, sum_of_weights_factor_ptr,
+					sum_of_inputs_factor, output_ptr, accum_depth, output_offset,
 					output_multiplier, output_shift, output_activation_min, output_activation_max);
 			weights_ptr += 2 * accum_depth;
-			bias_ptr += 2;
+			sum_of_weights_factor_ptr += 2;
 			output_ptr += 2;
 		}
-		if (output_depth % 2){
 
-			CalculateOutputNode(weights_ptr, input_ptr, bias_ptr, output_ptr,
-					accum_depth, weights_offset, input_offset, output_offset,
+		if ((output_depth - 1) % 2){
+
+			CalculateOutputNode(weights_ptr, input_ptr, sum_of_weights_factor_ptr,
+					sum_of_inputs_factor, output_ptr, accum_depth, output_offset,
 					output_multiplier, output_shift, output_activation_min, output_activation_max);
 			output_ptr++;
 		}
@@ -255,6 +356,7 @@ TfLiteStatus EvalFloat(TfLiteContext* context, TfLiteNode* node,
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
+  OpData* data = reinterpret_cast<OpData*>(node->user_data);
   auto* params =
       reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
 
@@ -265,8 +367,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
   //Portable optimized!
   TfLiteType data_type = input->type;
-  OpData local_data_object;
-  OpData* data = &local_data_object;
   TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, data_type, input,
                                         weights, bias, output, data));
 										

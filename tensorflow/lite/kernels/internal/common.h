@@ -157,28 +157,6 @@ inline int32 MultiplyByQuantizedMultiplier(int32 x, int32 quantized_multiplier,
                              right_shift);
 }
 
-inline void MultiplyAccumulate(const int8 *lhs, const int8 *rhs, int32 *accum,
-	int32 lhs_offset, int32 rhs_offset, int32 depth) {
-
-	for (int32 d = 0; d < depth; ++d) {
-		int32 lhs_value = lhs[d] + lhs_offset;
-		int32 rhs_value = rhs[d] + rhs_offset;
-		*accum += lhs_value * rhs_value;
-	}
-}
-
-inline void MultiplyAccumulateTwo(const int8 *lhs, const int8 *rhs, int32 *accum,
-	int32 lhs_offset, int32 rhs_offset, int32 depth) {
-
-	for (int32 d = 0; d < depth; ++d) {
-		int32 lhs_value0 = lhs[d] + lhs_offset;
-		int32 lhs_value1 = lhs[depth + d] + lhs_offset;
-		int32 rhs_value = rhs[d] + rhs_offset;
-		accum[0] += lhs_value0 * rhs_value;
-		accum[1] += lhs_value1 * rhs_value;
-	}
-}
-
 template <typename T>
 int CountLeadingZeros(T integer_input) {
   static_assert(std::is_unsigned<T>::value,
