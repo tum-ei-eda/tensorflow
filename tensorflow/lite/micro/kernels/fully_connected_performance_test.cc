@@ -26,27 +26,18 @@ namespace tflite {
 namespace testing {
 namespace {
 
-struct
-{
-	int bufferIndex = 0;
-	uint32_t buffer[1024/4];
-} MockAllocator;
-
+MockAllocator *mock_allocator;
 TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
 {
-	(*ptr) = &MockAllocator.buffer[MockAllocator.bufferIndex];
-	MockAllocator.bufferIndex += bytes/4 + 1;
-	return kTfLiteOk;
+	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
 }
 TfLiteStatus RequestScratchBufferInArena(struct TfLiteContext* ctx, size_t bytes, int* buffer_idx)
 {
-	*buffer_idx = MockAllocator.bufferIndex;
-	MockAllocator.bufferIndex += bytes/4 + 1;
-	return kTfLiteOk;
+	return mock_allocator->RequestScratchBufferInArena(ctx, bytes, buffer_idx);
 }
 void* GetScratchBuffer(struct TfLiteContext* ctx, int buffer_idx)
 {
-	return &MockAllocator.buffer[buffer_idx];
+	return mock_allocator->GetScratchBuffer(ctx, buffer_idx);
 }
 
 template <typename T>
@@ -79,6 +70,10 @@ void TestFullyConnectedQuantized(
 
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, &context);
+  const size_t buffer_arena_size = 1024;
+  const size_t bytes_alignment = 4;
+  uint8_t buffer_arena[buffer_arena_size];
+  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
   context.RequestScratchBufferInArena = RequestScratchBufferInArena;
   context.GetScratchBuffer = GetScratchBuffer;
@@ -147,7 +142,7 @@ void TestFullyConnectedQuantized(
 
 TF_LITE_MICRO_TESTS_BEGIN
 
-TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8) {
+TF_LITE_MICRO_TEST(PerformanceTestQuantizedInt8) {
 
   using tflite::testing::F2Q32;
   using tflite::testing::F2QS;

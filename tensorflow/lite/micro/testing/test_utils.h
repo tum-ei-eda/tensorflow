@@ -29,6 +29,41 @@ limitations under the License.
 namespace tflite {
 namespace testing {
 
+//
+class MockAllocator {
+public:
+	MockAllocator(uint8_t* tensor_arena, size_t arena_size, size_t alignment) {
+		this->alignment = alignment;
+		std::uintptr_t data_as_uintptr_t = reinterpret_cast<std::uintptr_t>(tensor_arena);
+		uint8_t* aligned_buffer = reinterpret_cast<uint8_t*>(
+		      ((data_as_uintptr_t + (alignment - 1)) / alignment) * alignment);
+		this->tensor_arena = aligned_buffer;
+		next_buffer_index = 0;
+		this->arena_size = arena_size - (aligned_buffer - tensor_arena);
+	};
+	TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr) {
+		(*ptr) = &tensor_arena[next_buffer_index];
+		size_t aligned_size = (((bytes + (alignment - 1)) / alignment) * alignment);
+		next_buffer_index += aligned_size;
+		return kTfLiteOk;
+	};
+	TfLiteStatus RequestScratchBufferInArena(struct TfLiteContext* ctx, size_t bytes, int* buffer_idx)
+	{
+		*buffer_idx = next_buffer_index;
+		return kTfLiteOk;
+	};
+	void* GetScratchBuffer(struct TfLiteContext* ctx, int buffer_idx)
+	{
+		return &tensor_arena[buffer_idx];
+	};
+
+private:
+	int next_buffer_index;
+	uint8_t* tensor_arena;
+	size_t arena_size;
+	size_t alignment;
+};
+
 // Note: These methods are deprecated, do not use.  See b/141332970.
 // USE WITH CARE!! Returns pointer to data member of argument
 // so this object's lifetime must outlive any access to its underlying

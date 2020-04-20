@@ -264,16 +264,21 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 	for (int b = 0; b < batches; ++b) {
 		const int8_t *weights_ptr = weights_data;
 		const int32_t *sum_of_weights_factor_ptr = sum_of_weights_factor;
+		int32_t out_c = output_depth;
 
-		int32_t sum_of_inputs_factor = CalculateOutputNodeAndSumOfInputsFactor(
-				weights_ptr, input_ptr, sum_of_weights_factor_ptr, output_ptr,
-				accum_depth, weights_offset, output_offset, output_multiplier,
-				output_shift, output_activation_min, output_activation_max);
-		weights_ptr += accum_depth;
-		sum_of_weights_factor_ptr++;
-		output_ptr++;
+		int32_t sum_of_inputs_factor = 0;
+		if (weights_offset != 0) {
+			sum_of_inputs_factor = CalculateOutputNodeAndSumOfInputsFactor(
+					weights_ptr, input_ptr, sum_of_weights_factor_ptr, output_ptr,
+					accum_depth, weights_offset, output_offset, output_multiplier,
+					output_shift, output_activation_min, output_activation_max);
+			weights_ptr += accum_depth;
+			sum_of_weights_factor_ptr++;
+			output_ptr++;
+			out_c--;
+		}
 
-		for (int32_t out_c = 1; out_c <= ((output_depth -1) - 2); out_c += 2) {
+		while (out_c > 1) {
 
 			CalculateTwoOutputNodes(weights_ptr, input_ptr, sum_of_weights_factor_ptr,
 					sum_of_inputs_factor, output_ptr, accum_depth, output_offset,
@@ -281,9 +286,10 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 			weights_ptr += 2 * accum_depth;
 			sum_of_weights_factor_ptr += 2;
 			output_ptr += 2;
+			out_c -= 2;
 		}
 
-		if ((output_depth - 1) % 2){
+		if (out_c > 0){
 
 			CalculateOutputNode(weights_ptr, input_ptr, sum_of_weights_factor_ptr,
 					sum_of_inputs_factor, output_ptr, accum_depth, output_offset,
