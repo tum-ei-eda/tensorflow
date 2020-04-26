@@ -99,11 +99,6 @@ class FunctionTest : public ::testing::Test {
     params.delete_kernel = [](OpKernel* kernel) {
       DeleteNonCachedKernel(kernel);
     };
-    params.rendezvous_factory = [](const int64, const DeviceMgr* device_mgr,
-                                   Rendezvous** r) {
-      *r = new IntraProcessRendezvous(device_mgr);
-      return Status::OK();
-    };
     Executor* exec;
     TF_CHECK_OK(NewLocalExecutor(params, *g, &exec));
     exec_.reset(exec);
@@ -166,7 +161,14 @@ class FunctionLibraryRuntimeTest : public ::testing::Test {
     device_mgr_ = absl::make_unique<StaticDeviceMgr>(std::move(devices));
     pflr_.reset(new ProcessFunctionLibraryRuntime(
         device_mgr_.get(), Env::Default(), &options.config,
-        TF_GRAPH_DEF_VERSION, lib_def_.get(), opts));
+        TF_GRAPH_DEF_VERSION, lib_def_.get(), opts, /*thread_pool=*/nullptr,
+        /*parent=*/nullptr, /*custom_kernel_creator=*/nullptr,
+        /*session_metadata=*/nullptr,
+        Rendezvous::Factory{
+            [](const int64, const DeviceMgr* device_mgr, Rendezvous** r) {
+              *r = new IntraProcessRendezvous(device_mgr);
+              return Status::OK();
+            }}));
     flr0_ = pflr_->GetFLR("/job:localhost/replica:0/task:0/cpu:0");
     flr1_ = pflr_->GetFLR("/job:localhost/replica:0/task:0/cpu:1");
     flr2_ = pflr_->GetFLR("/job:localhost/replica:0/task:0/cpu:2");
@@ -389,6 +391,19 @@ TEST_F(FunctionLibraryRuntimeTest, XTimesTwo) {
   test::ExpectTensorEqual<float>(y, test::AsTensor<float>({2, 4, 6, 8}));
   TF_CHECK_OK(InstantiateAndRunViaCallFrameInterface(
       flr0_, "XTimesTwo", {{"T", DT_FLOAT}}, {x}, {&y}));
+  test::ExpectTensorEqual<float>(y, test::AsTensor<float>({2, 4, 6, 8}));
+}
+
+TEST_F(FunctionLibraryRuntimeTest, XTimesTwo_MultiDeviceBacked) {
+  Init({test::function::XTimesTwo()});
+  auto x = test::AsTensor<float>({1, 2, 3, 4});
+  Tensor y;
+
+  FunctionLibraryRuntime::InstantiateOptions options;
+  options.is_multi_device_function = true;
+
+  TF_CHECK_OK(InstantiateAndRun(flr0_, "XTimesTwo", {{"T", DT_FLOAT}}, options,
+                                {x}, {&y}));
   test::ExpectTensorEqual<float>(y, test::AsTensor<float>({2, 4, 6, 8}));
 }
 

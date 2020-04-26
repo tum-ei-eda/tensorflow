@@ -32,7 +32,8 @@ namespace profiler {
 struct InterThreadConnectInfo {
   int64 parent_event_type;
   int64 child_event_type;
-  std::vector<int64> stat_types;
+  std::vector<int64> parent_stat_types;
+  std::vector<int64> child_stat_types;
 };
 
 // A wrapper for XEvent with parent and children pointers. Through these
@@ -47,6 +48,8 @@ class EventNode {
   }
 
   EventNode* GetParent() const { return parent_; }
+
+  const std::vector<EventNode*>& GetChildren() const { return children_; }
 
   void AddChild(EventNode* child) {
     children_.push_back(child);
@@ -68,7 +71,15 @@ class EventNode {
 
   void AddStepName(absl::string_view step_name);
 
+  void SetIsEager(bool is_eager);
+
+  // Returns true if this event is part of eagerly executed op.
+  bool IsEager();
+
   bool IsNestedIn(EventNode* parent);
+
+  // Returns the closest parent of the given event type.
+  EventNode* FindParent(int64 event_type);
 
  private:
   const XPlaneVisitor* visitor_;
@@ -96,6 +107,8 @@ class EventForest {
               const std::function<XPlaneVisitor(const XPlane*)> visitor_factory,
               XSpace* space);
 
+  const EventNodeMap& GetEventNodeMap() const { return event_node_map_; }
+
   const EventGroupNameMap& GetEventGroupNameMap() const {
     return event_group_name_map_;
   }
@@ -115,17 +128,30 @@ class EventForest {
   void CreateEventGroup(
       const std::vector<int64 /*EventType*/>& root_event_types);
 
+  // Sets the is_eager stat to true for the eagerly executed GPU kernel events.
+  void MarkEagerlyExecutedGpuKernels();
+
+  // Sets the is_eager stat to true for the eagerly executed CPU TF op events.
+  void MarkEagerlyExecutedCpuTfOps();
+
   // Create virtual events of HostEventType::kHostTrainingLoopIteration and
   // event nodes for them. A virtual event is created for each iteration of the
   // host training loop and connected to the
   // HostEventType::kExecutorStateProcess event nodes of the iteration.
-  void CreateVirtualEvents();
+  void CreateVirtualEventsForHostTrainingLoop();
+
+  // Create virutal events of HostEventType::kAsyncExecutorTraceContext and
+  // event nodes for them. A virtual event is created for every FunctionRun and
+  // the following eager ops (e.g., for Keras callback).
+  void CreateVirtualEventsForAsyncExecutor();
 
   EventNodeMap event_node_map_;
   std::vector<XPlaneVisitor> visitors_;
   VirtualEventContainer virtual_event_container_;
   EventGroupNameMap event_group_name_map_;
 };
+
+std::vector<InterThreadConnectInfo> CreateInterThreadConnectInfoList();
 
 // Calls GroupEvents with connect_info_list and root_event_types specific to
 // TensorFlow.

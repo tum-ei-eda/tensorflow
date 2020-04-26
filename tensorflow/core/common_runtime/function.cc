@@ -402,7 +402,7 @@ class FunctionLibraryRuntimeImpl : public FunctionLibraryRuntime {
 
   mutable mutex mu_;
 
-  int next_handle_ GUARDED_BY(mu_);
+  int next_handle_ TF_GUARDED_BY(mu_);
 
   // The instantiated and transformed function is encoded as a Graph
   // object, and an executor is created for the graph.
@@ -414,7 +414,6 @@ class FunctionLibraryRuntimeImpl : public FunctionLibraryRuntime {
     Executor* exec = nullptr;
     FunctionLibraryRuntimeOverlay* overlay_flr = nullptr;
     string executor_type;
-    Executor::RendezvousFactory rendezvous_factory = nullptr;
 
     ~Item() {
       delete this->func_graph;
@@ -423,7 +422,7 @@ class FunctionLibraryRuntimeImpl : public FunctionLibraryRuntime {
     }
   };
   std::unique_ptr<std::unordered_map<Handle, std::unique_ptr<Item>>> items_
-      GUARDED_BY(mu_);
+      TF_GUARDED_BY(mu_);
 
   ProcessFunctionLibraryRuntime* parent_ = nullptr;  // not owned.
 
@@ -812,11 +811,6 @@ Status FunctionLibraryRuntimeImpl::Instantiate(
         item->overlay_flr =
             new FunctionLibraryRuntimeOverlay(this, options.lib_def);
       }
-      item->rendezvous_factory = [](const int64, const DeviceMgr* device_mgr,
-                                    Rendezvous** r) {
-        *r = new IntraProcessRendezvous(device_mgr);
-        return Status::OK();
-      };
       local_handle = next_handle_++;
       items_->emplace(local_handle, std::unique_ptr<Item>(item));
     }
@@ -972,7 +966,6 @@ Status FunctionLibraryRuntimeImpl::CreateItem(Item** item) {
   params.delete_kernel = [](OpKernel* kernel) {
     DeleteNonCachedKernel(kernel);
   };
-  params.rendezvous_factory = (*item)->rendezvous_factory;
   params.session_metadata = session_metadata_;
   std::unique_ptr<Executor> exec;
   TF_RETURN_IF_ERROR(NewExecutor(executor_type, params, *g, &exec));
@@ -1210,7 +1203,8 @@ void FunctionLibraryRuntimeImpl::Run(const Options& opts, Handle handle,
     };
   }
 
-  LocalHandle local_handle = parent_->GetHandleOnDevice(device_name_, handle);
+  LocalHandle local_handle = parent_->GetHandleOnDevice(
+      device_name_, handle, /*include_multi_device=*/true);
   if (local_handle == kInvalidLocalHandle) {
     parent_->Run(run_opts, handle, frame, done);
     return;

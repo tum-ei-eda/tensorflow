@@ -336,6 +336,7 @@ def generated_test_models():
         "rfft2d",
         "round",
         "rsqrt",
+        "scatter_nd",
         "shape",
         "sigmoid",
         "sin",
@@ -718,6 +719,7 @@ def tflite_experimental_runtime_linkopts(if_eager = [], if_non_eager = [], if_no
         if_eager = [
             # "//tensorflow/lite/experimental/tf_runtime:eager_interpreter",
             # "//tensorflow/lite/experimental/tf_runtime:eager_model",
+            # "//tensorflow/lite/experimental/tf_runtime:subgraph",
         ] + if_eager,
         if_non_eager = [
             # "//tensorflow/lite/experimental/tf_runtime:interpreter",

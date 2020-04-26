@@ -204,7 +204,7 @@ class GRU(recurrent.DropoutRNNCellMixin, recurrent.GRU):
   4. `unroll` is `False`
   5. `use_bias` is `True`
   6. `reset_after` is `True`
-  7. Inputs are not masked or strictly right padded.
+  7. Inputs, if use masking, are strictly right-padded.
 
   There are two variants of the GRU implementation. The default one is based on
   [v3](https://arxiv.org/abs/1406.1078v3) and has reset gate applied to hidden
@@ -925,7 +925,7 @@ class LSTM(recurrent.DropoutRNNCellMixin, recurrent.LSTM):
   3. `recurrent_dropout` == 0
   4. `unroll` is `False`
   5. `use_bias` is `True`
-  6. Inputs are not masked or strictly right padded.
+  6. Inputs, if use masking, are strictly right-padded.
 
   For example:
 
@@ -1179,9 +1179,10 @@ class LSTM(recurrent.DropoutRNNCellMixin, recurrent.LSTM):
       states = [new_h, new_c]
 
     if self.stateful:
-      updates = []
-      for i in range(len(states)):
-        updates.append(state_ops.assign(self.states[i], states[i]))
+      updates = [
+          state_ops.assign(self_state, state)
+          for self_state, state in zip(self.states, states)
+      ]
       self.add_update(updates)
 
     if self.return_sequences:

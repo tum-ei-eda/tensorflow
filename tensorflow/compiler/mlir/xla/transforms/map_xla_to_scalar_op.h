@@ -18,7 +18,7 @@ limitations under the License.
 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"  // TF:llvm-project
+#include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
 #include "tensorflow/compiler/mlir/xla/ir/hlo_ops.h"
 #include "tensorflow/compiler/mlir/xla/ir/lhlo_ops.h"
 #include "tensorflow/compiler/mlir/xla/transforms/map_hlo_to_lhlo_op.h"
@@ -119,8 +119,24 @@ template <>
 inline Value MapLhloOpToStdScalarOp<xla_lhlo::AbsOp>(
     Location loc, ArrayRef<Type> result_types, ArrayRef<Value> args,
     OpBuilder* b) {
-  return MapLhloOpToStdScalarOpImpl<FloatType, ::mlir::AbsFOp>{}(
-      loc, result_types, args, b);
+  Type element_type = args.front().getType();
+  if (element_type.isa<FloatType>()) {
+    return MapLhloOpToStdScalarOpImpl<FloatType, ::mlir::AbsFOp>{}(
+        loc, result_types, args, b);
+  }
+  if (element_type.isa<IntegerType>()) {
+    // xla_lhlo.abs(x, result) ->  result = select((x > 0), x, sub(0, x))
+    Value lhs = args[0];
+    auto integer_type = element_type.dyn_cast<IntegerType>();
+
+    auto zero_intval =
+        b->create<::mlir::ConstantIntOp>(loc, 0, integer_type.getWidth());
+    auto lhs_gt_zero = b->create<ScalarIOp<CompareOp>>(loc, CmpIPredicate::sge,
+                                                       lhs, zero_intval);
+    auto neg_val = b->create<ScalarIOp<xla_lhlo::SubOp>>(loc, zero_intval, lhs);
+    return b->create<::mlir::SelectOp>(loc, lhs_gt_zero, lhs, neg_val);
+  }
+  return nullptr;
 }
 
 template <>
@@ -140,14 +156,14 @@ inline Optional<PredicateType> getCmpPredicate(
 template <>
 inline Optional<CmpFPredicate> getCmpPredicate<CmpFPredicate>(
     StringRef xla_comparison_direction) {
-  return llvm::StringSwitch<CmpFPredicate>(xla_comparison_direction)
+  return llvm::StringSwitch<Optional<CmpFPredicate>>(xla_comparison_direction)
       .Case("EQ", CmpFPredicate::OEQ)
       .Case("NE", CmpFPredicate::ONE)
       .Case("GE", CmpFPredicate::OGE)
       .Case("GT", CmpFPredicate::OGT)
       .Case("LE", CmpFPredicate::OLE)
       .Case("LT", CmpFPredicate::OLT)
-      .Default(CmpFPredicate::NumPredicates);
+      .Default(llvm::None);
 }
 
 template <>
@@ -326,7 +342,28 @@ template <>
 inline Value MapLhloOpToStdScalarOp<xla_lhlo::NegOp>(
     Location loc, ArrayRef<Type> result_types, ArrayRef<Value> args,
     OpBuilder* b) {
-  return MapLhloOpToStdScalarOpImpl<FloatType, ::mlir::NegFOp>{}(
+  Type element_type = args.front().getType();
+  if (element_type.isa<FloatType>()) {
+    return MapLhloOpToStdScalarOpImpl<FloatType, ::mlir::NegFOp>{}(
+        loc, result_types, args, b);
+  }
+  if (element_type.isa<IntegerType>()) {
+    // xla_lhlo.neg(x, result) -> result = sub(0, x)
+    Value lhs = args[0];
+    auto integer_type = element_type.dyn_cast<IntegerType>();
+
+    auto zero_intval =
+        b->create<::mlir::ConstantIntOp>(loc, 0, integer_type.getWidth());
+    return b->create<ScalarIOp<xla_lhlo::SubOp>>(loc, zero_intval, lhs);
+  }
+  return nullptr;
+}
+
+template <>
+inline Value MapLhloOpToStdScalarOp<xla_lhlo::RsqrtOp>(
+    Location loc, ArrayRef<Type> result_types, ArrayRef<Value> args,
+    OpBuilder* b) {
+  return MapLhloOpToStdScalarOpImpl<FloatType, ::mlir::RsqrtOp>{}(
       loc, result_types, args, b);
 }
 
@@ -414,12 +451,6 @@ struct XlaOpToStdScalarOp {
         op.getLoc(), comparison_direction, result_types, args, b);
   }
 };
-
-template <typename XlaOpTy>
-inline Value MapXlaOpToStdScalarOp(XlaOpTy xla_op, ArrayRef<Type> result_types,
-                                   ArrayRef<Value> args, OpBuilder* b) {
-  return XlaOpToStdScalarOp::map<XlaOpTy>(xla_op, result_types, args, b);
-}
 
 }  // namespace xla_lhlo
 }  // namespace mlir
