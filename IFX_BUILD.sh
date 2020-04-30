@@ -2,7 +2,7 @@
 set -e
 source ../SETTINGS_AND_VERSIONS.sh
 
-JOBS=HOST_CPUS*0.7
+LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
@@ -10,19 +10,27 @@ do
         echo "`basename $0`: [--no_toco]"
         exit 1
         ;;
-    "--noconfig")
+    "--no-config")
         NOCONFIG=1
         ;;
-    "--notoco")
+    "--no-build")
         NOBUILD=1
         ;;
-    "--nottflite")
+    "--no-tflite")
         NOTFLITE=1
         ;;
     "--jobs")
-        JOBS="$2"
+        LOCALJOBS="$2"
         shift
         ;;
+    "--remote")
+        BAZEL_REMOTE_OPTIONS=(
+           --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://localhost:8980
+        )
+        ;;
+    "--override-llvm")
+	BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f ../..)/llvm-project )
+	;;
     "--verbose")
         VERBOSE=( --subcommands=true )
         ;;
@@ -38,7 +46,24 @@ RISCV_SETTINGS=( TARGET_ARCH=${RV_TARGET_ARCH} TARGET_ABI=${RV_TARGET_ABI} )
 # These builds only here to trigger error if build fails
 
 TFLITE_MICRO_ROOT=${TOOLSPREFIX}/tflite_u-${TFLITE_MICRO_VERSION}
-#bazel clean
+
+
+if [ -n "$RD_CLUSTER_LINUX_HOST" ]
+then
+  BAZEL_DISTDIR_OPTIONS=( --distdir /home/aifordes.work/share/bazel-distdir )
+fi
+
+BAZEL_CMDLINE_OPTIONS=( )
+BAZEL_OPTIONS=(
+  "${BAZEL_DISTDIR_OPTIONS[@]}"
+  "${BAZEL_REPO_OVERRIDES[@]}"
+  --verbose_failures --local_cpu_resources="$LOCALJOBS" --config=monolithic "${VERBOSE[@]}"
+  "${BAZEL_REMOTE_OPTIONS[@]}"
+  --config=dbg
+  --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+  --strip=never --fission=yes --verbose_failures=yes
+)
+
 
 # Build a statically linked toco command-line translator
 # and TF-lite(micro) libraries
@@ -87,20 +112,17 @@ then
   export TF_OVERRIDE_EIGEN_STRONG_INLINE=1
   export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'from distutils.sysconfig import get_python_lib;print(get_python_lib())')"
   ./configure
+
+  rm .bazelrc.user
+  echo configured bazel build: "${BAZEL_OPTIONS[@]}"
+  for o in "${BAZEL_OPTIONS[@]}"
+  do
+    echo build "$o" >> .bazelrc.user
+  done
 )
 else
   echo Skipping configure...
 fi
-
-if [ -n "$RD_CLUSTER_LINUX_HOST" ]
-then
-  BAZEL_DISTDIR_OPTIONS=( --distdir /home/aifordes.work/share/bazel-distdir )
-fi
-
-BAZEL_OPTIONS=(
-  --verbose_failures --local_cpu_resources="$JOBS" --config opt --config=monolithic "${VERBOSE[@]}"
-  "${BAZEL_DISTDIR_OPTIONS[@]}" 
-)
 
 BAZEL_TARGETS=( //tensorflow/lite/toco:toco //tensorflow/compiler/mlir/lite:tf_tfl_translate )
 
@@ -109,7 +131,7 @@ then
     # Some useful recipes from the past... comment out in case needed
     #  bazel fetch "${BAZEL_DISTDIR_OPTIONS[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
     #bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
-    #bazel build --local_cpu_resources="$JOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
+    #bazel build --local_cpu_resources="$LOCALJOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
     #sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
   (
     # Wild patching orgy is needed... including yes in 2020
@@ -119,8 +141,8 @@ then
        source msys_env.sh
     fi
     # 
-    echo bazel build "${BAZEL_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
-    bazel build  --local_cpu_resources="$JOBS" --config=monolithic "${BAZEL_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
+    echo bazel build "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
+    bazel build   "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
     mkdir -p ${TFLITE_MICRO_ROOT}/bin  
     rm -f ${TFLITE_MICRO_ROOT}/bin/*
     cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
