@@ -29,6 +29,7 @@ limitations under the License.
 #include "tensorflow/core/distributed_runtime/eager/cluster_function_library_runtime.h"
 #include "tensorflow/core/distributed_runtime/eager/remote_mgr.h"
 #include "tensorflow/core/distributed_runtime/eager/remote_tensor_handle.h"
+#include "tensorflow/core/distributed_runtime/message_wrappers.h"
 #include "tensorflow/core/distributed_runtime/rpc/rpc_rendezvous_mgr.h"
 #include "tensorflow/core/distributed_runtime/server_lib.h"
 #include "tensorflow/core/distributed_runtime/session_mgr.h"
@@ -285,14 +286,9 @@ Status EagerServiceImpl::UpdateContext(const UpdateContextRequest* request,
   TF_RETURN_IF_ERROR(worker_session->worker_cache()->GetEagerClientCache(
       &remote_eager_workers));
 
-  DistributedFunctionLibraryRuntime* cluster_flr =
-      eager::CreateClusterFLR(request->context_id(), ctx, worker_session.get());
-
   ctx->ClearCachesAndThreadExecutors();
-  Status s = ctx->UpdateRemoteWorker(
-      device_mgr, std::move(remote_eager_workers),
-      worker_session->remote_device_mgr(), remote_workers,
-      request->context_id(), cluster_flr);
+  Status s = ctx->UpdateRemoteWorker(std::move(remote_eager_workers),
+                                     remote_workers, request->context_id());
   if (!s.ok()) {
     VLOG(1) << "EagerContext::UpdateRemoteWorker failed with " << s.ToString();
     return s;
@@ -323,6 +319,13 @@ Status EagerServiceImpl::CreateMasterContext(
       ServerContext::CreateMasterContext(context, env_);
   mutex_lock l(contexts_mu_);
   contexts_.emplace(context_id, server_context);
+  return Status::OK();
+}
+
+Status TensorHandleProto(TensorHandle* handle, TensorProto* proto) {
+  const tensorflow::Tensor* t = nullptr;
+  TF_RETURN_IF_ERROR(handle->Tensor(&t));
+  t->AsProtoTensorContent(proto);
   return Status::OK();
 }
 
@@ -359,12 +362,24 @@ Status EagerServiceImpl::ExecuteOp(const Operation& operation,
   {
     profiler::TraceMe activity("EagerService:RemoteTensorHandleInternal",
                                profiler::TraceMeLevel::kVerbose);
-    for (const auto& remote_handle : operation.inputs()) {
+    for (const auto& input : operation.op_inputs()) {
       tensorflow::TensorHandle* handle;
-      TF_RETURN_IF_ERROR(
-          eager_context->RemoteMgr()->DeserializeRemoteTensorHandle(
-              remote_handle, &handle));
-      op->AddInput(handle);
+      if (input.has_remote_handle()) {
+        TF_RETURN_IF_ERROR(
+            eager_context->RemoteMgr()->DeserializeRemoteTensorHandle(
+                input.remote_handle(), &handle));
+        TF_RETURN_IF_ERROR(op->AddInput(handle));
+      } else {
+        Tensor tensor;
+        if (!ParseTensorProtoToTensor(input.tensor(), &tensor)) {
+          return errors::InvalidArgument("Invalid TensorProto: ",
+                                         input.tensor().DebugString());
+        } else {
+          handle = TensorHandle::CreateLocalHandle(std::move(tensor), nullptr,
+                                                   nullptr, eager_context);
+          TF_RETURN_IF_ERROR(op->AddInput(handle));
+        }
+      }
       // Unref handle since it has a ref as an input now.
       handle->Unref();
     }
@@ -383,12 +398,21 @@ Status EagerServiceImpl::ExecuteOp(const Operation& operation,
   VLOG(3) << "ServerContext: Calling EagerExecute for op " << operation.id();
   TF_RETURN_IF_ERROR(EagerExecute(op.get(), retvals.data(), &num_retvals));
 
-  eager_context->RemoteMgr()->AddOperationOutputs(
-      absl::MakeSpan(retvals.data(), num_retvals), operation.id());
-
-  for (int i = 0; i < num_retvals; i++) {
-    TF_RETURN_IF_ERROR(
-        TensorHandleShape(retvals[i], queue_response->add_shape()));
+  if (operation.id() == kInvalidRemoteOpId) {
+    // Copy the output tensors back along with the response, since the op id
+    // is invalid which cannot be added to RemoteMgr.
+    for (int i = 0; i < num_retvals; i++) {
+      TF_RETURN_IF_ERROR(
+          TensorHandleProto(retvals[i], queue_response->add_tensor()));
+      retvals[i]->Unref();
+    }
+  } else {
+    eager_context->RemoteMgr()->AddOperationOutputs(
+        absl::MakeSpan(retvals.data(), num_retvals), operation.id());
+    for (int i = 0; i < num_retvals; i++) {
+      TF_RETURN_IF_ERROR(
+          TensorHandleShape(retvals[i], queue_response->add_shape()));
+    }
   }
 
   return Status::OK();
@@ -529,9 +553,8 @@ Status EagerServiceImpl::SendTensor(const SendTensorOp& send_tensor,
       return errors::InvalidArgument("Unable to parse tensor proto");
     }
 
-    TensorHandle* tensor_handle = nullptr;
-    TF_RETURN_IF_ERROR(TensorHandle::CreateLocalHandle(
-        std::move(tensor), nullptr, nullptr, eager_context, &tensor_handle));
+    TensorHandle* tensor_handle = TensorHandle::CreateLocalHandle(
+        std::move(tensor), nullptr, nullptr, eager_context);
     TensorHandle* copied_handle = nullptr;
     Device* device;
     TF_RETURN_IF_ERROR(eager_context->FindDeviceFromName(
@@ -557,7 +580,7 @@ tensorflow::Status EagerServiceImpl::GetServerContext(
     return errors::InvalidArgument(strings::Printf(
         "Unable to find a context_id matching the specified one "
         "(%llu). Perhaps the worker was restarted, or the context was GC'd?",
-        context_id));
+        static_cast<unsigned long long>(context_id)));
   }
 
   *server_context = iter->second;

@@ -15,8 +15,14 @@ limitations under the License.
 
 #include "tensorflow/core/kernels/data/experimental/snapshot_util.h"
 
+#include <queue>
+
+#include "absl/memory/memory.h"
 #include "tensorflow/core/common_runtime/dma_helper.h"
+#include "tensorflow/core/framework/dataset.h"
+#include "tensorflow/core/framework/graph.pb.h"
 #include "tensorflow/core/framework/tensor.pb.h"
+#include "tensorflow/core/kernels/data/name_utils.h"
 #include "tensorflow/core/lib/io/buffered_inputstream.h"
 #include "tensorflow/core/lib/io/random_inputstream.h"
 #include "tensorflow/core/lib/io/snappy/snappy_inputbuffer.h"
@@ -26,37 +32,57 @@ limitations under the License.
 #include "tensorflow/core/lib/io/zlib_outputbuffer.h"
 #include "tensorflow/core/platform/coding.h"
 #include "tensorflow/core/platform/file_system.h"
+#include "tensorflow/core/platform/path.h"
+#include "tensorflow/core/platform/random.h"
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/protobuf/data/experimental/snapshot.pb.h"
 
 namespace tensorflow {
 namespace data {
-namespace experimental {
+namespace snapshot_util {
 
-SnapshotWriter::SnapshotWriter(WritableFile* dest,
-                               const string& compression_type, int version,
-                               const DataTypeVector& dtypes)
-    : dest_(dest), compression_type_(compression_type), version_(version) {
+/* static */ constexpr const int64 Reader::kSnappyReaderInputBufferSizeBytes;
+/* static */ constexpr const int64 Reader::kSnappyReaderOutputBufferSizeBytes;
+
+Writer::Writer(const std::string& filename, const std::string& compression_type,
+               int version, const DataTypeVector& dtypes)
+    : filename_(filename),
+      compression_type_(compression_type),
+      version_(version),
+      dtypes_(dtypes) {}
+
+Status Writer::Create(Env* env, const std::string& filename,
+                      const std::string& compression_type, int version,
+                      const DataTypeVector& dtypes,
+                      std::unique_ptr<Writer>* out_writer) {
+  *out_writer =
+      absl::WrapUnique(new Writer(filename, compression_type, version, dtypes));
+
+  return (*out_writer)->Initialize(env);
+}
+
+Status Writer::Initialize(tensorflow::Env* env) {
+  TF_RETURN_IF_ERROR(env->NewWritableFile(filename_, &dest_));
 #if defined(IS_SLIM_BUILD)
-  if (compression_type != io::compression::kNone) {
+  if (compression_type_ != io::compression::kNone) {
     LOG(ERROR) << "Compression is unsupported on mobile platforms. Turning "
                << "off compression.";
   }
 #else   // IS_SLIM_BUILD
-  if (compression_type == io::compression::kGzip) {
+  if (compression_type_ == io::compression::kGzip) {
+    zlib_underlying_dest_.swap(dest_);
     io::ZlibCompressionOptions zlib_options;
     zlib_options = io::ZlibCompressionOptions::GZIP();
 
-    io::ZlibOutputBuffer* zlib_output_buffer =
-        new io::ZlibOutputBuffer(dest, zlib_options.input_buffer_size,
-                                 zlib_options.output_buffer_size, zlib_options);
+    io::ZlibOutputBuffer* zlib_output_buffer = new io::ZlibOutputBuffer(
+        zlib_underlying_dest_.get(), zlib_options.input_buffer_size,
+        zlib_options.output_buffer_size, zlib_options);
     TF_CHECK_OK(zlib_output_buffer->Init());
-    dest_ = zlib_output_buffer;
-    dest_is_owned_ = true;
+    dest_.reset(zlib_output_buffer);
   }
 #endif  // IS_SLIM_BUILD
-  simple_tensor_mask_.reserve(dtypes.size());
-  for (const auto& dtype : dtypes) {
+  simple_tensor_mask_.reserve(dtypes_.size());
+  for (const auto& dtype : dtypes_) {
     if (DataTypeCanUseMemcpy(dtype)) {
       simple_tensor_mask_.push_back(true);
       num_simple_++;
@@ -65,9 +91,11 @@ SnapshotWriter::SnapshotWriter(WritableFile* dest,
       num_complex_++;
     }
   }
+
+  return Status::OK();
 }
 
-Status SnapshotWriter::WriteTensors(const std::vector<Tensor>& tensors) {
+Status Writer::WriteTensors(const std::vector<Tensor>& tensors) {
   if (compression_type_ != io::compression::kSnappy) {
     experimental::SnapshotRecord record;
     for (const auto& tensor : tensors) {
@@ -93,11 +121,12 @@ Status SnapshotWriter::WriteTensors(const std::vector<Tensor>& tensors) {
   tensor_buffers.reserve(num_simple_);
   std::vector<TensorProto> tensor_protos;
   tensor_protos.reserve(num_complex_);
-  SnapshotTensorMetadata metadata;
+  experimental::SnapshotTensorMetadata metadata;
   int64 total_size = 0;
   for (int i = 0; i < tensors.size(); ++i) {
     const Tensor& tensor = tensors[i];
-    TensorMetadata* tensor_metadata = metadata.add_tensor_metadata();
+    experimental::TensorMetadata* tensor_metadata =
+        metadata.add_tensor_metadata();
     tensor.shape().AsProto(tensor_metadata->mutable_tensor_shape());
     int64 size = 0;
     if (simple_tensor_mask_[i]) {
@@ -147,28 +176,28 @@ Status SnapshotWriter::WriteTensors(const std::vector<Tensor>& tensors) {
   return Status::OK();
 }
 
-Status SnapshotWriter::Sync() { return dest_->Sync(); }
+Status Writer::Sync() { return dest_->Sync(); }
 
-Status SnapshotWriter::Close() {
-  if (dest_is_owned_) {
-    Status s = dest_->Close();
-    delete dest_;
+Status Writer::Close() {
+  if (dest_ != nullptr) {
+    TF_RETURN_IF_ERROR(dest_->Close());
     dest_ = nullptr;
-    return s;
+  }
+  if (zlib_underlying_dest_ != nullptr) {
+    TF_RETURN_IF_ERROR(zlib_underlying_dest_->Close());
+    zlib_underlying_dest_ = nullptr;
   }
   return Status::OK();
 }
 
-SnapshotWriter::~SnapshotWriter() {
-  if (dest_ != nullptr) {
-    Status s = Close();
-    if (!s.ok()) {
-      LOG(ERROR) << "Could not finish writing file: " << s;
-    }
+Writer::~Writer() {
+  Status s = Close();
+  if (!s.ok()) {
+    LOG(ERROR) << "Could not finish writing file: " << s;
   }
 }
 
-Status SnapshotWriter::WriteRecord(const StringPiece& data) {
+Status Writer::WriteRecord(const StringPiece& data) {
   char header[kHeaderSize];
   core::EncodeFixed64(header, data.size());
   TF_RETURN_IF_ERROR(dest_->Append(StringPiece(header, sizeof(header))));
@@ -176,7 +205,7 @@ Status SnapshotWriter::WriteRecord(const StringPiece& data) {
 }
 
 #if defined(PLATFORM_GOOGLE)
-Status SnapshotWriter::WriteRecord(const absl::Cord& data) {
+Status Writer::WriteRecord(const absl::Cord& data) {
   char header[kHeaderSize];
   core::EncodeFixed64(header, data.size());
   TF_RETURN_IF_ERROR(dest_->Append(StringPiece(header, sizeof(header))));
@@ -184,14 +213,218 @@ Status SnapshotWriter::WriteRecord(const absl::Cord& data) {
 }
 #endif  // PLATFORM_GOOGLE
 
-SnapshotReader::SnapshotReader(RandomAccessFile* file,
-                               const string& compression_type, int version,
-                               const DataTypeVector& dtypes)
-    : file_(file),
-      input_stream_(new io::RandomAccessInputStream(file)),
+Status Reader::Create(Env* env, const std::string& filename,
+                      const string& compression_type, int version,
+                      const DataTypeVector& dtypes,
+                      std::unique_ptr<Reader>* out_reader) {
+  *out_reader =
+      absl::WrapUnique(new Reader(filename, compression_type, version, dtypes));
+
+  return (*out_reader)->Initialize(env);
+}
+
+class Reader::Dataset : public DatasetBase {
+ public:
+  explicit Dataset(const std::string& filename, const std::string& compression,
+                   const int64 version, const DataTypeVector& dtypes,
+                   const std::vector<PartialTensorShape>& shapes,
+                   DatasetContext::Params params)
+      : DatasetBase(DatasetContext(std::move(params))),
+        filename_(filename),
+        compression_(compression),
+        version_(version),
+        dtypes_(dtypes),
+        shapes_(shapes) {}
+
+  const DataTypeVector& output_dtypes() const override { return dtypes_; }
+
+  const std::vector<PartialTensorShape>& output_shapes() const override {
+    return shapes_;
+  }
+
+  std::string DebugString() const override {
+    return "snapshot_util::Reader::Dataset";
+  }
+
+  Status CheckExternalState() const override { return Status::OK(); }
+
+ protected:
+  Status AsGraphDefInternal(SerializationContext* ctx,
+                            DatasetGraphDefBuilder* b,
+                            Node** node) const override {
+    // TODO(frankchn): Implement for serialization and checkpointing.
+    return Status::OK();
+  }
+
+  std::unique_ptr<IteratorBase> MakeIteratorInternal(
+      const string& prefix) const override {
+    return absl::make_unique<Iterator>(Iterator::Params{
+        this, name_utils::IteratorPrefix(node_name(), prefix)});
+  }
+
+ private:
+  std::string filename_;
+  std::string compression_;
+  int64 version_;
+  DataTypeVector dtypes_;
+  std::vector<PartialTensorShape> shapes_;
+
+  class Iterator : public DatasetIterator<Dataset> {
+   public:
+    explicit Iterator(const Params& params)
+        : DatasetIterator<Dataset>(params) {}
+
+    Status Initialize(IteratorContext* ctx) override {
+      return Reader::Create(ctx->env(), dataset()->filename_,
+                            dataset()->compression_, dataset()->version_,
+                            dataset()->dtypes_, &reader_);
+    }
+
+   protected:
+    Status GetNextInternal(IteratorContext* ctx,
+                           std::vector<Tensor>* out_tensors,
+                           bool* end_of_sequence) override {
+      *end_of_sequence = false;
+      Status s = reader_->ReadTensors(out_tensors);
+      if (errors::IsOutOfRange(s)) {
+        *end_of_sequence = true;
+        return Status::OK();
+      }
+      return s;
+    }
+
+    Status SaveInternal(SerializationContext* ctx,
+                        IteratorStateWriter* writer) override {
+      // TODO(frankchn): Implement for serialization and checkpointing.
+      return Status::OK();
+    }
+
+    Status RestoreInternal(IteratorContext* ctx,
+                           IteratorStateReader* reader) override {
+      // TODO(frankchn): Implement for serialization and checkpointing.
+      return Status::OK();
+    }
+
+   private:
+    std::unique_ptr<Reader> reader_;
+  };
+};
+
+class Reader::NestedDataset : public DatasetBase {
+ public:
+  explicit NestedDataset(std::vector<DatasetBase*> datasets,
+                         DatasetContext::Params params)
+      : DatasetBase(DatasetContext(std::move(params))), datasets_(datasets) {
+    dtypes_.push_back(DT_VARIANT);
+    gtl::InlinedVector<int64, 1> element_dim_sizes;
+    element_dim_sizes.push_back(1);
+    partial_shapes_.emplace_back(element_dim_sizes);
+  }
+
+  const DataTypeVector& output_dtypes() const override { return dtypes_; }
+
+  const std::vector<PartialTensorShape>& output_shapes() const override {
+    return partial_shapes_;
+  }
+
+  std::string DebugString() const override {
+    return "snapshot_util::Reader::NestedDataset";
+  }
+
+  Status CheckExternalState() const override { return Status::OK(); }
+
+ protected:
+  Status AsGraphDefInternal(SerializationContext* ctx,
+                            DatasetGraphDefBuilder* b,
+                            Node** node) const override {
+    // TODO(frankchn): Implement for serialization and checkpointing.
+    return Status::OK();
+  }
+
+  std::unique_ptr<IteratorBase> MakeIteratorInternal(
+      const string& prefix) const override {
+    return absl::make_unique<Iterator>(Iterator::Params{
+        this, name_utils::IteratorPrefix(node_name(), prefix)});
+  }
+
+ private:
+  std::vector<DatasetBase*> datasets_;
+  DataTypeVector dtypes_;
+  std::vector<PartialTensorShape> partial_shapes_;
+
+  class Iterator : public DatasetIterator<NestedDataset> {
+   public:
+    explicit Iterator(const Params& params)
+        : DatasetIterator<NestedDataset>(params), index_(0) {}
+
+   protected:
+    Status GetNextInternal(IteratorContext* ctx,
+                           std::vector<Tensor>* out_tensors,
+                           bool* end_of_sequence) override {
+      *end_of_sequence = dataset()->datasets_.size() == index_;
+      if (!*end_of_sequence) {
+        Tensor tensor(DT_VARIANT, TensorShape({}));
+
+        TF_RETURN_IF_ERROR(
+            StoreDatasetInVariantTensor(dataset()->datasets_[index_], &tensor));
+        out_tensors->clear();
+        out_tensors->push_back(std::move(tensor));
+
+        index_++;
+      }
+      return Status::OK();
+    }
+
+    Status SaveInternal(SerializationContext* ctx,
+                        IteratorStateWriter* writer) override {
+      // TODO(frankchn): Implement for serialization and checkpointing.
+      return Status::OK();
+    }
+
+    Status RestoreInternal(IteratorContext* ctx,
+                           IteratorStateReader* reader) override {
+      // TODO(frankchn): Implement for serialization and checkpointing.
+      return Status::OK();
+    }
+
+   private:
+    int64 index_;
+  };
+};
+
+Status Reader::MakeNestedDataset(Env* env,
+                                 const std::vector<std::string>& filenames,
+                                 const string& compression_type, int version,
+                                 const DataTypeVector& dtypes,
+                                 const std::vector<PartialTensorShape>& shapes,
+                                 DatasetBase** output) {
+  std::vector<DatasetBase*> datasets;
+
+  datasets.reserve(filenames.size());
+  for (const auto& filename : filenames) {
+    datasets.push_back(
+        new Dataset(filename, compression_type, version, dtypes, shapes,
+                    DatasetContext::Params({"snapshot_util::Reader::Dataset",
+                                            "snapshot_util_reader_Dataset"})));
+  }
+
+  *output = new NestedDataset(
+      datasets, DatasetContext::Params({"snapshot_util::Reader::NestedDataset",
+                                        "snapshot_util_reader_NestedDataset"}));
+  return Status::OK();
+}
+
+Reader::Reader(const std::string& filename, const string& compression_type,
+               int version, const DataTypeVector& dtypes)
+    : filename_(filename),
       compression_type_(compression_type),
       version_(version),
-      dtypes_(dtypes) {
+      dtypes_(dtypes) {}
+
+Status Reader::Initialize(Env* env) {
+  TF_RETURN_IF_ERROR(Env::Default()->NewRandomAccessFile(filename_, &file_));
+  input_stream_ = std::make_unique<io::RandomAccessInputStream>(file_.get());
+
 #if defined(IS_SLIM_BUILD)
   if (compression_type_ != io::compression::kNone) {
     LOG(ERROR) << "Compression is unsupported on mobile platforms. Turning "
@@ -208,16 +441,16 @@ SnapshotReader::SnapshotReader(RandomAccessFile* file,
   } else if (compression_type_ == io::compression::kSnappy) {
     if (version_ == 0) {
       input_stream_ = absl::make_unique<io::SnappyInputBuffer>(
-          file_, /*input_buffer_bytes=*/SnapshotReader::kSnappyReaderInputBufferSizeBytes,
-          /*output_buffer_bytes=*/SnapshotReader::kSnappyReaderOutputBufferSizeBytes);
+          file_.get(), /*input_buffer_bytes=*/kSnappyReaderInputBufferSizeBytes,
+          /*output_buffer_bytes=*/kSnappyReaderOutputBufferSizeBytes);
     } else {
       input_stream_ =
-          absl::make_unique<io::BufferedInputStream>(file_, 64 << 20);
+          absl::make_unique<io::BufferedInputStream>(file_.get(), 64 << 20);
     }
   }
-#endif  // IS_SLIM_BUILD  
-  simple_tensor_mask_.reserve(dtypes.size());
-  for (const auto& dtype : dtypes) {
+#endif  // IS_SLIM_BUILD
+  simple_tensor_mask_.reserve(dtypes_.size());
+  for (const auto& dtype : dtypes_) {
     if (DataTypeCanUseMemcpy(dtype)) {
       simple_tensor_mask_.push_back(true);
       num_simple_++;
@@ -226,15 +459,11 @@ SnapshotReader::SnapshotReader(RandomAccessFile* file,
       num_complex_++;
     }
   }
+
+  return Status::OK();
 }
 
- const int64 SnapshotReader::kSnappyReaderInputBufferSizeBytes =
-      1 << 30;  // 1 GiB
-  // TODO(b/148804377): Set this in a smarter fashion.
-const int64 SnapshotReader::kSnappyReaderOutputBufferSizeBytes =
-      32 << 20;  // 32 MiB
-
-Status SnapshotReader::ReadTensors(std::vector<Tensor>* read_tensors) {
+Status Reader::ReadTensors(std::vector<Tensor>* read_tensors) {
   profiler::TraceMe activity(
       [&]() { return absl::StrCat(kClassName, kSeparator, "ReadTensors"); },
       profiler::TraceMeLevel::kInfo);
@@ -248,7 +477,7 @@ Status SnapshotReader::ReadTensors(std::vector<Tensor>* read_tensors) {
     return errors::InvalidArgument("Version 1 only supports snappy.");
   }
 
-  SnapshotTensorMetadata metadata;
+  experimental::SnapshotTensorMetadata metadata;
   tstring metadata_str;
   TF_RETURN_IF_ERROR(ReadRecord(&metadata_str));
   if (!metadata.ParseFromArray(metadata_str.data(), metadata_str.size())) {
@@ -299,7 +528,7 @@ Status SnapshotReader::ReadTensors(std::vector<Tensor>* read_tensors) {
   return Status::OK();
 }
 
-Status SnapshotReader::ReadTensorsV0(std::vector<Tensor>* read_tensors) {
+Status Reader::ReadTensorsV0(std::vector<Tensor>* read_tensors) {
   experimental::SnapshotRecord record;
 #if defined(PLATFORM_GOOGLE)
   absl::Cord c;
@@ -320,8 +549,9 @@ Status SnapshotReader::ReadTensorsV0(std::vector<Tensor>* read_tensors) {
   return Status::OK();
 }
 
-Status SnapshotReader::SnappyUncompress(
-    const SnapshotTensorMetadata* metadata, std::vector<Tensor>* simple_tensors,
+Status Reader::SnappyUncompress(
+    const experimental::SnapshotTensorMetadata* metadata,
+    std::vector<Tensor>* simple_tensors,
     std::vector<std::pair<std::unique_ptr<char[]>, size_t>>*
         tensor_proto_strs) {
   tstring compressed;
@@ -368,7 +598,7 @@ Status SnapshotReader::SnappyUncompress(
   return Status::OK();
 }
 
-Status SnapshotReader::ReadRecord(tstring* record) {
+Status Reader::ReadRecord(tstring* record) {
   tstring header;
   TF_RETURN_IF_ERROR(input_stream_->ReadNBytes(kHeaderSize, &header));
   uint64 length = core::DecodeFixed64(header.data());
@@ -376,7 +606,7 @@ Status SnapshotReader::ReadRecord(tstring* record) {
 }
 
 #if defined(PLATFORM_GOOGLE)
-Status SnapshotReader::ReadRecord(absl::Cord* record) {
+Status Reader::ReadRecord(absl::Cord* record) {
   tstring header;
   TF_RETURN_IF_ERROR(input_stream_->ReadNBytes(kHeaderSize, &header));
   uint64 length = core::DecodeFixed64(header.data());
@@ -395,6 +625,92 @@ Status SnapshotReader::ReadRecord(absl::Cord* record) {
 }
 #endif
 
-}  // namespace experimental
+Status WriteMetadataFile(const string& hash_dir,
+                         const experimental::SnapshotMetadataRecord* metadata) {
+  string metadata_filename = io::JoinPath(hash_dir, kMetadataFilename);
+  TF_RETURN_IF_ERROR(Env::Default()->RecursivelyCreateDir(hash_dir));
+  std::string tmp_filename =
+      absl::StrCat(metadata_filename, "-tmp-", random::New64());
+  TF_RETURN_IF_ERROR(WriteBinaryProto(Env::Default(), tmp_filename, *metadata));
+  return Env::Default()->RenameFile(tmp_filename, metadata_filename);
+}
+
+Status ReadMetadataFile(const string& hash_dir,
+                        experimental::SnapshotMetadataRecord* metadata,
+                        bool* file_exists) {
+  string metadata_filename = io::JoinPath(hash_dir, kMetadataFilename);
+  Status s = Env::Default()->FileExists(metadata_filename);
+  *file_exists = s.ok();
+
+  if (*file_exists) {
+    return ReadBinaryProto(Env::Default(), metadata_filename, metadata);
+  } else {
+    return Status::OK();
+  }
+}
+
+Status DumpDatasetGraph(const std::string& path, uint64 hash,
+                        const GraphDef* graph) {
+  std::string hash_hex =
+      strings::StrCat(strings::Hex(hash, strings::kZeroPad16));
+  std::string graph_file =
+      io::JoinPath(path, absl::StrCat(hash_hex, "-graph.pbtxt"));
+
+  LOG(INFO) << "Graph hash is " << hash_hex << ", writing to " << graph_file;
+  TF_RETURN_IF_ERROR(Env::Default()->RecursivelyCreateDir(path));
+  return WriteTextProto(Env::Default(), graph_file, *graph);
+}
+
+Status DetermineOpState(const std::string& mode_string, bool file_exists,
+                        const experimental::SnapshotMetadataRecord* metadata,
+                        const uint64 pending_snapshot_expiry_seconds,
+                        Mode* mode) {
+  if (mode_string == kModeRead) {
+    // In read mode, we should expect a metadata file is written.
+    if (!file_exists) {
+      return errors::NotFound("Metadata file does not exist.");
+    }
+    LOG(INFO) << "Overriding mode to reader.";
+    *mode = READER;
+    return Status::OK();
+  }
+
+  if (mode_string == kModeWrite) {
+    LOG(INFO) << "Overriding mode to writer.";
+    *mode = WRITER;
+    return Status::OK();
+  }
+
+  if (mode_string == kModePassthrough) {
+    LOG(INFO) << "Overriding mode to passthrough.";
+    *mode = PASSTHROUGH;
+    return Status::OK();
+  }
+
+  if (!file_exists) {
+    *mode = WRITER;
+    return Status::OK();
+  }
+
+  if (metadata->finalized()) {
+    // File found, snapshot has been finalized.
+    *mode = READER;
+    return Status::OK();
+  }
+
+  if (metadata->creation_timestamp() >=
+      (static_cast<int64>(EnvTime::NowMicros()) -
+       pending_snapshot_expiry_seconds * 1000000)) {
+    // Someone else is already writing and time has not expired.
+    *mode = PASSTHROUGH;
+    return Status::OK();
+  } else {
+    // Time has expired, we write regardless.
+    *mode = WRITER;
+    return Status::OK();
+  }
+}
+
+}  // namespace snapshot_util
 }  // namespace data
 }  // namespace tensorflow

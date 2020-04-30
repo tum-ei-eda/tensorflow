@@ -12,14 +12,6 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-# TODO(mrry): Remove this empty forwarding library.
-cc_library(
-    name = "dataset",
-    srcs = [],
-    hdrs = ["dataset.h"],
-    deps = ["//tensorflow/core:framework"],
-)
-
 cc_library(
     name = "dataset_test_base",
     testonly = 1,
@@ -160,6 +152,7 @@ cc_library(
         ":stats_utils",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
+        "//tensorflow/core:framework_internal",
         "//tensorflow/core:lib",
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:protos_all_cc",
@@ -177,6 +170,7 @@ cc_library(
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:lib",
+        "//tensorflow/core/common_runtime:local_executor_params",
     ],
     alwayslink = 1,
 )

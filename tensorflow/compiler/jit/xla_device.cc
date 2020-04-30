@@ -83,7 +83,7 @@ class XlaDeviceAllocatorState {
   std::unordered_map<std::pair<const xla::Backend*, int>,
                      std::unique_ptr<XlaDeviceAllocator>,
                      hash<std::pair<const xla::Backend*, int>>>
-      allocators_ GUARDED_BY(allocator_mutex_);
+      allocators_ TF_GUARDED_BY(allocator_mutex_);
 
   TF_DISALLOW_COPY_AND_ASSIGN(XlaDeviceAllocatorState);
 };
@@ -488,15 +488,8 @@ Status XlaDevice::MakeTensorFromProto(XlaDeviceContext* device_context,
     mutex_lock lock(mu_);
     Allocator* allocator = GetAllocatorLocked(alloc_attrs);
     Tensor copy(allocator, parsed.dtype(), parsed.shape());
-    Notification n;
-    device_context->CopyCPUTensorToDevice(
-        &parsed, this, &copy,
-        [&n, &status](const Status& s) {
-          status = s;
-          n.Notify();
-        },
-        true /*sync_dst_compute*/);
-    n.WaitForNotification();
+    TF_RETURN_IF_ERROR(
+        device_context->CopyCPUTensorToDeviceSync(&parsed, this, &copy));
     *tensor = copy;
   }
   VLOG(2) << "Allocated tensor at " << DMAHelper::base(tensor);

@@ -20,7 +20,6 @@ from __future__ import print_function
 
 import numpy as np
 
-from tensorflow.python.compat import compat
 from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
@@ -82,12 +81,6 @@ class Resizing(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(Resizing, self).__init__(name=name, **kwargs)
 
-  def build(self, input_shape):
-    channel_axis = 3
-    channel_dim = int(input_shape[channel_axis])
-    self.input_spec = InputSpec(ndim=4, axes={channel_axis: channel_dim})
-    self.built = True
-
   def call(self, inputs):
     outputs = image_ops.resize_images_v2(
         images=inputs,
@@ -136,12 +129,6 @@ class CenterCrop(Layer):
     self.target_width = width
     self.input_spec = InputSpec(ndim=4)
     super(CenterCrop, self).__init__(name=name, **kwargs)
-
-  def build(self, input_shape):
-    channel_axis = 3
-    channel_dim = int(input_shape[channel_axis])
-    self.input_spec = InputSpec(ndim=4, axes={channel_axis: channel_dim})
-    self.built = True
 
   def call(self, inputs):
     inputs_shape = array_ops.shape(inputs)
@@ -218,7 +205,7 @@ class RandomCrop(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(RandomCrop, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -354,7 +341,8 @@ class RandomFlip(Layer):
   Attributes:
     mode: String indicating which flip mode to use. Can be "horizontal",
       "vertical", or "horizontal_and_vertical". Defaults to
-      "horizontal_and_vertical".
+      "horizontal_and_vertical". "horizontal" is a left-right flip and
+      "vertical" is a top-bottom flip.
     seed: Integer. Used to create a random seed.
     name: A string, the name of the layer.
   """
@@ -382,17 +370,17 @@ class RandomFlip(Layer):
     self._rng = make_generator(self.seed)
     self.input_spec = InputSpec(ndim=4)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
     def random_flipped_inputs():
       flipped_outputs = inputs
       if self.horizontal:
-        flipped_outputs = image_ops.random_flip_up_down(flipped_outputs,
-                                                        self.seed)
+        flipped_outputs = image_ops.random_flip_left_right(flipped_outputs,
+                                                           self.seed)
       if self.vertical:
-        flipped_outputs = image_ops.random_flip_left_right(
+        flipped_outputs = image_ops.random_flip_up_down(
             flipped_outputs, self.seed)
       return flipped_outputs
 
@@ -505,7 +493,7 @@ class RandomTranslation(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(RandomTranslation, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -660,17 +648,11 @@ def transform(images,
                        'new_height, new_width, instead got '
                        '{}'.format(output_shape))
 
-    if compat.forward_compatible(2020, 3, 25):
-      return image_ops.image_projective_transform_v2(
-          images,
-          output_shape=output_shape,
-          transforms=transforms,
-          fill_mode=fill_mode.upper(),
-          interpolation=interpolation.upper())
     return image_ops.image_projective_transform_v2(
         images,
         output_shape=output_shape,
         transforms=transforms,
+        fill_mode=fill_mode.upper(),
         interpolation=interpolation.upper())
 
 
@@ -789,7 +771,7 @@ class RandomRotation(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(RandomRotation, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -829,7 +811,6 @@ class RandomRotation(Layer):
     return dict(list(base_config.items()) + list(config.items()))
 
 
-@keras_export('keras.layers.experimental.preprocessing.RandomZoom')
 class RandomZoom(Layer):
   """Randomly zoom each image during training.
 
@@ -918,7 +899,7 @@ class RandomZoom(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(RandomZoom, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -1054,7 +1035,7 @@ class RandomContrast(Layer):
     self.input_spec = InputSpec(ndim=4)
     super(RandomContrast, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -1132,7 +1113,7 @@ class RandomHeight(Layer):
     self._rng = make_generator(self.seed)
     super(RandomHeight, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 
@@ -1227,7 +1208,7 @@ class RandomWidth(Layer):
     self._rng = make_generator(self.seed)
     super(RandomWidth, self).__init__(name=name, **kwargs)
 
-  def call(self, inputs, training=None):
+  def call(self, inputs, training=True):
     if training is None:
       training = K.learning_phase()
 

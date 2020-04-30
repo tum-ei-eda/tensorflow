@@ -25,6 +25,7 @@ import enum  # pylint: disable=g-bad-import-order
 import inspect
 import itertools
 import os
+from typing import List, Sequence, Tuple, Union
 
 from absl import logging
 import numpy as np
@@ -42,6 +43,8 @@ from tensorflow.compiler.xla.python.xla_extension import ops
 # consistency with XLA.
 # pylint: disable=invalid-name
 
+# Pylint has false positives for type annotations.
+# pylint: disable=invalid-sequence-index
 
 profiler = _xla.profiler
 
@@ -78,11 +81,7 @@ class Backend(object, metaclass=abc.ABCMeta):
     """Allocates a fresh buffer and populates it with `pyval`."""
 
   @abc.abstractmethod
-  def make_tuple(self, c_buffers, device):
-    """Makes a tuple from a sequence of backend buffer objects."""
-
-  @abc.abstractmethod
-  def compile(self, computation, compile_options):
+  def compile(self, computation, compile_options=None):
     """Compiles a computation. Returns an executable."""
 
   @abc.abstractmethod
@@ -138,10 +137,8 @@ class LocalBackend(Backend):
     return _xla.PyLocalBuffer.from_python(pyval, self.client, device,
                                           force_copy)
 
-  def make_tuple(self, c_buffers, device):
-    return _xla.PyLocalBuffer.make_tuple(c_buffers, self.client, device)
-
-  def compile(self, c_computation, compile_options):
+  def compile(self, c_computation, compile_options=None):
+    compile_options = compile_options or CompileOptions()
     options = _xla.ExecutableBuildOptions()
     options.num_replicas = compile_options.num_replicas
     options.num_partitions = compile_options.num_partitions
@@ -155,7 +152,8 @@ class LocalBackend(Backend):
     return _xla.LocalExecutable.Compile(c_computation,
                                         compile_options.argument_layouts,
                                         options, self.client,
-                                        compile_options.device_assignment)
+                                        compile_options.device_assignment,
+                                        compile_options.tuple_arguments)
 
   def get_default_device_assignment(self, num_replicas, num_partitions=None):
     if num_partitions is not None:
@@ -177,7 +175,7 @@ def _cpu_backend_factory():
   return LocalBackend(platform='cpu', client=client)
 
 
-def _gpu_backend_factory():
+def _gpu_backend_factory(distributed_client=None, node_id=0):
   """Returns a GPU backend. BFC allocator is used by default."""
   allocator = os.getenv('XLA_PYTHON_CLIENT_ALLOCATOR', 'default').lower()
   memory_fraction = os.getenv('XLA_PYTHON_CLIENT_MEM_FRACTION')
@@ -197,8 +195,11 @@ def _gpu_backend_factory():
     config.memory_fraction = float(memory_fraction)
   config.preallocate = preallocate not in ('0', 'false', 'False')
 
-  client = _xla.get_nvidia_gpu_client(asynchronous=True,
-                                      allocator_config=config)
+  client = _xla.get_nvidia_gpu_client(
+      asynchronous=True,
+      allocator_config=config,
+      distributed_client=distributed_client,
+      node_id=node_id)
   return LocalBackend(platform='gpu', client=client)
 
 
@@ -394,18 +395,12 @@ class Buffer(object):
     backend = backend or get_local_backend()
     return backend.buffer_from_pyval(pyval, device, force_copy=force_copy)
 
-  @staticmethod
-  def make_tuple(buffers, device, backend=None):
-    backend = backend or get_local_backend()
-    return backend.make_tuple(buffers, device)
-
   # Buffer is not an instantiable type and exists only for its static methods.
   # The underlying buffer objects are C++ object with the following
   # API:
   # def shape(self) -> Shape:
   # def device(self) -> int:
   # def delete(self):
-  # def destructure(self) -> [Buffer]
   # def is_deleted(self) -> bool:
   # def block_host_until_ready(self):
   #    """Blocks the calling thread until the buffer is ready on device."""
@@ -422,11 +417,6 @@ class Buffer(object):
   #
   # TODO(phawkins): remove Buffer and its static methods completely, have
   # clients call methods on Backend to create buffers.
-
-
-# TODO(phawkins): Alias for backward compatibility. Remove after JAX drops
-# compatibility with Jaxlib versions older than 0.1.13.
-LocalBuffer = Buffer
 
 
 def shape_from_pyval(pyval):
@@ -451,8 +441,8 @@ def transfer_to_infeed(value, device=None):
   Args:
     value: the value that the caller would like to enqueue into the XLA infeed
       queue
-    device: the device to infeed the value to. Each device has a
-      distinct infeed queue.
+    device: the device to infeed the value to. Each device has a distinct infeed
+      queue.
   """
   # TODO(phawkins): support non-default backends.
   backend = get_local_backend()
@@ -498,7 +488,6 @@ def computation_count():
   '''Returns the number of computations per replica.'''
 """
 
-
 Device = _xla.Device
 
 
@@ -521,6 +510,7 @@ class CompileOptions(object):
     self.argument_layouts = None
     self.result_layout = None
     self.device_assignment = None
+    self.tuple_arguments = False
 
 
 class Computation(object):
@@ -604,17 +594,17 @@ class Computation(object):
 #   def SizeOfGeneratedCodeInBytes(self) -> int:
 #     """Return generated binary size, or -1 if not known."""
 #
-#   def ExecutePerReplica(self, arguments: [[Buffer]]) -> [Buffer]:
+#   def ExecuteOnLocalDevices(self, arguments: [[Buffer]]) -> [Buffer]:
 #     """Execute on many replicas with Buffer arguments and return value.
 #
 #     Args:
 #       arguments: A sequence of sequences of Buffers. The i'th inner sequence
-#         comprises the arguments for execution on the i'th replica.
+#         comprises the arguments for execution on the i'th local device.
 #
 #     Returns:
-#       A list of the computation's outputs for each replica, as a Buffer. If
-#       a shallow sequence of arguments was passed in for `arguments`, then the
-#       sole, zero'th replica's output is returned instead, as a Buffer.
+#       A list of the computation's outputs for each local device, as a Buffer.
+#       If a shallow sequence of arguments was passed in for `arguments`, then
+#       the sole, zero'th device's output is returned instead, as a Buffer.
 #     """
 #
 # There are different implementations of Executable for different backends.
@@ -630,7 +620,8 @@ def execute_with_python_values(executable, arguments=(), backend=None):
         arg, device=executable.local_devices()[0], backend=backend)
 
   arguments = [put(arg) for arg in arguments]
-  return executable.Execute(arguments).to_py()
+  outputs = executable.Execute(arguments)
+  return [x.to_py() for x in outputs]
 
 
 def execute_with_python_values_replicated(executable, arguments, backend=None):
@@ -638,8 +629,8 @@ def execute_with_python_values_replicated(executable, arguments, backend=None):
 
   Arguments:
     executable: the program to run.
-    arguments: a list of lists of Python values indexed by
-      `[replica][arg_num]` to pass as inputs.
+    arguments: a list of lists of Python values indexed by `[replica][arg_num]`
+      to pass as inputs.
     backend: the backend we are targeting.
 
   Returns:
@@ -658,7 +649,9 @@ def execute_with_python_values_replicated(executable, arguments, backend=None):
   for replica_args in arguments:
     arg_buffers.append(flat_arg_buffers[:len(replica_args)])
     flat_arg_buffers = flat_arg_buffers[len(replica_args):]
-  return [out.to_py() for out in executable.ExecutePerReplica(arg_buffers)]
+  return [[x.to_py()
+           for x in xs]
+          for xs in executable.ExecuteOnLocalDevices(arg_buffers)]
 
 
 class PaddingType(enum.Enum):
@@ -666,8 +659,8 @@ class PaddingType(enum.Enum):
   SAME = 2
 
 
-def _convert_padding_type_to_pad_values(padding_type, lhs_dims, rhs_dims,
-                                        window_strides):
+def window_padding_type_to_pad_values(padding_type, lhs_dims, rhs_dims,
+                                      window_strides):
   """Maps PaddingType or string to pad values (list of pairs of ints)."""
   if not isinstance(padding_type, (str, PaddingType)):
     msg = 'padding_type must be str or PaddingType, got {}.'
@@ -695,6 +688,9 @@ def _convert_padding_type_to_pad_values(padding_type, lhs_dims, rhs_dims,
   else:
     msg = 'Unexpected PaddingType value: {}'
     raise ValueError(msg.format(padding_type))
+
+
+XlaBuilder = _xla.XlaBuilder
 
 
 class ComputationBuilder(object):
@@ -730,6 +726,16 @@ class ComputationBuilder(object):
       return Computation(self._builder.Build(root), backend=backend)
     else:
       return Computation(self._builder.Build(), backend=backend)
+
+  def SetUpAlias(self, output_index, param_number, param_index):
+    """Adds a new input/output alias.
+
+    Args:
+      output_index: Iterable of int64 specifying the output index.
+      param_number: Parameter number.
+      param_index: Iterable of int64 specifying parameter index.
+    """
+    return self._builder.SetUpAlias(output_index, param_number, param_index)
 
   def GetShape(self, operand):
     return self._builder.GetShape(operand)
@@ -784,6 +790,7 @@ class ComputationBuilder(object):
       shape: a `Shape` describing the shape of the infed value.
       token: an optional `XlaOp` representing a token after which the infeed
         effect should be sequenced.
+
     Returns:
       An XlaOp, representing a (value, token) pair.
     """
@@ -802,6 +809,7 @@ class ComputationBuilder(object):
       operand: an `XlaOp` representing the data to outfeed.
       token: an `XlaOp` representing a token after which the outfeed should be
         sequenced.
+
     Returns:
       An `XlaOp` representing a token.
     """
@@ -877,8 +885,11 @@ class ComputationBuilder(object):
     """
     return self.Constant(np.array(value, dtype=np.bool))
 
-  def ParameterWithShape(self, shape, name=None, parameter_num=None,
-                         replicated=False):
+  def ParameterWithShape(self,
+                         shape,
+                         name=None,
+                         parameter_num=None,
+                         replicated=None):
     """Enqueues a Parameter op onto the computation, given a shape.
 
     Args:
@@ -888,8 +899,9 @@ class ComputationBuilder(object):
         next linear parameter number is used. The default value capability can
         be used for auto-numbering. If you're using auto-numbering for some
         parameters, use it for *all* parameters to avoid clashes.
-      replicated: whether to mark the parameter's leaves as replicated. May be
-        a bool, in which case it applies to all leaves, or an iterable of bools.
+      replicated: whether to mark the parameter's leaves as replicated. May be a
+        bool, in which case it applies to all leaves, or an iterable of bools.
+        The default is None, which means no replication annotation.
 
     Returns:
       An XlaOp.
@@ -898,7 +910,9 @@ class ComputationBuilder(object):
       name = ''
     if parameter_num is None:
       parameter_num = next(self._parameter_numbering)
-    if isinstance(replicated, bool):
+    if replicated is None:
+      replicated = []
+    elif isinstance(replicated, bool):
       replicated = [replicated] * shape.leaf_count()
 
     return ops.Parameter(self._builder, parameter_num,
@@ -981,9 +995,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp representing the added Pad op.
     """
-    if isinstance(padding_config, tuple) or isinstance(padding_config, list):
-      padding_config = GetPaddingConfigFromTriples(padding_config)
-    return ops.Pad(operand, padding_value, padding_config)
+    return ops.Pad(operand, padding_value, make_padding_config(padding_config))
 
   def Reshape(self, operand, dimensions, new_sizes):
     """Enqueues a reshape op onto the computation.
@@ -1016,7 +1028,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp that represents the all-reduced result.
     """
-    replica_groups_protos = _get_replica_groups_protos(replica_groups)
+    replica_groups_protos = make_replica_groups(replica_groups)
     return ops.AllReduce(operand, computation.computation,
                          replica_groups_protos, None, None)
 
@@ -1040,7 +1052,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp that represents the all-to-all concatenation.
     """
-    replica_groups_protos = _get_replica_groups_protos(replica_groups)
+    replica_groups_protos = make_replica_groups(replica_groups)
     if not replica_groups:
       split_count = 1
     else:
@@ -1063,7 +1075,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp that represents on each replica the sum of its group's values.
     """
-    replica_groups_protos = _get_replica_groups_protos(replica_groups)
+    replica_groups_protos = make_replica_groups(replica_groups)
     return ops.CrossReplicaSum(operand, replica_groups_protos)
 
   def Trans(self, operand):
@@ -1094,7 +1106,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp representing the added SelectAndScatter op.
     """
-    pads = _convert_padding_type_to_pad_values(
+    pads = window_padding_type_to_pad_values(
         padding,
         self.GetShape(operand).dimensions(), window_dimensions, window_strides)
     return ops.SelectAndScatterWithGeneralPadding(operand, select.computation,
@@ -1189,6 +1201,8 @@ class ComputationBuilder(object):
     return ops.Call(self._builder, computation_to_apply.computation,
                     list(operands))
 
+  # TODO(skyewm): remove CustomCallWithLayout after callers are updated to use
+  # CustomCall.
   def CustomCallWithLayout(self,
                            call_target_name,
                            operands,
@@ -1210,13 +1224,39 @@ class ComputationBuilder(object):
       An XlaOp representing the added custom call op.
     """
     opaque = opaque or b''
-    return ops.CustomCall(self._builder, call_target_name,
-                          list(operands), shape_with_layout,
-                          list(operand_shapes_with_layout), opaque)
+    return ops.CustomCallWithLayout(self._builder, call_target_name,
+                                    list(operands), shape_with_layout,
+                                    list(operand_shapes_with_layout), opaque)
 
-  # TODO(phawkins): remove CustomCall after callers are updated to use
-  # CustomCallWithLayout.
-  CustomCall = CustomCallWithLayout
+  def CustomCall(self,
+                 call_target_name,
+                 operands,
+                 shape,
+                 operand_shapes_with_layout=None,
+                 opaque=None):
+    """Enqueues a custom call operation onto the computation.
+
+    Args:
+      call_target_name: the name of the function to call.
+      operands: an iterable of XlaOp. The number and types of operands must
+        match the arity of `operand_shapes_with_layout`.
+      shape: the shape of the operator's output. Must have layout if
+        `operand_shapes_with_layout` is provided.
+      operand_shapes_with_layout: optional, the shapes of `operands` including
+        the expected layouts.
+      opaque: an opaque string passed to the backend.
+
+    Returns:
+      An XlaOp representing the added custom call op.
+    """
+    opaque = opaque or b''
+    if operand_shapes_with_layout is None:
+      return ops.CustomCall(self._builder, call_target_name, list(operands),
+                            shape, opaque)
+    else:
+      return ops.CustomCallWithLayout(self._builder, call_target_name,
+                                      list(operands), shape,
+                                      list(operand_shapes_with_layout), opaque)
 
   def Map(self, operands, computation_to_apply, dimensions):
     """Enqueues a map operation onto the computation.
@@ -1262,7 +1302,7 @@ class ComputationBuilder(object):
     Returns:
       An XlaOp representing the added ReduceWindow op.
     """
-    pads = _convert_padding_type_to_pad_values(
+    pads = window_padding_type_to_pad_values(
         padding,
         self.GetShape(operand).dimensions(), window_dimensions, window_strides)
     return ops.ReduceWindowWithGeneralPadding(operand, init_value,
@@ -1383,8 +1423,7 @@ class ComputationBuilder(object):
         and batch dimensions on each input operand.
     Returns: a XlaOp representing the DotGeneral operation.
     """
-    if isinstance(dimension_numbers, tuple):
-      dimension_numbers = GetDotDimensionsFromLists(dimension_numbers)
+    dimension_numbers = make_dot_dimension_numbers(dimension_numbers)
     return ops.DotGeneral(
         lhs, rhs, dimension_numbers, precision_config=precision_config)
 
@@ -1407,7 +1446,7 @@ class ComputationBuilder(object):
       batch_group_count: number of batch groups for grouped convolution.
     Returns: a XlaOp representing the Conv operation.
     """
-    pads = _convert_padding_type_to_pad_values(
+    pads = window_padding_type_to_pad_values(
         padding,
         self.GetShape(lhs).dimensions()[2:],
         self.GetShape(rhs).dimensions()[2:], window_strides)
@@ -1458,21 +1497,6 @@ class ComputationBuilder(object):
         batch_group_count=batch_group_count,
         precision_config=precision_config)
 
-  def _GetConvDimensionNumbers(self, num_spatial_dims):
-    """Create ConvolutionDimensionNumbers proto for convolutions."""
-    nd = num_spatial_dims
-    dimension_numbers = ConvolutionDimensionNumbers()
-    dimension_numbers.input_batch_dimension = 0
-    dimension_numbers.input_feature_dimension = 1
-    dimension_numbers.output_batch_dimension = 0
-    dimension_numbers.output_feature_dimension = 1
-    dimension_numbers.kernel_output_feature_dimension = 0
-    dimension_numbers.kernel_input_feature_dimension = 1
-    dimension_numbers.input_spatial_dimensions.extend(range(2, 2 + nd))
-    dimension_numbers.kernel_spatial_dimensions.extend(range(2, 2 + nd))
-    dimension_numbers.output_spatial_dimensions.extend(range(2, 2 + nd))
-    return dimension_numbers
-
   def ConvGeneralDilated(self,
                          lhs,
                          rhs,
@@ -1516,27 +1540,6 @@ class ComputationBuilder(object):
       batch_group_count: number of batch groups for grouped convolution.
     Returns: a XlaOp representing the ConvGeneralDilated operation.
     """
-    if dimension_numbers is None:
-      dimension_numbers = self._GetConvDimensionNumbers(len(window_strides))
-    elif isinstance(dimension_numbers, tuple):
-      lhs_spec, rhs_spec, out_spec = dimension_numbers
-      dimension_numbers = ConvolutionDimensionNumbers()
-
-      dimension_numbers.input_batch_dimension = lhs_spec.index('N')
-      dimension_numbers.input_feature_dimension = lhs_spec.index('C')
-      dimension_numbers.output_batch_dimension = out_spec.index('N')
-      dimension_numbers.output_feature_dimension = out_spec.index('C')
-      dimension_numbers.kernel_output_feature_dimension = rhs_spec.index('O')
-      dimension_numbers.kernel_input_feature_dimension = rhs_spec.index('I')
-
-      dimension_numbers.kernel_spatial_dimensions.extend(
-          i for i, c in enumerate(rhs_spec) if c not in {'I', 'O'})
-      dimension_numbers.input_spatial_dimensions.extend(
-          sorted((i for i, c in enumerate(lhs_spec) if c not in {'N', 'C'}),
-                 key=lambda i: rhs_spec.index(lhs_spec[i])))
-      dimension_numbers.output_spatial_dimensions.extend(
-          sorted((i for i, c in enumerate(out_spec) if c not in {'N', 'C'}),
-                 key=lambda i: rhs_spec.index(out_spec[i])))
     return ops.ConvGeneralDilated(
         lhs,
         rhs,
@@ -1544,12 +1547,13 @@ class ComputationBuilder(object):
         padding,
         lhs_dilation,
         rhs_dilation,
-        dimension_numbers,
+        make_convolution_dimension_numbers(dimension_numbers,
+                                           len(window_strides)),
         feature_group_count,
         batch_group_count,
         precision_config=precision_config)
 
-  def Sort(self, operands, dimension=-1, comparator=None):
+  def Sort(self, operands, dimension=-1, comparator=None, is_stable=False):
     """Enqueues a sort operation onto the computation.
 
     Args:
@@ -1565,16 +1569,17 @@ class ComputationBuilder(object):
     """
     operands = (
         list(operands)
-        if isinstance(operands, collections.Sequence) else [operands])
-    return ops.Sort(self._builder, operands, dimension,
-                    comparator.computation if comparator else None)
+        if isinstance(operands, collections.abc.Sequence) else [operands])
+    return ops.Sort(self._builder, operands,
+                    comparator.computation if comparator else None, dimension,
+                    is_stable)
 
-  def SortKeyVal(self, keys, values, dimension=-1):
+  def SortKeyVal(self, keys, values, dimension=-1, is_stable=False):
     """Enqueues a key-value sort operation onto the computation.
 
     Deprecated. Use `Sort` instead.
     """
-    return ops.Sort(self._builder, [keys, values], dimension)
+    return ops.Sort(self._builder, [keys, values], None, dimension, is_stable)
 
   def QR(self, a, full_matrices=True):
     """Enqueues a QR decomposition onto the computation."""
@@ -1590,13 +1595,13 @@ class ComputationBuilder(object):
                       unit_diagonal=False):
     """Enqueues a triangular-solve operation onto the computation."""
     if not transpose_a:
-      transpose = _xla.TriangularSolveOptions_Transpose.NO_TRANSPOSE
+      transpose = ops.TriangularSolveOptions_Transpose.NO_TRANSPOSE
       if conjugate_a:
         a = self.Conj(a)
     else:
       transpose = (
-          _xla.TriangularSolveOptions_Transpose.ADJOINT
-          if conjugate_a else _xla.TriangularSolveOptions_Transpose.TRANSPOSE)
+          ops.TriangularSolveOptions_Transpose.ADJOINT
+          if conjugate_a else ops.TriangularSolveOptions_Transpose.TRANSPOSE)
     return ops.TriangularSolve(a, b, left_side, lower, unit_diagonal, transpose)
 
   def Eigh(self, a, full_matrices=True):
@@ -1764,6 +1769,7 @@ def register_custom_call_target(name, fn, platform='cpu'):
   """
   _xla.RegisterCustomCallTarget(name, fn, xla_platform_names[platform])
 
+
 # Deprecated. Use register_custom_call_target instead.
 register_cpu_custom_call_target = register_custom_call_target
 
@@ -1786,15 +1792,28 @@ class PaddingConfig(object):
     self.dimensions = []
 
 
-def GetPaddingConfigFromTriples(triples):
-  """Create PaddingConfig proto from list of triples of integers."""
-  padding_config = PaddingConfig()
-  for lo, hi, interior in triples:
-    dimension = PaddingConfigDimension()
-    dimension.edge_padding_low = lo
-    dimension.edge_padding_high = hi
-    dimension.interior_padding = interior
-    padding_config.dimensions.append(dimension)
+def make_padding_config(
+    padding_config: Union[PaddingConfig, Sequence[Tuple[int, int, int]]]
+) -> PaddingConfig:
+  """Create PaddingConfig proto from list of triples of integers.
+
+  Args:
+    padding_config: either a PaddingConfig or a list of integer triples
+      (edge_padding_low, edge_padding_high, interior_padding) representing the
+      configuration of the padding operation.
+
+  Returns:
+    A `PaddingConfig` object.
+  """
+  if isinstance(padding_config, tuple) or isinstance(padding_config, list):
+    triples = padding_config
+    padding_config = PaddingConfig()
+    for lo, hi, interior in triples:
+      dimension = PaddingConfigDimension()
+      dimension.edge_padding_low = lo
+      dimension.edge_padding_high = hi
+      dimension.interior_padding = interior
+      padding_config.dimensions.append(dimension)
   return padding_config
 
 
@@ -1810,14 +1829,32 @@ class DotDimensionNumbers(object):
     self.rhs_batch_dimensions = []
 
 
-def GetDotDimensionsFromLists(dimension_numbers):
-  (lhs_contract, rhs_contract), (lhs_batch, rhs_batch) = dimension_numbers
-  dot_dims_proto = DotDimensionNumbers()
-  dot_dims_proto.lhs_contracting_dimensions.extend(lhs_contract)
-  dot_dims_proto.rhs_contracting_dimensions.extend(rhs_contract)
-  dot_dims_proto.lhs_batch_dimensions.extend(lhs_batch)
-  dot_dims_proto.rhs_batch_dimensions.extend(rhs_batch)
-  return dot_dims_proto
+def make_dot_dimension_numbers(
+    dimension_numbers: Union[DotDimensionNumbers,
+                             Tuple[Tuple[List[int], List[int]],
+                                   Tuple[List[int], List[int]]]]
+) -> DotDimensionNumbers:
+  """Builds a DotDimensionNumbers object from a specification.
+
+  Args:
+    dimension_numbers: either a `DotDimensionNumbers` or a nested tuple
+      `((lhs_contract, rhs_contract), (lhs_batch, rhs_batch))` of lists of
+      integers representing the dimensions to treat as contracting dimensions
+      and batch dimensions on each input operand.
+
+  Returns:
+    A `DotDimensionNumbers` object.
+  """
+  if isinstance(dimension_numbers, (list, tuple)):
+    (lhs_contract, rhs_contract), (lhs_batch, rhs_batch) = dimension_numbers
+    dot_dims_proto = DotDimensionNumbers()
+    dot_dims_proto.lhs_contracting_dimensions.extend(lhs_contract)
+    dot_dims_proto.rhs_contracting_dimensions.extend(rhs_contract)
+    dot_dims_proto.lhs_batch_dimensions.extend(lhs_batch)
+    dot_dims_proto.rhs_batch_dimensions.extend(rhs_batch)
+    return dot_dims_proto
+  else:
+    return dimension_numbers
 
 
 class ConvolutionDimensionNumbers(object):
@@ -1838,6 +1875,70 @@ class ConvolutionDimensionNumbers(object):
     self.output_batch_dimension = 0
     self.output_feature_dimension = 0
     self.output_spatial_dimensions = []
+
+
+def make_convolution_dimension_numbers(
+    dimension_numbers: Union[None, ConvolutionDimensionNumbers, Tuple[str, str,
+                                                                      str]],
+    num_spatial_dimensions: int) -> ConvolutionDimensionNumbers:
+  """Builds a ConvolutionDimensionNumbers object from a specification.
+
+  Args:
+    dimension_numbers: optional, either a ConvolutionDimensionNumbers object or
+      a tuple (lhs_spec, rhs_spec, out_spec). Each element is a string of
+      length N+2 identifying by position: (1) batch dimensions in lhs, rhs, and
+        the output with the character 'N', (2) feature dimensions in lhs and the
+        output with the character 'C', (3) input and output feature dimensions
+        in rhs with the characters 'I' and 'O' respectively, and (4) spatial
+        dimension correspondences between lhs, rhs, and the output using any
+        distinct characters. For example, to indicate dimension numbers
+        consistent with the Conv operation with two spatial dimensions, one
+        could use ('NCHW', 'OIHW', 'NCHW'). As another example, to indicate
+        dimension numbers consistent with the TensorFlow Conv2D operation, one
+        could use ('NHWC', 'HWIO', 'NHWC'). When using the latter form of
+        convolution dimension specification, window strides are associated with
+        spatial dimension character labels according to the order in which the
+        labels appear in the rhs_spec string, so that window_strides[0] is
+        matched with the dimension corresponding to the first character
+        appearing in rhs_spec that is not 'I' or 'O'. By default, use the same
+        dimension numbering as Conv and ConvWithGeneralPadding.
+    num_spatial_dimensions: the number of spatial dimensions.
+
+  Returns:
+    A `ConvolutionDimensionNumbers` object.
+  """
+  if dimension_numbers is None:
+    nd = num_spatial_dimensions
+    dimension_numbers = ConvolutionDimensionNumbers()
+    dimension_numbers.input_batch_dimension = 0
+    dimension_numbers.input_feature_dimension = 1
+    dimension_numbers.output_batch_dimension = 0
+    dimension_numbers.output_feature_dimension = 1
+    dimension_numbers.kernel_output_feature_dimension = 0
+    dimension_numbers.kernel_input_feature_dimension = 1
+    dimension_numbers.input_spatial_dimensions.extend(range(2, 2 + nd))
+    dimension_numbers.kernel_spatial_dimensions.extend(range(2, 2 + nd))
+    dimension_numbers.output_spatial_dimensions.extend(range(2, 2 + nd))
+  elif isinstance(dimension_numbers, tuple):
+    lhs_spec, rhs_spec, out_spec = dimension_numbers
+    dimension_numbers = ConvolutionDimensionNumbers()
+
+    dimension_numbers.input_batch_dimension = lhs_spec.index('N')
+    dimension_numbers.input_feature_dimension = lhs_spec.index('C')
+    dimension_numbers.output_batch_dimension = out_spec.index('N')
+    dimension_numbers.output_feature_dimension = out_spec.index('C')
+    dimension_numbers.kernel_output_feature_dimension = rhs_spec.index('O')
+    dimension_numbers.kernel_input_feature_dimension = rhs_spec.index('I')
+
+    dimension_numbers.kernel_spatial_dimensions.extend(
+        i for i, c in enumerate(rhs_spec) if c not in {'I', 'O'})
+    dimension_numbers.input_spatial_dimensions.extend(
+        sorted((i for i, c in enumerate(lhs_spec) if c not in {'N', 'C'}),
+               key=lambda i: rhs_spec.index(lhs_spec[i])))
+    dimension_numbers.output_spatial_dimensions.extend(
+        sorted((i for i, c in enumerate(out_spec) if c not in {'N', 'C'}),
+               key=lambda i: rhs_spec.index(out_spec[i])))
+  return dimension_numbers
 
 
 class OpSharding(object):
@@ -1902,7 +2003,7 @@ def _make_replica_group_proto(replica_group):
   return replica_group_proto
 
 
-def _get_replica_groups_protos(replica_groups):
+def make_replica_groups(replica_groups):
   if replica_groups is None:
     replica_groups_protos = []  # special value for XLA API
   else:

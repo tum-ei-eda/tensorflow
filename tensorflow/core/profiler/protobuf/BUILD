@@ -63,6 +63,13 @@ tf_proto_library(
 )
 
 tf_proto_library(
+    name = "op_profile_proto",
+    srcs = ["op_profile.proto"],
+    cc_api_version = 2,
+    visibility = [":friends"],
+)
+
+tf_proto_library(
     name = "op_stats_proto",
     srcs = ["op_stats.proto"],
     cc_api_version = 2,
@@ -93,8 +100,22 @@ tf_proto_library(
 )
 
 tf_proto_library(
+    name = "trace_events_proto",
+    srcs = ["trace_events.proto"],
+    cc_api_version = 2,
+    visibility = [":friends"],
+)
+
+tf_proto_library(
     name = "hardware_types_proto",
     srcs = ["hardware_types.proto"],
+    cc_api_version = 2,
+    visibility = [":friends"],
+)
+
+tf_proto_library(
+    name = "tfstreamz_proto",
+    srcs = ["tfstreamz.proto"],
     cc_api_version = 2,
     visibility = [":friends"],
 )

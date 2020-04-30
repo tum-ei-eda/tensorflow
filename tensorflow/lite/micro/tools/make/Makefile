@@ -1,26 +1,11 @@
-
 ifneq (3.82,$(firstword $(sort $(MAKE_VERSION) 3.82)))
   $(error "Requires make version 3.82 or later (current is $(MAKE_VERSION))")
 endif
 
-here=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-# This is present only in installed copy and sets TFLITE_U_PATH 
--include $(here)/installed_settings.inc
+# root directory of tensorflow
+TENSORFLOW_ROOT :=
+MAKEFILE_DIR := tensorflow/lite/micro/tools/make
 
-
-ifneq ($(TFLITE_U_PATH),)
-    TFLITE_INCLUDE := $(TFLITE_U_PATH)
-    MAKEFILE_DIR := $(TFLITE_U_PATH)tools/make
-    PROJECT_DIR := .
-    TESTING_DIR := $(TFLITE_U_PATH)tensorflow/lite/micro/testing
-    EXAMPLES_DIR :=
-else
-    TFLITE_INCLUDE := .
-    PROJECT_DIR :=  tensorflow/lite/micro
-    MAKEFILE_DIR := $(PROJECT_DIR)/tools/make
-    TESTING_DIR := $(PROJECT_DIR)/testing
-    EXAMPLES_DIR := tensorflow/lite/micro/examples/
-endif
 
 # Pull in some convenience functions.
 include $(MAKEFILE_DIR)/helper_functions.inc
@@ -29,7 +14,6 @@ include $(MAKEFILE_DIR)/helper_functions.inc
 HOST_OS :=
 ifeq ($(OS),Windows_NT)
 	HOST_OS = windows
-	portable_path=$(shell cygpath -m "$(1)")
 else
 	UNAME_S := $(shell uname -s)
 	ifeq ($(UNAME_S),Linux)
@@ -38,7 +22,6 @@ else
 	ifeq ($(UNAME_S),Darwin)
 		HOST_OS := osx
 	endif
-	portable_path=$(1)
 endif
 
 # Determine the host architecture, with any ix86 architecture being labelled x86_32
@@ -61,29 +44,29 @@ ALL_TAGS := $(TAGS) $(TARGET)
 
 # This is obviously horrible.  We need to generate these 3 versions of the
 # include directories from one source.
-PORTABLE_MAKEFILE_DIR=$(call portable_path,$(MAKEFILE_DIR))
 INCLUDES := \
 -I. \
--I$(call portable_path,$(TFLITE_INCLUDE)) \
--I$(PORTABLE_MAKEFILE_DIR)/downloads/ \
--I$(PORTABLE_MAKEFILE_DIR)/downloads/gemmlowp \
--I$(PORTABLE_MAKEFILE_DIR)/downloads/flatbuffers/include
-
+-I$(MAKEFILE_DIR)/downloads/ \
+-I$(MAKEFILE_DIR)/downloads/gemmlowp \
+-I$(MAKEFILE_DIR)/downloads/flatbuffers/include \
+-I$(MAKEFILE_DIR)/downloads/ruy
 
 # Same list of paths, but now relative to the generated project files.
 GENERATED_PROJECT_INCLUDES := \
 -I. \
 -I./third_party/gemmlowp \
--I./third_party/flatbuffers/include
+-I./third_party/flatbuffers/include \
+-I./third_party/ruy
 
 # Same list of paths, but now in the format the generate_keil_project.py
 # script expects them.
 PROJECT_INCLUDES := \
 . \
 third_party/gemmlowp \
-third_party/flatbuffers/include
+third_party/flatbuffers/include \
+third_party/ruy
 
-TEST_SCRIPT := $(TESTING_DIR)/test_linux_binary.sh
+TEST_SCRIPT := tensorflow/lite/micro/testing/test_linux_binary.sh
 
 MICROLITE_LIBS := -lm
 
@@ -91,50 +74,57 @@ MICROLITE_LIBS := -lm
 CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY
 CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY
 ARFLAGS := -r
+
+# override these in the makefile.inc for specific compiler targets
 TARGET_TOOLCHAIN_PREFIX :=
-CC_PREFIX :=
+TARGET_TOOLCHAIN_ROOT :=
 
 ifeq ($(BUILD_TYPE), debug)
 	CXXFLAGS += -DDEBUG -g
 	CCFLAGS  += -DDEBUG -g
-    BUILD_SUFFIX := _debug
 else ifeq ($(BUILD_TYPE), release)
 	CXXFLAGS += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
-    BUILD_SUFFIX := _release
 else
 	CXXFLAGS += -O3
 	CCFLAGS  += -O3
-    BUILD_SUFFIX := 
 endif
 
 # This library is the main target for this makefile. It will contain a minimal
 # runtime that can be linked in to other programs.
 MICROLITE_LIB_NAME := libtensorflow-microlite.a
 
-MICRO_LITE_EXAMPLE_TESTS := $(wildcard $(EXAMPLES_DIR)*/Makefile.inc)
+MICRO_LITE_EXAMPLE_TESTS := $(shell find tensorflow/lite/micro/examples/ -name Makefile.inc)
+
+MICRO_LITE_BENCHMARKS := $(wildcard tensorflow/lite/micro/benchmarks/Makefile.inc)
 
 MICROLITE_TEST_SRCS := \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*test.cc) \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*test.cc) \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*test.cc)
+$(wildcard tensorflow/lite/micro/*test.cc) \
+$(wildcard tensorflow/lite/micro/kernels/*test.cc) \
+$(wildcard tensorflow/lite/micro/memory_planner/*test.cc)
+
+# TODO(b/152645559): move all benchmarks to benchmarks directory.
+MICROLITE_BENCHMARK_SRCS := \
+$(wildcard tensorflow/lite/micro/benchmarks/*.cc)
 
 MICROLITE_TEST_HDRS := \
 $(wildcard tensorflow/lite/micro/testing/*.h)
 
 MICROLITE_CC_BASE_SRCS := \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*.cc) \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*.cc) \
-$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*.cc) \
-$(TFLITE_U_PATH)tensorflow/lite/c/common.c \
-$(TFLITE_U_PATH)tensorflow/lite/core/api/error_reporter.cc \
-$(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
-$(TFLITE_U_PATH)tensorflow/lite/core/api/op_resolver.cc \
-$(TFLITE_U_PATH)tensorflow/lite/core/api/tensor_utils.cc \
-$(TFLITE_U_PATH)tensorflow/lite/kernels/internal/quantization_util.cc \
-$(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc
+$(wildcard tensorflow/lite/micro/*.cc) \
+$(wildcard tensorflow/lite/micro/kernels/*.cc) \
+$(wildcard tensorflow/lite/micro/memory_planner/*.cc) \
+tensorflow/lite/c/common.c \
+tensorflow/lite/core/api/error_reporter.cc \
+tensorflow/lite/core/api/flatbuffer_conversions.cc \
+tensorflow/lite/core/api/op_resolver.cc \
+tensorflow/lite/core/api/tensor_utils.cc \
+tensorflow/lite/kernels/internal/quantization_util.cc \
+tensorflow/lite/kernels/kernel_util.cc \
+tensorflow/lite/micro/testing/test_utils.cc
 
 MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))
+MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_BENCHMARK_SRCS), $(MICROLITE_CC_SRCS))
 
 MICROLITE_CC_HDRS := \
 $(wildcard tensorflow/lite/micro/*.h) \
@@ -148,7 +138,6 @@ tensorflow/lite/core/api/error_reporter.h \
 tensorflow/lite/core/api/flatbuffer_conversions.h \
 tensorflow/lite/core/api/op_resolver.h \
 tensorflow/lite/core/api/tensor_utils.h \
-tensorflow/lite/experimental/ruy/profiler/instrumentation.h \
 tensorflow/lite/kernels/internal/common.h \
 tensorflow/lite/kernels/internal/compatibility.h \
 tensorflow/lite/kernels/internal/optimized/neon_check.h \
@@ -169,8 +158,10 @@ tensorflow/lite/kernels/internal/reference/integer_ops/add.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h \
+tensorflow/lite/kernels/internal/reference/integer_ops/logistic.h \
+tensorflow/lite/kernels/internal/reference/integer_ops/l2normalization.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/mul.h \
-tensorflow/lite/kernels/internal/reference/integer_ops/softmax.h \
+tensorflow/lite/kernels/internal/reference/l2normalization.h \
 tensorflow/lite/kernels/internal/reference/maximum_minimum.h \
 tensorflow/lite/kernels/internal/reference/mul.h \
 tensorflow/lite/kernels/internal/reference/neg.h \
@@ -181,12 +172,14 @@ tensorflow/lite/kernels/internal/reference/process_broadcast_shapes.h \
 tensorflow/lite/kernels/internal/reference/quantize.h \
 tensorflow/lite/kernels/internal/reference/reduce.h \
 tensorflow/lite/kernels/internal/reference/requantize.h \
+tensorflow/lite/kernels/internal/reference/resize_nearest_neighbor.h \
 tensorflow/lite/kernels/internal/reference/round.h \
 tensorflow/lite/kernels/internal/reference/softmax.h \
+tensorflow/lite/kernels/internal/reference/sub.h \
 tensorflow/lite/kernels/internal/reference/logistic.h \
 tensorflow/lite/kernels/internal/reference/strided_slice.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h \
-tensorflow/lite/kernels/internal/round.h \
+tensorflow/lite/kernels/internal/cppmath.h \
 tensorflow/lite/kernels/internal/strided_slice_logic.h \
 tensorflow/lite/kernels/internal/tensor.h \
 tensorflow/lite/kernels/internal/tensor_ctypes.h \
@@ -208,11 +201,13 @@ third_party/gemmlowp/LICENSE \
 third_party/flatbuffers/include/flatbuffers/base.h \
 third_party/flatbuffers/include/flatbuffers/stl_emulation.h \
 third_party/flatbuffers/include/flatbuffers/flatbuffers.h \
-third_party/flatbuffers/LICENSE.txt
+third_party/flatbuffers/LICENSE.txt \
+third_party/ruy/ruy/profiler/instrumentation.h
+
 
 MAKE_PROJECT_FILES := \
-  README_MAKE.md \
   Makefile \
+  README_MAKE.md \
   .vscode/tasks.json
 
 MBED_PROJECT_FILES := \
@@ -262,8 +257,7 @@ ALL_SRCS := \
 	$(MICROLITE_TEST_SRCS)
 
 # Where compiled objects are stored.
-
-GENDIR := $(PROJECT_DIR)/gen/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+GENDIR := $(MAKEFILE_DIR)/gen/$(TARGET)_$(TARGET_ARCH)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
@@ -271,16 +265,18 @@ PRJDIR := $(GENDIR)prj/
 
 MICROLITE_LIB_PATH := $(LIBDIR)$(MICROLITE_LIB_NAME)
 
-CXX := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${CXX_TOOL}
-CC := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${CC_TOOL}
-AR := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${AR_TOOL}
-
+CXX := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CXX_TOOL}
+CC := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CC_TOOL}
+AR := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${AR_TOOL}
 
 # Load the examples.
 include $(MICRO_LITE_EXAMPLE_TESTS)
 
+# Load the benchmarks.
+include $(MICRO_LITE_BENCHMARKS)
+
 # Create rules for downloading third-party dependencies.
-THIRD_PARTY_TARGETS +=
+THIRD_PARTY_TARGETS :=
 $(foreach DOWNLOAD,$(THIRD_PARTY_DOWNLOADS),$(eval $(call create_download_rule,$(DOWNLOAD))))
 third_party_downloads: $(THIRD_PARTY_TARGETS)
 
@@ -315,7 +311,7 @@ tensorflow/lite/schema/schema_generated.h:
 	@cp -u tensorflow/lite/schema/schema_generated.h.OPENSOURCE tensorflow/lite/schema/schema_generated.h
 
 # Gathers together all the objects we've compiled into a single '.a' archive.
-$(MICROLITE_LIB_PATH): $(TFLITE_U_PATH)tensorflow/lite/schema/schema_generated.h $(MICROLITE_LIB_OBJS)
+$(MICROLITE_LIB_PATH): tensorflow/lite/schema/schema_generated.h $(MICROLITE_LIB_OBJS)
 	@mkdir -p $(dir $@)
 	$(AR) $(ARFLAGS) $(MICROLITE_LIB_PATH) $(MICROLITE_LIB_OBJS)
 
@@ -332,12 +328,10 @@ $(BINDIR)%.test_target: $(BINDIR)%_test
 # snease: Add %.bin rule here since BINDIR is now defined
 # These are microcontroller-specific rules for converting the ELF output
 # of the linker into a binary image that can be loaded directly.
-OBJCOPY := $(TARGET_TOOLCHAIN_PREFIX)objcopy
+OBJCOPY := ${TARGET_TOOLCHAIN_ROOT}$(TARGET_TOOLCHAIN_PREFIX)objcopy
 $(BINDIR)%.bin: $(BINDIR)%
 	@mkdir -p $(dir $@)
 	$(OBJCOPY) $< $@ -O binary
-
-ifeq ($(TFLITE_U_PATH),)
 
 # Generate standalone makefile projects for all of the test targets.
 $(foreach TEST_TARGET,$(filter-out tensorflow/lite/micro/kernels/%,$(MICROLITE_TEST_SRCS)),\
@@ -359,17 +353,13 @@ generate_non_test_projects: $(filter-out %_test%,$(ALL_PROJECT_TARGETS))
 generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
 	python tensorflow/lite/micro/tools/make/merge_arduino_zips.py $(PRJDIR)/tensorflow_lite.zip $(ARDUINO_LIBRARY_ZIPS)
 
+# Gets rid of all generated files.
+clean:
+	rm -rf $(MAKEFILE_DIR)/gen
+
 # Removes third-party downloads.
 clean_downloads:
 	rm -rf $(MAKEFILE_DIR)/downloads
-
-endif
-
-
-# Gets rid of all generated files.
-clean:
-	rm -rf $(GENDIR)
-
 
 $(DEPDIR)/%.d: ;
 .PRECIOUS: $(DEPDIR)/%.d
