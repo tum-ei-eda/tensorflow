@@ -50,8 +50,12 @@ do
 	TARGET_ARCH=sandybridge
         ;;
     "--override-llvm")
-	BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f ../..)/llvm-project )
-	;;
+	    BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f "$2")  )
+      shift
+	    ;;
+    "--no-override-llvm")
+	    BAZEL_REPO_OVERRIDES=(  )
+	    ;;
     "--verbose")
         VERBOSE=( --subcommands=true )
         ;;
