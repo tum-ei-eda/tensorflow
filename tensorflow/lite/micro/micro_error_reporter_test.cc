@@ -14,8 +14,10 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/testing/micro_test.h"
 
-int main(int argc, char** argv) {
+TF_LITE_MICRO_TESTS_BEGIN
+TF_LITE_MICRO_TEST(TestMicroErrorReporter) {
   tflite::MicroErrorReporter micro_error_reporter;
   tflite::ErrorReporter* error_reporter = &micro_error_reporter;
   TF_LITE_REPORT_ERROR(error_reporter, "Number: %d", 42);
@@ -24,3 +26,4 @@ int main(int argc, char** argv) {
                        "Another % badly-formed %% format string");
   TF_LITE_REPORT_ERROR(error_reporter, "~~~%s~~~", "ALL TESTS PASSED");
 }
+TF_LITE_MICRO_TESTS_END
