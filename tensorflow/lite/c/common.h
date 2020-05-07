@@ -275,6 +275,8 @@ typedef struct TfLiteQuantization {
 typedef struct TfLiteQuantizationParams {
   float scale;
   int32_t zero_point;
+  // @IFX_PATCH@  PoC hack Add flag for marking packing
+  uint8_t bits_per_item;
 } TfLiteQuantizationParams;
 
 // Parameters for asymmetric quantization across a dimension (i.e per output
@@ -288,6 +290,7 @@ typedef struct TfLiteAffineQuantization {
   TfLiteFloatArray* scale;
   TfLiteIntArray* zero_point;
   int32_t quantized_dimension;
+
 } TfLiteAffineQuantization;
 
 /* A union of pointers that points to memory for a given tensor. */

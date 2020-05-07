@@ -341,7 +341,9 @@ public:
   SubBytePacking(Value value) :
     container_bits(0u), bits_per_item(0u)
   {
+
     auto defing_op = value.getDefiningOp();
+    if (!defing_op) return;
     auto qcst_op = dyn_cast<tfl::QConstOp>(defing_op);
     
     bits_per_item = 0u;
@@ -349,18 +351,22 @@ public:
     // TFL operation
     if (!qcst_op) return;
 
-    for (auto user_i : value.getUsers() ) { 
-      if (!isa<tfl::FullyConnectedOp>(*user_i)) {
+    for (auto user_i : value.getUsers()) { 
+      Operation *op = user_i;
+      if (!op )
+        return;
+      if (!isa<tfl::FullyConnectedOp>(op)) {
         return;
       }
     } 
-
+ 
     // Of ocur has to be quantized and for now we handle only 8 bit
     // uniform quantization.    
-    auto uqtype = qcst_op.qtype().getElementType().dyn_cast<mlir::quant::UniformQuantizedType>();
-    if (!uqtype || uqtype.getStorageTypeIntegralWidth() != 8 ) {
-        return;
-    }
+    auto etype = qcst_op.qtype().getElementType();
+    if (!etype) return;
+    auto uqtype = etype.dyn_cast<mlir::quant::UniformQuantizedType>();
+    if (!uqtype) return;
+    if (uqtype.getStorageTypeIntegralWidth() != 8 ) return;
 
     // PoC only: 4 bits packed in UINT8 for now
     auto value_attr = qcst_op.value();
@@ -389,9 +395,11 @@ public:
     if (num_bits != 4) {
       return;
     }
+    qcst_op.emitWarning("Packing weights!!");
     bits_per_item = num_bits;
     container_bits = 8u;
   }
+
 
   unsigned int container_bits;
   unsigned int bits_per_item;
@@ -617,7 +625,7 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
   }
 
   absl::string_view tensor_data = tensor.tensor_data();
-  // @IFX_PATCH@  PoC packed quantized data.. for now hard-wired 6-bit weights
+  // @IFX_PATCH@  PoC packed quantized data.. for now hard-wired 4-bit weights
   flatbuffers::Offset<flatbuffers::Vector<uint8_t>> buffer_data;
   if (packing && packing.bits_per_item == 4) {
     auto vals = attr.getValues<uint8_t>();
@@ -736,7 +744,8 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
         // quantized type, so both are set to 0. The model couldn't be imported
         // to TensorFlow because of this.
         builder_, 
-        /*min=*/packing.bits_per_item, /*max=*/packing.container_bits,
+        /*min=*/builder_.CreateVector<float>({static_cast<float>(packing.bits_per_item)}), 
+        /*max=*/builder_.CreateVector<float>({static_cast<float>(packing.container_bits)}),
         builder_.CreateVector<float>({static_cast<float>(qtype.getScale())}),
         builder_.CreateVector<int64_t>({qtype.getZeroPoint()}));
   } else if (auto qtype =

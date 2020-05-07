@@ -40,6 +40,9 @@ struct OpData {
   int32_t output_activation_max;
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
+  // @IFX_PATCH@
+  // Packed quantized data in use...
+  uint8_t bits_per_item;
 };
 
 constexpr int kInputTensor = 0;
@@ -64,6 +67,9 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
     TF_LITE_ENSURE_STATUS(CalculateActivationRangeQuantized(
         context, params->activation, output, &data->output_activation_min,
         &data->output_activation_max));
+    // @IFX_PATCH@
+    // Packed quantized data in use...
+    data->bits_per_item = input->quantization->params;
   }
   return status;
 }
@@ -107,6 +113,59 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
   return kTfLiteOk;
 }
 
+//
+// @IFX_PATCH@curedly hack fuly connect kernel for packed 4-bit weights
+// (2 4-bit weights per 8-bit byte, least significant bits hold first weight)
+//
+inline void FullyConnected_2x4in8(
+    const FullyConnectedParams& params, const RuntimeShape& input_shape,
+    const uint8* input_data, const RuntimeShape& filter_shape,
+    const uint8* filter_data, const RuntimeShape& bias_shape,
+    const int32* bias_data, const RuntimeShape& output_shape,
+    uint8* output_data) {
+  const int32 input_offset = params.input_offset;
+  const int32 filter_offset = params.weights_offset;
+  const int32 output_offset = params.output_offset;
+  const int32 output_multiplier = params.output_multiplier;
+  const int output_shift = params.output_shift;
+  const int32 output_activation_min = params.quantized_activation_min;
+  const int32 output_activation_max = params.quantized_activation_max;
+  TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
+  TFLITE_DCHECK_GE(output_shape.DimensionsCount(), 1);
+
+  TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
+  // TODO(benoitjacob): This really should be:
+  //     const int batches = ArraySize(output_dims, 1);
+  // but the current --variable_batch hack consists in overwriting the 3rd
+  // dimension with the runtime batch size, as we don't keep track for each
+  // array of which dimension is the batch dimension in it.
+  const int output_dim_count = output_shape.DimensionsCount();
+  const int filter_dim_count = filter_shape.DimensionsCount();
+  const int batches = FlatSizeSkipDim(output_shape, output_dim_count - 1);
+  const int output_depth = MatchingDim(filter_shape, filter_dim_count - 2,
+                                       output_shape, output_dim_count - 1);
+  const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
+  for (int b = 0; b < batches; ++b) {
+    for (int out_c = 0; out_c < output_depth; ++out_c) {
+      int32 acc = 0;
+      for (int d = 0; d < accum_depth; d += 2) {
+        uint8_t *input_val_p = &input_data[b * accum_depth + d];
+        int32 filter_vals = filter_data[out_c * accum_depth + d];
+        acc += ((filter_vals&0xf) + filter_offset) * (*input_val_p + input_offset);
+        acc += (((filter_vals>>4)&0xf)  + filter_offset) * (*(input_val_p+1) + input_offset);
+      }
+      if (bias_data) {
+        acc += bias_data[out_c];
+      }
+      acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
+      acc += output_offset;
+      acc = std::max(acc, output_activation_min);
+      acc = std::min(acc, output_activation_max);
+      output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
+    }
+  }
+}
+
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                            TfLiteFullyConnectedParams* params, OpData* data,
                            const TfLiteTensor* input,
@@ -126,18 +185,22 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
 
-#define TF_LITE_FULLY_CONNECTED(output_data_type)                      \
-  reference_ops::FullyConnected(                                       \
+#define TF_LITE_FULLY_CONNECTED(func, output_data_type)                \
+  func(                                                                \
       op_params, GetTensorShape(input), GetTensorData<uint8_t>(input), \
       GetTensorShape(filter), GetTensorData<uint8_t>(filter),          \
       GetTensorShape(bias), GetTensorData<int32_t>(bias),              \
       GetTensorShape(output), GetTensorData<output_data_type>(output))
   switch (output->type) {
     case kTfLiteUInt8:
-      TF_LITE_FULLY_CONNECTED(uint8_t);
+      if( input->params.bits_per_item == 4 ) {
+        TF_LITE_FULLY_CONNECTED(FullyConnected_2x4in8, uint8_t);
+      } else {
+        TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);
+      }
       break;
     case kTfLiteInt16:
-      TF_LITE_FULLY_CONNECTED(int16_t);
+      TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, int16_t);
       break;
     default:
       TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
