@@ -113,7 +113,7 @@ then
   export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'from distutils.sysconfig import get_python_lib;print(get_python_lib())')"
   ./configure
 
-  rm .bazelrc.user
+  rm -f .bazelrc.user
   echo configured bazel build: "${BAZEL_OPTIONS[@]}"
   for o in "${BAZEL_OPTIONS[@]}"
   do
@@ -159,7 +159,7 @@ then
     make -j 4 test_executables
     echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
     echo make -j 4 BUILD_TYPE=debug test_executables
     make -j 4 BUILD_TYPE=debug microlite
 
