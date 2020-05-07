@@ -24,6 +24,5 @@ TF_LITE_MICRO_TEST(TestMicroErrorReporter) {
   TF_LITE_REPORT_ERROR(error_reporter, "Badly-formed format string %");
   TF_LITE_REPORT_ERROR(error_reporter,
                        "Another % badly-formed %% format string");
-  TF_LITE_REPORT_ERROR(error_reporter, "~~~%s~~~", "ALL TESTS PASSED");
 }
 TF_LITE_MICRO_TESTS_END
