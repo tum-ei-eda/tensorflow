@@ -31,11 +31,61 @@ TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, v
 {
 	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
 }
+
+void InitTestDataQuantized(const int accum_depth, const int output_depth,const int batches,
+    int8_t* input_data, const float input_min, const float input_max,
+	int8_t* weights_data, const float weights_min, const float weights_max,
+    int32_t* bias_data, const float bias_scale,
+	int8_t* expected_output_data, const float output_min, const float output_max) {
+
+	  using tflite::testing::F2Q32;
+	  using tflite::testing::F2QS;
+	  for(int b = 0; b < batches; b++) {
+		  for(int out_c = 0; out_c < output_depth; out_c++) {
+			  float acc = 0;
+			  for(int d = 0; d < accum_depth; d++) {
+				  float input_value = d;
+				  float weight_value = d;
+				  acc += input_value * weight_value;
+				  input_data[b * accum_depth + d] = F2QS(input_value, input_min, input_max);
+				  weights_data[out_c * accum_depth + d] = F2QS(weight_value, weights_min, weights_max);
+			  }
+			  float bias_value = out_c;
+			  bias_data[out_c] = F2Q32(bias_value, bias_scale);
+			  float output_value = acc + bias_value;
+			  expected_output_data[out_c + output_depth * b] = F2QS(output_value, output_min, output_max);
+		  }
+	  }
 }
+
+void InitTestDataQuantized(const int accum_depth, const int output_depth,const int batches,
+	uint8_t* input_data, const float input_min, const float input_max,
+	uint8_t* weights_data, const float weights_min, const float weights_max,
+    int32_t* bias_data, const float bias_scale,
+	uint8_t* expected_output_data, const float output_min, const float output_max) {
+
+	  using tflite::testing::F2Q32;
+	  using tflite::testing::F2Q;
+	  for(int b = 0; b < batches; b++) {
+		  for(int out_c = 0; out_c < output_depth; out_c++) {
+			  float acc = 0;
+			  for(int d = 0; d < accum_depth; d++) {
+				  float input_value = d;
+				  float weight_value = d;
+				  acc += input_value * weight_value;
+				  input_data[b * accum_depth + d] = F2Q(input_value, input_min, input_max);
+				  weights_data[out_c * accum_depth + d] = F2Q(weight_value, weights_min, weights_max);
+			  }
+			  float bias_value = out_c;
+			  bias_data[out_c] = F2Q32(bias_value, bias_scale);
+			  float output_value = acc + bias_value;
+			  expected_output_data[out_c + output_depth * b] = F2Q(output_value, output_min, output_max);
+		  }
+	  }
 }
 
 template <typename T>
-void TestFullyConnectedQuantized(
+void TestFullyConnectedQuantized(const int number_of_invocations,
     const int* input_dims_data, const T* input_data, const float input_min,
     const float input_max, const int* weights_dims_data, const T* weights_data,
     const float weights_min, const float weights_max, const int* bias_dims_data,
@@ -111,7 +161,6 @@ void TestFullyConnectedQuantized(
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
 
   //Perform inference several times after preparation is done
-  const int number_of_invocations = 100;
   for (int n = 0; n < number_of_invocations; n++) {
 	  registration->invoke(&context, &node);
   }
@@ -135,9 +184,6 @@ void TestFullyConnectedQuantized(
 TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(PerformanceTestQuantizedInt8) {
-
-  using tflite::testing::F2Q32;
-  using tflite::testing::F2QS;
 
   const float input_min = -63.5f;
   const float input_max = 64.0f;
@@ -165,29 +211,66 @@ TF_LITE_MICRO_TEST(PerformanceTestQuantizedInt8) {
   const int output_dims_count = batches * output_depth;
   int8_t expected_output_data[output_dims_count];
 
-  for(int b = 0; b < batches; b++) {
-	  for(int out_c = 0; out_c < output_depth; out_c++) {
-		  float acc = 0;
-		  for(int d = 0; d < accum_depth; d++) {
-			  float input_value = d;
-			  float weight_value = d;
-			  acc += input_value * weight_value;
-			  input_data[b * accum_depth + d] = F2QS(input_value, input_min, input_max);
-			  weights_data[out_c * accum_depth + d] = F2QS(weight_value, weights_min, weights_max);
-		  }
-		  float bias_value = out_c;
-		  bias_data[out_c] = F2Q32(bias_value, bias_scale);
-		  float output_value = acc + bias_value;
-		  expected_output_data[out_c + output_depth * b] = F2QS(output_value, output_min, output_max);
-	  }
-  }
+  tflite::testing::InitTestDataQuantized(
+		  accum_depth, output_depth, batches,
+		  input_data, input_min, input_max,
+		  weights_data, weights_min, weights_max,
+		  bias_data, bias_scale,
+		  expected_output_data, output_min, output_max);
 
   int8_t output_data[output_dims_count];
-  tflite::testing::TestFullyConnectedQuantized<int8_t>(
+  const int number_of_invocations = 1000;
+  tflite::testing::TestFullyConnectedQuantized<int8_t>(number_of_invocations,
       input_dims_data, input_data, input_min, input_max, weights_dims_data,
       weights_data, weights_min, weights_max, bias_dims_data, bias_data,
       bias_scale, expected_output_data, output_dims_data, output_min,
       output_max, kTfLiteActNone, output_data);
 }
+
+
+TF_LITE_MICRO_TEST(PerformanceTestQuantizedUint8) {
+
+  const float input_min = -63.5f;
+  const float input_max = 64.0f;
+  const float weights_min = -63.5f;
+  const float weights_max = 64.0f;
+  const float bias_scale = 0.25f;
+  const float output_min = -127.0f;
+  const float output_max = 128.0f;
+
+  const int accum_depth = 128;
+  const int output_depth = 64;
+  const int batches = 32;
+
+  //Init input data
+  const int input_dims_data[] = {2, batches, accum_depth};
+  uint8_t input_data[batches * accum_depth];
+
+  const int weights_dims_data[] = {2, output_depth, accum_depth};
+  uint8_t weights_data[output_depth * accum_depth];
+
+  const int bias_dims_data[] = {1, output_depth};
+  int32_t bias_data[output_depth];
+
+  const int output_dims_data[] = {2, batches, output_depth};
+  const int output_dims_count = batches * output_depth;
+  uint8_t expected_output_data[output_dims_count];
+
+  tflite::testing::InitTestDataQuantized(
+		  accum_depth, output_depth, batches,
+		  input_data, input_min, input_max,
+		  weights_data, weights_min, weights_max,
+		  bias_data, bias_scale,
+		  expected_output_data, output_min, output_max);
+
+  uint8_t output_data[output_dims_count];
+  const int number_of_invocations = 100;
+  tflite::testing::TestFullyConnectedQuantized<uint8_t>(number_of_invocations,
+      input_dims_data, input_data, input_min, input_max, weights_dims_data,
+      weights_data, weights_min, weights_max, bias_dims_data, bias_data,
+      bias_scale, expected_output_data, output_dims_data, output_min,
+      output_max, kTfLiteActNone, output_data);
+}
+
 
 TF_LITE_MICRO_TESTS_END
