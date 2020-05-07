@@ -29,7 +29,7 @@ limitations under the License.
 namespace tflite {
 namespace testing {
 
-//
+//Mock allocator for using buffers in Micro-kernel functions
 class MockAllocator {
 public:
 	MockAllocator(uint8_t* tensor_arena, size_t arena_size, size_t alignment) {

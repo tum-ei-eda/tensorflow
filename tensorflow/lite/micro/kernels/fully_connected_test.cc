@@ -30,14 +30,6 @@ TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, v
 {
 	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
 }
-TfLiteStatus RequestScratchBufferInArena(struct TfLiteContext* ctx, size_t bytes, int* buffer_idx)
-{
-	return mock_allocator->RequestScratchBufferInArena(ctx, bytes, buffer_idx);
-}
-void* GetScratchBuffer(struct TfLiteContext* ctx, int buffer_idx)
-{
-	return mock_allocator->GetScratchBuffer(ctx, buffer_idx);
-}
 
 void TestFullyConnectedFloat(
     const int* input_dims_data, const float* input_data,
@@ -68,8 +60,6 @@ void TestFullyConnectedFloat(
   uint8_t buffer_arena[buffer_arena_size];
   mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
-  context.RequestScratchBufferInArena = RequestScratchBufferInArena;
-  context.GetScratchBuffer = GetScratchBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
@@ -150,8 +140,6 @@ void TestFullyConnectedQuantized(
   uint8_t buffer_arena[buffer_arena_size];
   mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
-  context.RequestScratchBufferInArena = RequestScratchBufferInArena;
-  context.GetScratchBuffer = GetScratchBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =

@@ -40,8 +40,8 @@ struct OpData {
   int32_t output_activation_max;
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
-  // The index of a temporary buffer containing the sum-of-weights factor
-  int sum_of_weights_factor;
+  // A buffer containing the sum-of-weights factor
+  int32 *sum_of_weights_factor;
 };
 
 constexpr int kInputTensor = 0;
@@ -112,12 +112,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 		const int rows = weights_shape.Dims(0);
 		const int cols = weights_shape.Dims(1);
 
-		TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
-				context, sizeof(int32_t) * rows,
-				&data->sum_of_weights_factor));
-
-		int32_t* sum_of_weights_buffer = reinterpret_cast<int32_t*>(
-		        context->GetScratchBuffer(context, data->sum_of_weights_factor));
+		void* raw;
+		context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows, &raw);
+	    data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
 
 		const TfLiteTensor* input = GetInput(context, node, kInputTensor);
 		const int32_t input_offset = -input->params.zero_point;
@@ -240,10 +237,6 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 	const int weights_dim_count = weights_shape.DimensionsCount();
 	const int accum_depth = weights_shape.Dims(weights_dim_count - 1);
 
-	//Get pre-calculated factor
-	const int32_t* sum_of_weights_factor = reinterpret_cast<const int32_t*>(
-	        context->GetScratchBuffer(context, data->sum_of_weights_factor));
-
 	//Get output info
 	int8_t* output_data = GetTensorData<int8_t>(output);
 	const int32_t output_offset = output->params.zero_point;
@@ -264,6 +257,8 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 	for (int b = 0; b < batches; ++b) {
 		const int8_t *weights_ptr = weights_data;
 		const int32_t *sum_of_weights_factor_ptr = sum_of_weights_factor;
+		//Get pre-calculated factor
+		const int32_t *sum_of_weights_factor_ptr = data->sum_of_weights_factor;
 		int32_t out_c = output_depth;
 
 		int32_t sum_of_inputs_factor = 0;
