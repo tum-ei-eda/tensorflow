@@ -69,7 +69,7 @@ INCLUDES := \
 -I$(call portable_path,$(TFLITE_INCLUDE)) \
 -I$(PORTABLE_MAKEFILE_DIR)/downloads/ \
 -I$(PORTABLE_MAKEFILE_DIR)/downloads/gemmlowp \
--I$(PORTABLE_MAKEFILE_DIR)/downloads/flatbuffers/include
+-I$(PORTABLE_MAKEFILE_DIR)/downloads/flatbuffers/include \
 -I$(PORTABLE_MAKEFILE_DIR)/downloads/ruy
 # Same list of paths, but now relative to the generated project files.
 GENERATED_PROJECT_INCLUDES := \
@@ -143,7 +143,7 @@ $(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/op_resolver.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/tensor_utils.cc \
 $(TFLITE_U_PATH)tensorflow/lite/kernels/internal/quantization_util.cc \
-$(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc
+$(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc \
 $(TFLITE_U_PATH)tensorflow/lite/micro/testing/test_utils.cc
 
 MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))
@@ -368,6 +368,7 @@ test: $(MICROLITE_TEST_TARGETS)
 # Just build the test targets
 build: $(MICROLITE_BUILD_TARGETS)
 
+ifdef ($(TFLITE_U_PATH),)
 generate_projects: $(ALL_PROJECT_TARGETS)
 
 generate_non_kernel_projects: $(filter-out generate_kernel%,$(ALL_PROJECT_TARGETS))
