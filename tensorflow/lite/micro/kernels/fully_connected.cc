@@ -40,9 +40,6 @@ struct OpData {
   int32_t output_activation_max;
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
-  // @IFX_PATCH@
-  // Packed quantized data in use...
-  uint8_t bits_per_item;
 };
 
 constexpr int kInputTensor = 0;
@@ -67,9 +64,6 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
     TF_LITE_ENSURE_STATUS(CalculateActivationRangeQuantized(
         context, params->activation, output, &data->output_activation_min,
         &data->output_activation_max));
-    // @IFX_PATCH@
-    // Packed quantized data in use...
-    data->bits_per_item = input->quantization->params;
   }
   return status;
 }
@@ -149,7 +143,7 @@ inline void FullyConnected_2x4in8(
     for (int out_c = 0; out_c < output_depth; ++out_c) {
       int32 acc = 0;
       for (int d = 0; d < accum_depth; d += 2) {
-        uint8_t *input_val_p = &input_data[b * accum_depth + d];
+        const uint8_t *input_val_p = &input_data[b * accum_depth + d];
         int32 filter_vals = filter_data[out_c * accum_depth + d];
         acc += ((filter_vals&0xf) + filter_offset) * (*input_val_p + input_offset);
         acc += (((filter_vals>>4)&0xf)  + filter_offset) * (*(input_val_p+1) + input_offset);
