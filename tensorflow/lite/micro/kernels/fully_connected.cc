@@ -144,7 +144,7 @@ inline void FullyConnected_2x4in8(
       int32 acc = 0;
       for (int d = 0; d < accum_depth; d += 2) {
         const uint8_t *input_val_p = &input_data[b * accum_depth + d];
-        int32 filter_vals = filter_data[out_c * accum_depth + d];
+        int32 filter_vals = filter_data[out_c * accum_depth + (d>>1)];
         acc += ((filter_vals&0xf) + filter_offset) * (*input_val_p + input_offset);
         acc += (((filter_vals>>4)&0xf)  + filter_offset) * (*(input_val_p+1) + input_offset);
       }
@@ -187,7 +187,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
       GetTensorShape(output), GetTensorData<output_data_type>(output))
   switch (output->type) {
     case kTfLiteUInt8:
-      if( input->params.bits_per_item == 4 ) {
+      if( filter->params.bits_per_item == 4 ) {
         TF_LITE_FULLY_CONNECTED(FullyConnected_2x4in8, uint8_t);
       } else {
         TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);

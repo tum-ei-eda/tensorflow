@@ -317,6 +317,7 @@ TfLiteStatus InitializeRuntimeTensor(
 
   // Copy the quantization information from the serialized data.
   const auto* src_quantization = flatbuffer_tensor.quantization();
+  result->params.bits_per_item = 0;
   if (src_quantization && src_quantization->scale() &&
       (src_quantization->scale()->size() > 0) &&
       src_quantization->zero_point() &&
@@ -333,7 +334,7 @@ TfLiteStatus InitializeRuntimeTensor(
 
     // @IFX_PATCH@ PoC hack  abuse min/max to carry packing information
     result->params.bits_per_item = 0;
-    if( src_quantization->min()->size()> 0 ) {
+    if( src_quantization->min() && src_quantization->min()->size()> 0 ) {
       float hack_bpi = src_quantization->min()->Get(0);
         if(hack_bpi < 0.0 || hack_bpi > 8.0) {      
           TF_LITE_REPORT_ERROR(error_reporter,
@@ -428,6 +429,7 @@ TfLiteStatus MicroAllocator::Init() {
                            i);
       return kTfLiteError;
     }
+    auto params = context_->tensors[i].params;
   }
 
   return kTfLiteOk;
