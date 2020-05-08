@@ -23,6 +23,8 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
+#include <iostream>
+
 namespace tflite {
 namespace ops {
 namespace micro {
@@ -139,6 +141,8 @@ inline void FullyConnected_2x4in8(
   const int output_depth = MatchingDim(filter_shape, filter_dim_count - 2,
                                        output_shape, output_dim_count - 1);
   const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
+
+    std::cout << "Packed implementation!: ";
   for (int b = 0; b < batches; ++b) {
     for (int out_c = 0; out_c < output_depth; ++out_c) {
       int32 acc = 0;
@@ -147,6 +151,7 @@ inline void FullyConnected_2x4in8(
         int32 filter_vals = filter_data[out_c * accum_depth + (d>>1)];
         acc += ((filter_vals&0xf) + filter_offset) * (*input_val_p + input_offset);
         acc += (((filter_vals>>4)&0xf)  + filter_offset) * (*(input_val_p+1) + input_offset);
+        std::cout << " "<< std::hex << (filter_vals&0xf) << " " << ((filter_vals>>4)&0xf);
       }
       if (bias_data) {
         acc += bias_data[out_c];
@@ -158,6 +163,7 @@ inline void FullyConnected_2x4in8(
       output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
     }
   }
+  std::cout <<std::endl;
 }
 
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,

@@ -636,13 +636,13 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
     msg << "Packing ";
     for( size_t i = 0; i < tensor_data.size(); i+=2)
     {
-        msg << std::hex << " " << raw_tensor_data[i] << " " << raw_tensor_data[i+1];
+        msg << std::hex << " " << (uint32_t)raw_tensor_data[i] << " " << (uint32_t)raw_tensor_data[i+1];
         packed_data.push_back((raw_tensor_data[i] & mask) | ((raw_tensor_data[i+1] & mask)<<4));
     }
     msg << " as ";
     for( auto v :  packed_data)
     {
-      msg  << " " << std::hex << v;
+      msg  << " " << std::hex << (uint32_t)giv;
     }
     inst->emitRemark(msg.str());
     buffer_data = builder_.CreateVector(packed_data);
