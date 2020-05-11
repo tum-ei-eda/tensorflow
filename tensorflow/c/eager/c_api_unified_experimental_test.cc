@@ -15,17 +15,14 @@ limitations under the License.
 
 #include "tensorflow/c/eager/c_api_unified_experimental.h"
 
-#include <string.h>
+#include <memory>
 
 #include "tensorflow/c/eager/c_api.h"
 #include "tensorflow/c/eager/c_api_test_util.h"
-#include "tensorflow/cc/profiler/profiler.h"
-#include "tensorflow/core/lib/monitoring/collection_registry.h"
-#include "tensorflow/core/platform/logging.h"
-#include "tensorflow/core/platform/protobuf.h"
-#include "tensorflow/core/platform/str_util.h"
+#include "tensorflow/c/tf_datatype.h"
+#include "tensorflow/c/tf_status.h"
+#include "tensorflow/c/tf_tensor.h"
 #include "tensorflow/core/platform/test.h"
-#include "tensorflow/core/platform/test_benchmark.h"
 
 using tensorflow::string;
 
@@ -134,6 +131,7 @@ TEST(UnifedCAPI, TestBasicGraph) {
   string fn_name = "double";
   TF_AbstractFunction* func = TF_ExecutionContextToFunction(
       graph_ctx, fn_name.c_str(), 1, placeholder_t, 1, output_t, status.get());
+  ASSERT_EQ(TF_OK, TF_GetCode(status.get())) << TF_Message(status.get());
   TF_DeleteAbstractTensor(placeholder_t);
   TF_DeleteAbstractTensor(output_t);
 

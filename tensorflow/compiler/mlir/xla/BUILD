@@ -14,6 +14,7 @@ package_group(
         "//learning/brain/experimental/dtensor/...",
         "//learning/brain/experimental/mlir/...",
         "//learning/brain/google/xla/kernels/...",
+        "//learning/brain/google/xla/mlir/...",
         "//learning/brain/swift/swift_mlir/...",
         "//learning/pathways/data_parallel/tf2xla/...",
         "//platforms/xla/...",
@@ -22,7 +23,6 @@ package_group(
         "//tensorflow/compiler/xla/...",
         "//third_party/iree/...",
         "//third_party/mlir_edge/...",
-        "//third_party/tf_runtime/tools/tf_kernel_gen/...",
     ],
 )
 
@@ -146,6 +146,7 @@ cc_library(
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Shape",
         "@llvm-project//mlir:StandardOps",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:Transforms",
@@ -163,6 +164,7 @@ cc_library(
         ":mlir_hlo_builder",
         "//tensorflow/compiler/mlir:op_or_arg_name_mapper",
         "//tensorflow/compiler/mlir/tensorflow",
+        "//tensorflow/compiler/mlir/tensorflow:convert_tensor",
         "//tensorflow/compiler/mlir/tensorflow:convert_type",
         "//tensorflow/compiler/mlir/tensorflow:export_tf_dialect_op",
         "//tensorflow/compiler/mlir/tensorflow:lower_tf_lib",
@@ -184,6 +186,7 @@ cc_library(
         "@llvm-project//llvm:support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:StandardOps",
         "@llvm-project//mlir:Support",
     ],
     alwayslink = 1,
@@ -395,9 +398,8 @@ cc_library(
 
 cc_library(
     name = "xla_hlo_to_lhlo_with_xla",
-    srcs = [
-        "transforms/xla_hlo_to_lhlo_with_xla.cc",
-    ],
+    srcs = ["transforms/xla_hlo_to_lhlo_with_xla.cc"],
+    hdrs = ["transforms/xla_hlo_to_lhlo_with_xla.h"],
     deps = [
         ":hlo",
         ":hlo_utils",
@@ -586,6 +588,7 @@ cc_library(
         "//tensorflow/compiler/xla:comparison_util",
         "//tensorflow/compiler/xla:shape_util",
         "//tensorflow/compiler/xla:types",
+        "//tensorflow/compiler/xla:util",
         "//tensorflow/compiler/xla/client:xla_builder",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/compiler/xla/service:shape_inference",
@@ -715,6 +718,7 @@ cc_library(
         "//tensorflow/compiler/xla/client/lib:slicing",
         "//tensorflow/compiler/xla/service:hlo",
         "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/stream_executor/lib",
         "@llvm-project//llvm:support",

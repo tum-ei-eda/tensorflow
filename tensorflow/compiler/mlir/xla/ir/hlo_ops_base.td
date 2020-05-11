@@ -64,14 +64,14 @@ def HLO_TensorOrTuple : AnyTypeOf<[HLO_Tensor, HLO_Tuple]>;
 
 // Dynamic representation of a shape vector as a tensor.
 def HLO_DimensionTensor : ShapedContainerType<
-    [Index, AnySignlessInteger],
+    [Index, HLO_Pred, HLO_Int],
     And<[IsTensorTypePred, HasAnyRankOfPred<[1]>]>,
     "a 1D tensor of dimensions">;
 
 // In general, static shaped tensor constraints should be avoided unless
 // it is for a legacy op which is only correct with static shapes.
 def HLO_StaticShapeTensor : StaticShapeTensorOf<[
-      AnyFloat, AnySignlessInteger, HLO_Complex]>;
+      AnyFloat, HLO_Pred, HLO_Int, HLO_Complex]>;
 
 //===----------------------------------------------------------------------===//
 // XLA on tensors combined type definitions.
@@ -147,15 +147,6 @@ class BASE_HLO_ClzOp {
 
     See
     https://www.tensorflow.org/xla/operation_semantics#element-wise_unary_functions.
-  }];
-}
-
-class BASE_HLO_ComplexOp {
-  string summary = "Complex operator";
-
-  string description = [{
-    Performs element-wise conversion of a pair of real and imaginary values to
-    a complex value.
   }];
 }
 
@@ -397,6 +388,15 @@ class BASE_HLO_AddOp {
 
     See
     https://www.tensorflow.org/xla/operation_semantics#element-wise_binary_arithmetic_operations.
+  }];
+}
+
+class BASE_HLO_ComplexOp {
+  string summary = "Complex operator";
+
+  string description = [{
+    Performs element-wise conversion of a pair of real and imaginary values to
+    a complex value.
   }];
 }
 

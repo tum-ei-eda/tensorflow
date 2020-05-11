@@ -160,6 +160,8 @@ def TF_AddV2Op : TF_Op<"AddV2", [Commutative, NoSideEffect, ResultsBroadcastable
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let hasCanonicalizer = 1;
+
+  let hasFolder = 1;
 }
 
 def TF_AllOp : TF_Op<"All", [NoSideEffect]> {
@@ -1063,6 +1065,26 @@ for dtype in dtype_list:
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_BroadcastArgsOp : TF_Op<"BroadcastArgs", [NoSideEffect]> {
+  let summary = "Return the shape of s0 op s1 with broadcast.";
+
+  let description = [{
+Given `s0` and `s1`, tensors that represent shapes, compute `r0`, the
+broadcasted shape. `s0`, `s1` and `r0` are all integer vectors.
+  }];
+
+  let arguments = (ins
+    TF_I32OrI64Tensor:$s0,
+    TF_I32OrI64Tensor:$s1
+  );
+
+  let results = (outs
+    TF_I32OrI64Tensor:$r0
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
 def TF_BroadcastGradientArgsOp : TF_Op<"BroadcastGradientArgs", [NoSideEffect]> {
   let summary = [{
 Return the reduction indices for computing gradients of s0 op s1 with broadcast.
@@ -1107,6 +1129,15 @@ tf.Tensor(
 
 In the above example, the input Tensor with the shape of `[1, 3]`
 is broadcasted to output Tensor with shape of `[3, 3]`.
+
+When doing broadcasted operations such as multiplying a tensor
+by a scalar, broadcasting (usually) confers some time or space
+benefit, as the broadcasted tensor is never materialized.
+
+However, `broadcast_to` does not carry with it any such benefits.
+The newly-created tensor takes the full memory of the broadcasted
+shape. (In a graph context, `broadcast_to` might be fused to
+subsequent operation and then be optimized away, however.)
   }];
 
   let arguments = (ins
@@ -1186,7 +1217,7 @@ that are not a number (NaN) or infinity (Inf). Otherwise, passes `tensor` as-is.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
-def TF_ClipByValueOp : TF_Op<"ClipByValue", [NoSideEffect, SameOperandsAndResultType]> {
+def TF_ClipByValueOp : TF_Op<"ClipByValue", [NoSideEffect]> {
   let summary = "Clips tensor values to a specified min and max.";
 
   let description = [{
@@ -1651,6 +1682,27 @@ Given an input tensor, this function computes hyperbolic cosine of every
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_CrossOp : TF_Op<"Cross", [NoSideEffect]> {
+  let summary = "Compute the pairwise cross product.";
+
+  let description = [{
+`a` and `b` must be the same shape; they can either be simple 3-element vectors,
+or any shape where the innermost dimension is 3. In the latter case, each pair
+of corresponding 3-element vectors is cross-multiplied independently.
+  }];
+
+  let arguments = (ins
+    TF_IntOrFpTensor:$a,
+    TF_IntOrFpTensor:$b
+  );
+
+  let results = (outs
+    TF_IntOrFpTensor:$product
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
 def TF_CrossReplicaSumOp : TF_Op<"CrossReplicaSum", [AllTypesMatch<["input", "output"]>, NoSideEffect]> {
   let summary = "An Op to sum inputs across replicated TPU instances.";
 
@@ -1723,6 +1775,169 @@ tf.cumsum([a, b, c], exclusive=True, reverse=True)  # => [b + c, c, 0]
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
   TF_DerivedOperandTypeAttr Tidx = TF_DerivedOperandTypeAttr<1>;
+}
+
+def TF_DataFormatDimMapOp : TF_Op<"DataFormatDimMap", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+Returns the dimension index in the destination data format given the one in
+  }];
+
+  let description = [{
+the source data format.
+  }];
+
+  let arguments = (ins
+    TF_I32OrI64Tensor:$x,
+
+    DefaultValuedAttr<StrAttr, "NHWC">:$src_format,
+    DefaultValuedAttr<StrAttr, "NCHW">:$dst_format
+  );
+
+  let results = (outs
+    TF_I32OrI64Tensor:$y
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_DecodeAndCropJpegOp : TF_Op<"DecodeAndCropJpeg", [NoSideEffect]> {
+  let summary = "Decode and Crop a JPEG-encoded image to a uint8 tensor.";
+
+  let description = [{
+The attr `channels` indicates the desired number of color channels for the
+decoded image.
+
+Accepted values are:
+
+*   0: Use the number of channels in the JPEG-encoded image.
+*   1: output a grayscale image.
+*   3: output an RGB image.
+
+If needed, the JPEG-encoded image is transformed to match the requested number
+of color channels.
+
+The attr `ratio` allows downscaling the image by an integer factor during
+decoding.  Allowed values are: 1, 2, 4, and 8.  This is much faster than
+downscaling the image later.
+
+
+It is equivalent to a combination of decode and crop, but much faster by only
+decoding partial jpeg image.
+  }];
+
+  let arguments = (ins
+    TF_StrTensor:$contents,
+    I32Tensor:$crop_window,
+
+    DefaultValuedAttr<I64Attr, "0">:$channels,
+    DefaultValuedAttr<I64Attr, "1">:$ratio,
+    DefaultValuedAttr<BoolAttr, "true">:$fancy_upscaling,
+    DefaultValuedAttr<BoolAttr, "false">:$try_recover_truncated,
+    DefaultValuedAttr<F32Attr, "1.0f">:$acceptable_fraction,
+    StrAttr:$dct_method
+  );
+
+  let results = (outs
+    TF_Uint8Tensor:$image
+  );
+}
+
+def TF_DecodeGifOp : TF_Op<"DecodeGif", [NoSideEffect]> {
+  let summary = "Decode the frame(s) of a GIF-encoded image to a uint8 tensor.";
+
+  let description = [{
+GIF images with frame or transparency compression are not supported.
+On Linux and MacOS systems, convert animated GIFs from compressed to
+uncompressed by running:
+
+    convert $src.gif -coalesce $dst.gif
+
+This op also supports decoding JPEGs and PNGs, though it is cleaner to use
+`tf.io.decode_image`.
+  }];
+
+  let arguments = (ins
+    TF_StrTensor:$contents
+  );
+
+  let results = (outs
+    TF_Uint8Tensor:$image
+  );
+}
+
+def TF_DecodeJpegOp : TF_Op<"DecodeJpeg", [NoSideEffect]> {
+  let summary = "Decode a JPEG-encoded image to a uint8 tensor.";
+
+  let description = [{
+The attr `channels` indicates the desired number of color channels for the
+decoded image.
+
+Accepted values are:
+
+*   0: Use the number of channels in the JPEG-encoded image.
+*   1: output a grayscale image.
+*   3: output an RGB image.
+
+If needed, the JPEG-encoded image is transformed to match the requested number
+of color channels.
+
+The attr `ratio` allows downscaling the image by an integer factor during
+decoding.  Allowed values are: 1, 2, 4, and 8.  This is much faster than
+downscaling the image later.
+
+
+This op also supports decoding PNGs and non-animated GIFs since the interface is
+the same, though it is cleaner to use `tf.io.decode_image`.
+  }];
+
+  let arguments = (ins
+    TF_StrTensor:$contents,
+
+    DefaultValuedAttr<I64Attr, "0">:$channels,
+    DefaultValuedAttr<I64Attr, "1">:$ratio,
+    DefaultValuedAttr<BoolAttr, "true">:$fancy_upscaling,
+    DefaultValuedAttr<BoolAttr, "false">:$try_recover_truncated,
+    DefaultValuedAttr<F32Attr, "1.0f">:$acceptable_fraction,
+    StrAttr:$dct_method
+  );
+
+  let results = (outs
+    TF_Uint8Tensor:$image
+  );
+}
+
+def TF_DecodePngOp : TF_Op<"DecodePng", [NoSideEffect]> {
+  let summary = "Decode a PNG-encoded image to a uint8 or uint16 tensor.";
+
+  let description = [{
+The attr `channels` indicates the desired number of color channels for the
+decoded image.
+
+Accepted values are:
+
+*   0: Use the number of channels in the PNG-encoded image.
+*   1: output a grayscale image.
+*   3: output an RGB image.
+*   4: output an RGBA image.
+
+If needed, the PNG-encoded image is transformed to match the requested number
+of color channels.
+
+This op also supports decoding JPEGs and non-animated GIFs since the interface
+is the same, though it is cleaner to use `tf.io.decode_image`.
+  }];
+
+  let arguments = (ins
+    TF_StrTensor:$contents,
+
+    DefaultValuedAttr<I64Attr, "0">:$channels
+  );
+
+  let results = (outs
+    TensorOf<[TF_Uint16, TF_Uint8]>:$image
+  );
+
+  TF_DerivedResultTypeAttr dtype = TF_DerivedResultTypeAttr<0>;
 }
 
 def TF_DepthToSpaceOp : TF_Op<"DepthToSpace", [NoSideEffect]> {
@@ -1954,6 +2169,8 @@ def TF_DivOp : TF_Op<"Div", [NoSideEffect, ResultsBroadcastableShape]>,
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let hasCanonicalizer = 1;
+
+  let hasFolder = 1;
 }
 
 def TF_DivNoNanOp : TF_Op<"DivNoNan", [NoSideEffect, ResultsBroadcastableShape]>,
@@ -2186,6 +2403,51 @@ See [Fast and Accurate Deep Network Learning by Exponential Linear Units (ELUs)
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_EluGradOp : TF_Op<"EluGrad", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+Computes gradients for the exponential linear (Elu) operation.
+  }];
+
+  let description = [{
+  }];
+
+  let arguments = (ins
+    TF_FpTensor:$gradients,
+    TF_FpTensor:$outputs
+  );
+
+  let results = (outs
+    TF_FpTensor:$backprops
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_EmptyOp : TF_Op<"Empty", []> {
+  let summary = [{
+Creates a tensor with the given shape.
+
+This operation creates a tensor of `shape` and `dtype`.
+  }];
+
+  let description = [{
+  }];
+
+  let arguments = (ins
+    I32Tensor:$shape,
+
+    DefaultValuedAttr<BoolAttr, "false">:$init
+  );
+
+  let results = (outs
+    TF_Tensor:$output
+  );
+
+  TF_DerivedResultTypeAttr dtype = TF_DerivedResultTypeAttr<0>;
+
+  let hasFolder = 1;
+}
+
 def TF_EqualOp : TF_Op<"Equal", [Commutative, NoSideEffect]> {
   let summary = "Returns the truth value of (x == y) element-wise.";
 
@@ -2218,7 +2480,7 @@ tf.math.equal(x, y) ==> array([True,  True])
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  x, "
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  x, "
               "Value  y, BoolAttr incompatible_shape_error">
   ];
 
@@ -2374,7 +2636,7 @@ size 1.
   TF_DerivedOperandTypeAttr Tdim = TF_DerivedOperandTypeAttr<1>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  condition, "
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  condition, "
               "Value  dim">
   ];
 }
@@ -2584,7 +2846,7 @@ fill([2, 3], 9) ==> [[9, 9, 9]
   }];
 
   let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, Value dims, Value value"
+    "OpBuilder &builder, OperationState &result, Value dims, Value value"
   >];
 }
 
@@ -2668,6 +2930,7 @@ The size of 1D Tensors matches the dimension C of the 4D Tensors.
     F32Tensor:$variance,
 
     DefaultValuedAttr<F32Attr, "0.0001f">:$epsilon,
+    DefaultValuedAttr<F32Attr, "1.0f">:$exponential_avg_factor,
     DefaultValuedAttr<TF_ConvnetDataFormatAttr, "NHWC">:$data_format,
     DefaultValuedAttr<BoolAttr, "true">:$is_training
   );
@@ -2807,6 +3070,7 @@ The size of 1D Tensors matches the dimension C of the 4D Tensors.
     F32Tensor:$variance,
 
     DefaultValuedAttr<F32Attr, "0.0001f">:$epsilon,
+    DefaultValuedAttr<F32Attr, "1.0f">:$exponential_avg_factor,
     DefaultValuedAttr<TF_ConvnetDataFormatAttr, "NHWC">:$data_format,
     DefaultValuedAttr<BoolAttr, "true">:$is_training
   );
@@ -3013,8 +3277,8 @@ Gather slices from `params` axis `axis` according to `indices`.
 
   let description = [{
 `indices` must be an integer tensor of any dimension (usually 0-D or 1-D).
-Produces an output tensor with shape `params.shape[:axis] + indices.shape +
-params.shape[axis + 1:]` where:
+Produces an output tensor with shape `params.shape[:axis] +
+indices.shape[batch_dims:] + params.shape[axis + 1:]` where:
 
 ```python
     # Scalar indices (output is rank(params) - 1).
@@ -3584,6 +3848,28 @@ def TF_LeakyReluOp : TF_Op<"LeakyRelu", [NoSideEffect, SameOperandsAndResultType
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let hasFolder = 1;
+}
+
+def TF_LeakyReluGradOp : TF_Op<"LeakyReluGrad", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+Computes rectified linear gradients for a LeakyRelu operation.
+  }];
+
+  let description = [{
+  }];
+
+  let arguments = (ins
+    TF_FpTensor:$gradients,
+    TF_FpTensor:$features,
+
+    DefaultValuedAttr<F32Attr, "0.2f">:$alpha
+  );
+
+  let results = (outs
+    TF_FpTensor:$backprops
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
 def TF_LeftShiftOp : TF_Op<"LeftShift", [NoSideEffect, ResultsBroadcastableShape]>,
@@ -4614,7 +4900,7 @@ retained with length 1.
   TF_DerivedOperandTypeAttr Tidx = TF_DerivedOperandTypeAttr<1>;
 
   let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, Value input, "
+    "OpBuilder &builder, OperationState &result, Value input, "
     "Value reduction_indices, BoolAttr keep_dims"
   >];
 }
@@ -4884,7 +5170,7 @@ func @main(%arg0 : tensor<10xf32>, %arg1 : tensor<10xf32>) -> tensor<10x10xf32> 
 
 @tf.function
 def foo(x, y):
-  return = mlir_passthrough_op([x, y], mlir_module, Toutputs=[tf.float32])
+  return mlir_passthrough_op([x, y], mlir_module, Toutputs=[tf.float32])
 
 graph_def = foo.get_concrete_function(tf.TensorSpec([10], tf.float32), tf.TensorSpec([10], tf.float32)).graph.as_graph_def()
 ```
@@ -4949,6 +5235,8 @@ def TF_MulOp : TF_Op<"Mul", [Commutative, NoSideEffect, ResultsBroadcastableShap
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+
+  let hasFolder = 1;
 }
 
 def TF_MulNoNanOp : TF_Op<"MulNoNan", [NoSideEffect, ResultsBroadcastableShape]>,
@@ -4963,12 +5251,12 @@ Returns x * y element-wise. Returns zero if y is zero, even if x if infinite or 
   }];
 
   let arguments = (ins
-    TensorOf<[F16, F32, F64, TF_Complex128, TF_Complex64]>:$x,
-    TensorOf<[F16, F32, F64, TF_Complex128, TF_Complex64]>:$y
+    TF_FpOrComplexTensor:$x,
+    TF_FpOrComplexTensor:$y
   );
 
   let results = (outs
-    TensorOf<[F16, F32, F64, TF_Complex128, TF_Complex64]>:$z
+    TF_FpOrComplexTensor:$z
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
@@ -5160,7 +5448,7 @@ def TF_NotEqualOp : TF_Op<"NotEqual", [Commutative, NoSideEffect]> {
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  x, "
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  x, "
               "Value  y, BoolAttr incompatible_shape_error">
   ];
 
@@ -5279,7 +5567,7 @@ output =
   TF_DerivedOperandTypeAttr TI = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  indices, "
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  indices, "
               "Value  depth, Value  on_value, Value  off_value, "
               "IntegerAttr axis">
   ];
@@ -5861,7 +6149,7 @@ tf.range(start, limit, delta) ==> [3, 6, 9, 12, 15]
   TF_DerivedOperandTypeAttr Tidx = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  start, "
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  start, "
               "Value  limit, Value  delta">
   ];
 }
@@ -5896,7 +6184,7 @@ of the tensor. Rank is also known as "order", "degree", or "ndims."
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  input">
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  input">
   ];
 
   let hasFolder = 1;
@@ -6021,6 +6309,29 @@ is the corresponding input gradient.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_RecvTPUEmbeddingActivationsOp : TF_Op<"RecvTPUEmbeddingActivations", []> {
+  let summary = "An op that receives embedding activations on the TPU.";
+
+  let description = [{
+The TPU system performs the embedding lookups and aggregations specified by
+the arguments to TPUEmbeddingEnqueue(Integer/Sparse/SparseTensor)Batch. The
+results of these aggregations are visible to the Tensorflow Graph as the
+outputs of a RecvTPUEmbeddingActivations op. This op returns a list containing
+one Tensor of activations per table specified in the model. There can be at
+most one RecvTPUEmbeddingActivations op in the TPU graph.
+  }];
+
+  let arguments = (ins
+    StrAttr:$config
+  );
+
+  let results = (outs
+    Variadic<F32Tensor>:$outputs
+  );
+
+  TF_DerivedResultSizeAttr num_outputs = TF_DerivedResultSizeAttr<0>;
+}
+
 def TF_ReluOp : TF_Op<"Relu", [NoSideEffect, SameOperandsAndResultType, TF_LayoutAgnostic]> {
   let summary = "Computes rectified linear: `max(features, 0)`.";
 
@@ -6054,6 +6365,24 @@ def TF_Relu6Op : TF_Op<"Relu6", [NoSideEffect, SameOperandsAndResultType]> {
 
   let results = (outs
     TF_IntOrFpTensor:$activations
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_Relu6GradOp : TF_Op<"Relu6Grad", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = "Computes rectified linear 6 gradients for a Relu6 operation.";
+
+  let description = [{
+  }];
+
+  let arguments = (ins
+    TF_IntOrFpTensor:$gradients,
+    TF_IntOrFpTensor:$features
+  );
+
+  let results = (outs
+    TF_IntOrFpTensor:$backprops
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
@@ -6156,7 +6485,7 @@ reshape(t, []) ==> 7
 
   let builders = [
     OpBuilder<
-      "Builder* builder, OperationState& result, Value  tensor, Value  shape">
+      "OpBuilder& builder, OperationState& result, Value  tensor, Value  shape">
   ];
 
   let verifier = [{
@@ -7062,8 +7391,54 @@ def TF_SelectV2Op : TF_Op<"SelectV2", [NoSideEffect]> {
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<1>;
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  condition, Value  e, Value  t">
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  condition, Value  e, Value  t">
   ];
+}
+
+def TF_SeluOp : TF_Op<"Selu", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+Computes scaled exponential linear: `scale * alpha * (exp(features) - 1)`
+  }];
+
+  let description = [{
+if < 0, `scale * features` otherwise.
+
+To be used together with
+`initializer = tf.variance_scaling_initializer(factor=1.0, mode='FAN_IN')`.
+For correct dropout, use `tf.contrib.nn.alpha_dropout`.
+
+See [Self-Normalizing Neural Networks](https://arxiv.org/abs/1706.02515)
+  }];
+
+  let arguments = (ins
+    TF_FpTensor:$features
+  );
+
+  let results = (outs
+    TF_FpTensor:$activations
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_SeluGradOp : TF_Op<"SeluGrad", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = [{
+Computes gradients for the scaled exponential linear (Selu) operation.
+  }];
+
+  let description = [{
+  }];
+
+  let arguments = (ins
+    TF_FpTensor:$gradients,
+    TF_FpTensor:$outputs
+  );
+
+  let results = (outs
+    TF_FpTensor:$backprops
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
 def TF_ShapeOp : TF_Op<"Shape", [NoSideEffect]> {
@@ -7096,7 +7471,7 @@ shape(t) ==> [2, 2, 3]
   }];
 
   let builders = [
-    OpBuilder<"Builder* builder, OperationState& result, Value  input, BoolAttr use32Bit">
+    OpBuilder<"OpBuilder& builder, OperationState& result, Value  input, BoolAttr use32Bit">
   ];
 
   let hasFolder = 1;
@@ -7704,6 +8079,26 @@ I.e., \\(y = \sqrt{x} = x^{1/2}\\).
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
+def TF_SqrtGradOp : TF_Op<"SqrtGrad", [NoSideEffect, SameOperandsAndResultType]> {
+  let summary = "Computes the gradient for the sqrt of `x` wrt its input.";
+
+  let description = [{
+Specifically, `grad = dy * 0.5 / y`, where `y = sqrt(x)`, and `dy`
+is the corresponding input gradient.
+  }];
+
+  let arguments = (ins
+    TF_FpOrComplexTensor:$y,
+    TF_FpOrComplexTensor:$dy
+  );
+
+  let results = (outs
+    TF_FpOrComplexTensor:$z
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
 def TF_SquareOp : TF_Op<"Square", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "Computes square of x element-wise.";
 
@@ -8064,28 +8459,6 @@ shape of `StridedSlice`'s `input`.
   }];
 }
 
-def TF_StringFormatOp : TF_Op<"StringFormat", [NoSideEffect]> {
-  let summary = "Formats a string template using a list of tensors.";
-
-  let description = [{
-Formats a string template using a list of tensors, pretty-printing tensor summaries.
-  }];
-
-  let arguments = (ins
-    Variadic<TF_Tensor>:$inputs,
-
-    DefaultValuedAttr<StrAttr, "%s">:$strtemplate,
-    DefaultValuedAttr<StrAttr, "%s">:$placeholder,
-    DefaultValuedAttr<I64Attr, "3">:$summarize
-  );
-
-  let results = (outs
-    TF_StrTensor:$output
-  );
-
-  TF_DerivedOperandTypeListAttr T = TF_DerivedOperandTypeListAttr<0>;
-}
-
 def TF_SubOp : TF_Op<"Sub", [NoSideEffect, ResultsBroadcastableShape]>,
                WithBroadcastableBinOpBuilder {
   let summary = "Returns x - y element-wise.";
@@ -8107,6 +8480,8 @@ def TF_SubOp : TF_Op<"Sub", [NoSideEffect, ResultsBroadcastableShape]>,
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let hasCanonicalizer = 1;
+
+  let hasFolder = 1;
 }
 
 def TF_SumOp : TF_Op<"Sum", [NoSideEffect]> {
@@ -8134,7 +8509,7 @@ retained with length 1.
   TF_DerivedOperandTypeAttr Tidx = TF_DerivedOperandTypeAttr<1>;
 
   let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, Value input, "
+    "OpBuilder &builder, OperationState &result, Value input, "
     "Value reduction_indices, BoolAttr keep_dims"
   >];
 }
@@ -9067,7 +9442,7 @@ On GPU, if an out of bound index is found, the index is ignored.
 
   let builders = [
     OpBuilder<
-      "Builder* builder, OperationState& result, "
+      "OpBuilder& builder, OperationState& result, "
       "Value tensor, Value indices, Value updates",
       [{build(builder, result, tensor.getType(), tensor, indices, updates);}]
     >
@@ -9152,8 +9527,8 @@ as true/false for a branch condition.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 
   let builders = [OpBuilder<
-    "Builder *builder, OperationState &result, Value value", [{
-      build(builder, result, RankedTensorType::get({}, builder->getI1Type()),
+    "OpBuilder &builder, OperationState &result, Value value", [{
+      build(builder, result, RankedTensorType::get({}, builder.getI1Type()),
             value);
     }]>];
 
@@ -9217,7 +9592,7 @@ The output `y` has the same rank as `x`. The shapes of `x` and `y` satisfy:
 
   let builders = [
     OpBuilder<
-      "Builder* builder, OperationState& result, Value  x, Value  perm">
+      "OpBuilder& builder, OperationState& result, Value  x, Value  perm">
   ];
 
   let verifier = [{
@@ -9279,6 +9654,30 @@ y + truncate_mod(x, y) = x`.
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF_TruncatedNormalOp : TF_Op<"TruncatedNormal", []> {
+  let summary = "Outputs random values from a truncated normal distribution.";
+
+  let description = [{
+The generated values follow a normal distribution with mean 0 and standard
+deviation 1, except that values whose magnitude is more than 2 standard
+deviations from the mean are dropped and re-picked.
+  }];
+
+  let arguments = (ins
+    TF_I32OrI64Tensor:$shape,
+
+    DefaultValuedAttr<I64Attr, "0">:$seed,
+    DefaultValuedAttr<I64Attr, "0">:$seed2
+  );
+
+  let results = (outs
+    TF_FpTensor:$output
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+  TF_DerivedResultTypeAttr dtype = TF_DerivedResultTypeAttr<0>;
 }
 
 def TF_UniqueOp : TF_Op<"Unique", [NoSideEffect]> {
@@ -10059,6 +10458,29 @@ def TF_ZerosLikeOp : TF_Op<"ZerosLike", [NoSideEffect, SameOperandsAndResultType
   );
 
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
+def TF__RecvTPUEmbeddingActivationsOp : TF_Op<"_RecvTPUEmbeddingActivations", []> {
+  let summary = "An op that receives embeddng activations on the TPU.";
+
+  let description = [{
+The TPU system performs the embedding lookups and aggregations. The results of
+these aggregations are visible to the Tensorflow Graph as the outputs of a
+_RecvTPUEmbeddingActivations Op. This op returns a list containing one
+Tensor of activations per table specified in the model.
+  }];
+
+  let arguments = (ins
+    TF_VariantTensor:$deduplication_data,
+
+    StrAttr:$config
+  );
+
+  let results = (outs
+    Variadic<F32Tensor>:$outputs
+  );
+
+  TF_DerivedResultSizeAttr num_tables = TF_DerivedResultSizeAttr<0>;
 }
 
 def TF__TPUCompileMlirOp : TF_Op<"_TPUCompileMlir", []> {

@@ -16,6 +16,7 @@ limitations under the License.
 #include "tensorflow/compiler/mlir/xla/ir/chlo_ops.h"
 
 #include "mlir/IR/Attributes.h"  // from @llvm-project
+#include "mlir/IR/Builders.h"  // from @llvm-project
 #include "mlir/IR/Diagnostics.h"  // from @llvm-project
 #include "mlir/IR/StandardTypes.h"  // from @llvm-project
 #include "mlir/IR/TypeUtilities.h"  // from @llvm-project
@@ -96,16 +97,12 @@ static Type GetBroadcastType(Type x, Type y, Type element_type,
 
 LogicalResult InferBroadcastBinaryOpReturnTypeComponents(
     MLIRContext* context, Optional<Location> location, ValueRange operands,
-    ArrayRef<NamedAttribute> attributes, Type element_type,
+    DictionaryAttr attributes, Type element_type,
     SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
   // Find broadcast_dimensions.
-  DenseIntElementsAttr broadcast_dimensions;
-  for (auto attr : attributes) {
-    if (attr.first == "broadcast_dimensions") {
-      broadcast_dimensions = attr.second.dyn_cast<DenseIntElementsAttr>();
-      break;
-    }
-  }
+  DenseIntElementsAttr broadcast_dimensions =
+      attributes.get("broadcast_dimensions")
+          .dyn_cast_or_null<DenseIntElementsAttr>();
 
   ShapedType lhs_type = operands[0].getType().dyn_cast<ShapedType>();
   ShapedType rhs_type = operands[1].getType().dyn_cast<ShapedType>();
@@ -167,7 +164,7 @@ LogicalResult ReifyBroadcastBinaryOpReturnTypeShapes(
 
 LogicalResult BroadcastComplexOp::inferReturnTypeComponents(
     MLIRContext* context, Optional<Location> location, ValueRange operands,
-    ArrayRef<NamedAttribute> attributes, RegionRange regions,
+    DictionaryAttr attributes, RegionRange regions,
     SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
   ShapedType lhs_type = operands[0].getType().dyn_cast<ShapedType>();
   if (!lhs_type) {
@@ -190,7 +187,7 @@ LogicalResult BroadcastComplexOp::reifyReturnTypeShapes(
 
 LogicalResult BroadcastCompareOp::inferReturnTypeComponents(
     MLIRContext* context, Optional<Location> location, ValueRange operands,
-    ArrayRef<NamedAttribute> attributes, RegionRange regions,
+    DictionaryAttr attributes, RegionRange regions,
     SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {
   Type element_type = IntegerType::get(1, context);
   return InferBroadcastBinaryOpReturnTypeComponents(context, location, operands,
@@ -210,7 +207,7 @@ LogicalResult BroadcastCompareOp::reifyReturnTypeShapes(
 #define BROADCAST_INFER_SHAPE_TYPE_OP_DEFS(Op)                                \
   LogicalResult Op::inferReturnTypeComponents(                                \
       MLIRContext* context, Optional<Location> location, ValueRange operands, \
-      ArrayRef<NamedAttribute> attributes, RegionRange regions,               \
+      DictionaryAttr attributes, RegionRange regions,                         \
       SmallVectorImpl<ShapedTypeComponents>& inferedReturnShapes) {           \
     return InferBroadcastBinaryOpReturnTypeComponents(                        \
         context, location, operands, attributes, /*element_type=*/nullptr,    \
@@ -223,7 +220,7 @@ LogicalResult BroadcastCompareOp::reifyReturnTypeShapes(
   }
 
 #define BROADCAST_BINARY_OP_DEFS(Op)                                           \
-  void Op::build(Builder* builder, OperationState& result, Value left,         \
+  void Op::build(OpBuilder& builder, OperationState& result, Value left,       \
                  Value right, DenseIntElementsAttr broadcast_dimensions) {     \
     auto type = GetBroadcastType(                                              \
         left.getType().cast<ShapedType>(), right.getType().cast<ShapedType>(), \

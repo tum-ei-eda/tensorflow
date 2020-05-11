@@ -549,6 +549,12 @@ class XlaBuilder {
   XlaOp CrossReplicaSum(XlaOp operand,
                         absl::Span<const ReplicaGroup> replica_groups = {});
 
+  XlaOp AllGather(
+      XlaOp operand, int64 all_gather_dimension, int64 shard_count,
+      absl::Span<const ReplicaGroup> replica_groups = {},
+      const absl::optional<ChannelHandle>& channel_id = absl::nullopt,
+      const absl::optional<Layout>& layout = absl::nullopt);
+
   XlaOp AllReduce(
       XlaOp operand, const XlaComputation& computation,
       absl::Span<const ReplicaGroup> replica_groups = {},
@@ -557,7 +563,8 @@ class XlaBuilder {
 
   XlaOp AllToAll(XlaOp operand, int64 split_dimension, int64 concat_dimension,
                  int64 split_count,
-                 const std::vector<ReplicaGroup>& replica_groups);
+                 const std::vector<ReplicaGroup>& replica_groups,
+                 const absl::optional<Layout>& layout = absl::nullopt);
 
   XlaOp CollectivePermute(
       XlaOp operand,
@@ -705,6 +712,10 @@ class XlaBuilder {
 
   XlaOp RngOp(RandomDistribution distribution,
               absl::Span<const XlaOp> parameters, const Shape& shape);
+
+  virtual StatusOr<XlaOp> RngOpInternal(RandomDistribution distribution,
+                                        absl::Span<const XlaOp> parameters,
+                                        const Shape& shape);
 
   virtual StatusOr<XlaOp> InDimBroadcast(
       const Shape& shape, XlaOp operand,
@@ -987,13 +998,19 @@ class XlaBuilder {
       absl::Span<const std::pair<int64, int64>> padding);
   friend XlaOp CrossReplicaSum(XlaOp operand,
                                absl::Span<const ReplicaGroup> replica_groups);
+  friend XlaOp AllGather(XlaOp operand, int64 all_gather_dimension,
+                         int64 shard_count,
+                         absl::Span<const ReplicaGroup> replica_groups,
+                         const absl::optional<ChannelHandle>& channel_id,
+                         const absl::optional<Layout>& layout);
   friend XlaOp AllReduce(XlaOp operand, const XlaComputation& computation,
                          absl::Span<const ReplicaGroup> replica_groups,
                          const absl::optional<ChannelHandle>& channel_id,
                          const absl::optional<Shape>& shape_with_layout);
   friend XlaOp AllToAll(XlaOp operand, int64 split_dimension,
                         int64 concat_dimension, int64 split_count,
-                        const std::vector<ReplicaGroup>& replica_groups);
+                        const std::vector<ReplicaGroup>& replica_groups,
+                        const absl::optional<Layout>& layout);
   friend XlaOp CollectivePermute(
       XlaOp operand,
       const std::vector<std::pair<int64, int64>>& source_target_pairs);
@@ -1028,6 +1045,7 @@ class XlaBuilder {
   friend XlaOp Imag(XlaOp operand);
   friend XlaOp Sqrt(XlaOp operand);
   friend XlaOp Rsqrt(XlaOp operand);
+  friend XlaOp Cbrt(XlaOp operand);
   friend XlaOp Pow(XlaOp lhs, XlaOp rhs,
                    absl::Span<const int64> broadcast_dimensions);
   friend XlaOp IsFinite(XlaOp operand);
@@ -1764,6 +1782,11 @@ XlaOp ReduceWindowWithGeneralPadding(
 XlaOp CrossReplicaSum(XlaOp operand,
                       absl::Span<const ReplicaGroup> replica_groups = {});
 
+XlaOp AllGather(XlaOp operand, int64 all_gather_dimension, int64 shard_count,
+                absl::Span<const ReplicaGroup> replica_groups = {},
+                const absl::optional<ChannelHandle>& channel_id = absl::nullopt,
+                const absl::optional<Layout>& layout = absl::nullopt);
+
 // Enqueues an operation that do an AllReduce of the operand cross cores. Here
 // AllReduce means doing a reduction on the input operand cross cores and then
 // broadcasting the reduction result to those cores. The reduction function is
@@ -1789,9 +1812,13 @@ XlaOp AllReduce(XlaOp operand, const XlaComputation& computation,
                 const absl::optional<Shape>& shape_with_layout = absl::nullopt);
 
 // Enqueues an operation that do an Alltoall of the operand cross cores.
+// An optional `layout` can be specified to force the layout of the instruction.
+// This is used to guarantee the same layout for a group of AllToAll ops
+// compiled separately.
 XlaOp AllToAll(XlaOp operand, int64 split_dimension, int64 concat_dimension,
                int64 split_count,
-               const std::vector<ReplicaGroup>& replica_groups = {});
+               const std::vector<ReplicaGroup>& replica_groups = {},
+               const absl::optional<Layout>& layout = absl::nullopt);
 
 // Enqueues an collective operation that sends and receives data cross replicas.
 //
@@ -1877,6 +1904,9 @@ XlaOp Imag(XlaOp operand);
 
 // Enqueues a sqrt computation onto the computation.
 XlaOp Sqrt(XlaOp operand);
+
+// Enqueues a cbrt computation onto the computation.
+XlaOp Cbrt(XlaOp operand);
 
 // Enqueues a rsqrt computation onto the computation.
 XlaOp Rsqrt(XlaOp operand);

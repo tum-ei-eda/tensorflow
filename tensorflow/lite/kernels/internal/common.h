@@ -24,6 +24,7 @@ limitations under the License.
 #include <functional>
 
 #include "fixedpoint/fixedpoint.h"
+#include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/optimized/neon_check.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/internal/cppmath.h"
@@ -247,8 +248,8 @@ inline void gen_lut(const std::function<double(double)>& func, double min,
     double sample_val = TfLiteRound(func(min + i * step) * 32768.0);
     double midpoint_interp_val =
         TfLiteRound((func(min + (i + 1) * step) * 32768.0 +
-                    TfLiteRound(func(min + i * step) * 32768.0)) /
-                   2.0);
+                     TfLiteRound(func(min + i * step) * 32768.0)) /
+                    2.0);
     double midpoint_val =
         TfLiteRound(func(min + i * step + half_step) * 32768.0);
     double midpoint_err = midpoint_interp_val - midpoint_val;

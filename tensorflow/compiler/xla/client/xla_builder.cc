@@ -1792,8 +1792,6 @@ XlaOp XlaBuilder::RngOp(RandomDistribution distribution,
                         absl::Span<const XlaOp> parameters,
                         const Shape& shape) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
-    HloInstructionProto instr;
-
     // Check the number of parameters per RNG distribution.
     switch (distribution) {
       case RandomDistribution::RNG_NORMAL:
@@ -1809,12 +1807,18 @@ XlaOp XlaBuilder::RngOp(RandomDistribution distribution,
     }
 
     TF_RETURN_IF_ERROR(ShapeUtil::ValidateShapeWithOptionalLayout(shape));
-    *instr.mutable_shape() = shape.ToProto();
-
-    instr.set_distribution(distribution);
-
-    return AddInstruction(std::move(instr), HloOpcode::kRng, parameters);
+    return RngOpInternal(distribution, parameters, shape);
   });
+}
+
+StatusOr<XlaOp> XlaBuilder::RngOpInternal(RandomDistribution distribution,
+                                          absl::Span<const XlaOp> parameters,
+                                          const Shape& shape) {
+  HloInstructionProto instr;
+  *instr.mutable_shape() = shape.ToProto();
+  instr.set_distribution(distribution);
+
+  return AddInstruction(std::move(instr), HloOpcode::kRng, parameters);
 }
 
 XlaOp XlaBuilder::RngNormal(XlaOp mu, XlaOp sigma, const Shape& shape) {
@@ -2199,6 +2203,39 @@ XlaOp XlaBuilder::BatchNormGrad(XlaOp operand, XlaOp scale, XlaOp batch_mean,
   });
 }
 
+XlaOp XlaBuilder::AllGather(XlaOp operand, int64 all_gather_dimension,
+                            int64 shard_count,
+                            absl::Span<const ReplicaGroup> replica_groups,
+                            const absl::optional<ChannelHandle>& channel_id,
+                            const absl::optional<Layout>& layout) {
+  return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
+    HloInstructionProto instr;
+    TF_ASSIGN_OR_RETURN(const Shape* operand_shape, GetShapePtr(operand));
+
+    TF_ASSIGN_OR_RETURN(Shape inferred_shape,
+                        ShapeInference::InferAllGatherShape(
+                            *operand_shape, all_gather_dimension, shard_count));
+    if (layout) {
+      *inferred_shape.mutable_layout() = *layout;
+      instr.set_constrain_layout(true);
+    }
+    *instr.mutable_shape() = inferred_shape.ToProto();
+
+    instr.add_dimensions(all_gather_dimension);
+    for (const ReplicaGroup& group : replica_groups) {
+      *instr.add_replica_groups() = group;
+    }
+    if (channel_id.has_value()) {
+      instr.set_channel_id(channel_id->handle());
+    }
+
+    TF_ASSIGN_OR_RETURN(
+        auto all_gather,
+        AddInstruction(std::move(instr), HloOpcode::kAllGather, {operand}));
+    return all_gather;
+  });
+}
+
 XlaOp XlaBuilder::CrossReplicaSum(
     XlaOp operand, absl::Span<const ReplicaGroup> replica_groups) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
@@ -2307,7 +2344,8 @@ XlaOp XlaBuilder::AllReduce(XlaOp operand, const XlaComputation& computation,
 
 XlaOp XlaBuilder::AllToAll(XlaOp operand, int64 split_dimension,
                            int64 concat_dimension, int64 split_count,
-                           const std::vector<ReplicaGroup>& replica_groups) {
+                           const std::vector<ReplicaGroup>& replica_groups,
+                           const absl::optional<Layout>& layout) {
   return ReportErrorOrReturn([&]() -> StatusOr<XlaOp> {
     TF_ASSIGN_OR_RETURN(const Shape* operand_shape, GetShapePtr(operand));
 
@@ -2342,7 +2380,21 @@ XlaOp XlaBuilder::AllToAll(XlaOp operand, int64 split_dimension,
                       [](const Shape& shape) { return &shape; });
     TF_ASSIGN_OR_RETURN(
         Shape shape, ShapeInference::InferAllToAllTupleShape(slice_shape_ptrs));
+
+    if (layout) {
+      TF_RET_CHECK(shape.IsTuple() && !ShapeUtil::IsNestedTuple(shape));
+      for (int64 i = 0; i < ShapeUtil::TupleElementCount(shape); ++i) {
+        if (layout->minor_to_major().size() != shape.tuple_shapes(i).rank()) {
+          return InvalidArgument(
+              "Provided layout must be compatible with the operand shape: %s "
+              "vs %s",
+              layout->ToString(), operand_shape->ToString());
+        }
+        *(shape.mutable_tuple_shapes(i)->mutable_layout()) = *layout;
+      }
+    }
     *instr.mutable_shape() = shape.ToProto();
+
     for (const ReplicaGroup& group : replica_groups) {
       *instr.add_replica_groups() = group;
     }
@@ -3451,6 +3503,16 @@ XlaOp ReduceWindowWithGeneralPadding(
       base_dilations, window_dilations, padding);
 }
 
+XlaOp AllGather(const XlaOp operand, int64 all_gather_dimension,
+                int64 shard_count,
+                absl::Span<const ReplicaGroup> replica_groups,
+                const absl::optional<ChannelHandle>& channel_id,
+                const absl::optional<Layout>& layout) {
+  return operand.builder()->AllGather(operand, all_gather_dimension,
+                                      shard_count, replica_groups, channel_id,
+                                      layout);
+}
+
 XlaOp CrossReplicaSum(const XlaOp operand,
                       absl::Span<const ReplicaGroup> replica_groups) {
   return operand.builder()->CrossReplicaSum(operand, replica_groups);
@@ -3466,9 +3528,10 @@ XlaOp AllReduce(const XlaOp operand, const XlaComputation& computation,
 
 XlaOp AllToAll(const XlaOp operand, int64 split_dimension,
                int64 concat_dimension, int64 split_count,
-               const std::vector<ReplicaGroup>& replica_groups) {
+               const std::vector<ReplicaGroup>& replica_groups,
+               const absl::optional<Layout>& layout) {
   return operand.builder()->AllToAll(operand, split_dimension, concat_dimension,
-                                     split_count, replica_groups);
+                                     split_count, replica_groups, layout);
 }
 
 XlaOp CollectivePermute(
@@ -3554,6 +3617,9 @@ XlaOp Imag(const XlaOp operand) {
 }
 XlaOp Sqrt(const XlaOp operand) {
   return operand.builder()->UnaryOp(HloOpcode::kSqrt, operand);
+}
+XlaOp Cbrt(const XlaOp operand) {
+  return operand.builder()->UnaryOp(HloOpcode::kCbrt, operand);
 }
 XlaOp Rsqrt(const XlaOp operand) {
   return operand.builder()->UnaryOp(HloOpcode::kRsqrt, operand);

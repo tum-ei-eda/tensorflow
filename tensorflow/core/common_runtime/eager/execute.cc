@@ -200,7 +200,8 @@ Status ValidateInputTypeAndPlacement(
             "together.");
       }
       Device* handle_device = absl::get<Device*>(handle_device_variant);
-      const bool maybe_copy = !skip_remote_copy || !handle->IsRemote();
+      const bool maybe_copy =
+          !skip_remote_copy || handle->Type() != TensorHandle::REMOTE;
       // If the input is already on the right device, then nothing to do.
       if (expected_device != handle_device && maybe_copy) {
         TF_RETURN_IF_ERROR(CopyInputToExpectedDevice(ctx, op, kernel->device(),
@@ -258,7 +259,7 @@ Status GetDeviceForInput(const EagerContext& ctx, TensorHandle* tensor_handle,
   }
   Device* cpu_device = ctx.HostCPU();
   string device_name;
-  if (tensor_handle->IsRemote()) {
+  if (tensor_handle->Type() != TensorHandle::LOCAL) {
     Device* device = absl::get<Device*>(tensor_handle->device());
     device_name = device != nullptr ? device->name() : cpu_device->name();
     *result = (device == nullptr ? cpu_device : device);
@@ -366,6 +367,7 @@ Status GetOrCreateKernelAndDevice(
   Fprint128 cache_key = op->MutableAttrs()->CacheKey(op->DeviceName());
 
   std::vector<Device*> input_dev_ptrs;
+  absl::flat_hash_map<string, const std::vector<string>*> composite_devices;
   std::unordered_map<int, DtypeAndPartialTensorShape>
       input_resource_variable_dtypes_and_shapes;
   // We can eliminate some overhead by running simple functions using regular
@@ -392,7 +394,8 @@ Status GetOrCreateKernelAndDevice(
     // which doesn't accept remote inputs.
     for (int i = 0; i < op->Inputs().size(); i++) {
       TensorHandle* input = op->Inputs()[i];
-      if (!ctx.LazyCopyFunctionRemoteInputs() && input->IsRemote()) {
+      if (!ctx.LazyCopyFunctionRemoteInputs() &&
+          input->Type() == TensorHandle::REMOTE) {
         TensorHandle* handle = nullptr;
         TF_RETURN_IF_ERROR(
             EagerCopyToDevice(input, &ctx, &op->Executor(),
@@ -408,6 +411,13 @@ Status GetOrCreateKernelAndDevice(
       Device* input_device;
       TF_RETURN_IF_ERROR(GetDeviceForInput(ctx, input, &input_device));
       input_dev_ptrs.push_back(input_device);
+      CompositeDevice* composite_device = nullptr;
+      if (ctx.FindCompositeDeviceFromName(input_device->name().c_str(),
+                                          &composite_device)
+              .ok()) {
+        composite_devices[input_device->name()] =
+            composite_device->underlying_devices();
+      }
       cache_key =
           FingerprintCat128(cache_key, Fingerprint128(input_device->name()));
 
@@ -518,6 +528,7 @@ Status GetOrCreateKernelAndDevice(
 #endif  // IS_MOBILE_PLATFORM
       kernel.reset(new KernelAndDeviceFunc(
           flr, ctx.pflr(), std::move(input_dev_ptrs),
+          std::move(composite_devices),
           std::move(input_resource_variable_dtypes_and_shapes), runner,
           ctx.GetCollectiveExecutorHandle(), ctx.HostCPU(), op->Name(),
           [&ctx](const int64 step_id) { return ctx.CreateRendezvous(step_id); },
@@ -548,6 +559,15 @@ Status GetOrCreateKernelAndDevice(
       }
     }
   }
+
+  int num_outputs = kernel->num_outputs();
+  if (num_outputs > *num_retvals) {
+    return errors::InvalidArgument("Expecting ", num_outputs,
+                                   " outputs, but *num_retvals is ",
+                                   *num_retvals);
+  }
+  *num_retvals = num_outputs;
+
   kernel->Ref();  // Ownership of reference is passed to out_kernel.
   out_kernel->reset(kernel.get());
   return Status::OK();
@@ -585,12 +605,6 @@ Status EagerLocalExecute(EagerOperation* op, TensorHandle** retvals,
       GetOrCreateKernelAndDevice(op, retvals, num_retvals, &kernel));
 
   int num_outputs = kernel->num_outputs();
-  if (num_outputs > *num_retvals) {
-    return errors::InvalidArgument("Expecting ", num_outputs,
-                                   " outputs, but *num_retvals is ",
-                                   *num_retvals);
-  }
-  *num_retvals = num_outputs;
   TF_RETURN_IF_ERROR(ValidateInputTypeAndPlacement(&ctx, op, kernel));
 
   GraphCollector* graph_collector = nullptr;
@@ -1160,15 +1174,33 @@ Status LocalEagerCopyToDevice(TensorHandle* h, EagerContext* ctx,
 
   bool async = executor->Async();
   if (mirror) {
+    h->Ref();
+    *result = h;
+
+    if (h->HasLocalMirror(d)) {
+      return Status::OK();
+    }
+
     // We don't bother adding an empty local mirror in sync mode since we'll be
     // executing the operation directly and be calling AddLocalMirror. A
     // reference count is still needed which will be removed if the operation
     // fails.
     if (async) {
-      TF_RETURN_IF_ERROR(h->AddEmptyLocalMirror(d));
+      Status s = h->AddEmptyLocalMirror(d);
+      if (!s.ok()) {
+        // If a mirror was added since we called HasLocalMirror then just return
+        // since another thread has already added the mirror.
+        if (s.code() == error::Code::ALREADY_EXISTS) {
+          return Status::OK();
+        }
+
+        // Remove the previously added reference count since adding the mirror
+        // failed.
+        h->Unref();
+        *result = nullptr;
+        return s;
+      }
     }
-    h->Ref();
-    *result = h;
   } else {
     *result = TensorHandle::CreateEmptyLocalHandle(
         d, dstd, h->resource_device(), h->dtype, ctx);
@@ -1225,19 +1257,31 @@ Status EagerCopyToDevice(TensorHandle* h, EagerContext* ctx,
     uint64 recv_op_id = 0;
     if (receiver_is_local) {
       Device* d = ctx->CanonicalDevice(device);
-      if (mirror && h->HasLocalMirror(d)) {
-        h->Ref();
-        *result = h;
-        return Status::OK();
-      }
-
       // TODO(gjn): Need to add support for async execution. Note if receiver
       // is local, we need to first add support in TensorHandle to wait on local
       // mirrors.
       if (mirror) {
-        TF_RETURN_IF_ERROR(h->AddEmptyLocalMirror(d));
         h->Ref();
         *result = h;
+
+        if (h->HasLocalMirror(d)) {
+          return Status::OK();
+        }
+
+        Status s = h->AddEmptyLocalMirror(d);
+        if (!s.ok()) {
+          // If a mirror was added since we called HasLocalMirror then just
+          // return since another thread has already added the mirror.
+          if (s.code() == error::Code::ALREADY_EXISTS) {
+            return Status::OK();
+          }
+
+          // Remove the previously added reference count since adding the mirror
+          // failed.
+          h->Unref();
+          *result = nullptr;
+          return s;
+        }
       } else {
         *result = TensorHandle::CreateEmptyLocalHandle(
             /* d= */ d, /* op_device= */ device,
@@ -1280,4 +1324,117 @@ Status EagerCopyToDevice(TensorHandle* h, EagerContext* ctx,
   }
 }
 
+namespace {
+// Low-level utility function to execute the kernel specified by `kernel` on
+// `kernel->device()`, with the provided inputs as `op_inputs` in the 'ctx'.
+// Different from `EagerKernelExecute` that ties up the thread until the
+// underlying function finishes execute, this function does not block the thread
+// and could return before the function execution finishes. The provided
+// `StatusCallback` will be triggered after function execution with its status.
+void EagerKernelExecuteAsync(
+    EagerContext* ctx, const absl::InlinedVector<TensorHandle*, 4>& op_inputs,
+    const absl::optional<EagerRemoteFunctionParams>& remote_func_params,
+    const core::RefCountPtr<KernelAndDevice> kernel,
+    GraphCollector* graph_collector, CancellationManager* cancellation_manager,
+    TensorHandle** retvals, int num_outputs, StatusCallback done) {
+  auto inputs = std::make_shared<ExecuteNodeArgs>(op_inputs.size());
+  auto outputs = std::make_shared<std::vector<Tensor>>(1);
+
+  Status s = inputs->Init(ctx, op_inputs, kernel);
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+
+  kernel->Ref();  // Ownership of reference is transferred to the callback
+  kernel->RunAsync(
+      ctx->StepContainer(), *inputs, outputs.get(), cancellation_manager,
+      remote_func_params,
+      [retvals, inputs, outputs, num_outputs, ctx, graph_collector,
+       kernel_raw = kernel.get(), done = std::move(done)](const Status& s) {
+        auto wrapped_done = [&](const Status& s) {
+          kernel_raw->Unref();
+          done(s);
+        };
+        if (!s.ok()) {
+          wrapped_done(s);
+          return;
+        }
+        if (graph_collector != nullptr) {
+          CollectGraphs(ctx);
+        }
+        DCHECK_EQ(num_outputs, outputs->size());
+        wrapped_done(GetKernelOutputs(outputs.get(), num_outputs, retvals, ctx,
+                                      kernel_raw));
+      });
+}
+}  // namespace
+
+// Low-level utility to run the eager operation on local devices. Different from
+// `EagerLocalExecute` which blocks and waits for the finishing the op
+// execution, this method does not block the thread and could return before the
+// eager operation execution finishes. The provided `StatusCallback` will be
+// triggered after execution with its status.
+void EagerLocalExecuteAsync(EagerOperation* op, TensorHandle** retvals,
+                            int* num_retvals, StatusCallback done) {
+  if (VariantDeviceIsCustom(op->Device())) {
+    done(errors::Unimplemented(
+        "Custom device is not supported in EagerLocalExecuteAsync."));
+    return;
+  }
+  if (!op->IsLocal()) {
+    done(errors::InvalidArgument(
+        "Remote execution is not supported in async EagerLocalExecuteAsync"));
+    return;
+  }
+
+  ScopedMemoryDebugAnnotation op_annotation(
+      op->op_name(), op->remote_func_params().has_value()
+                         ? op->remote_func_params().value().step_id.value_or(0)
+                         : 0);
+  profiler::TraceMe activity(
+      [&] { return absl::StrCat("EagerLocalExecuteAsync: ", op->Name()); },
+      profiler::TraceMeLevel::kInfo);
+  EagerContext& ctx = op->EagerContext();
+
+  core::RefCountPtr<KernelAndDevice> kernel;
+  Status s = GetOrCreateKernelAndDevice(op, retvals, num_retvals, &kernel);
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+
+  int num_outputs = kernel->num_outputs();
+  s = ValidateInputTypeAndPlacement(&ctx, op, kernel);
+  if (!s.ok()) {
+    done(s);
+    return;
+  }
+
+  GraphCollector* graph_collector = nullptr;
+  if (ctx.ShouldStoreGraphs()) {
+    graph_collector = ctx.GetGraphCollector();
+  }
+
+  for (int i = 0; i < num_outputs; ++i) {
+    retvals[i] = nullptr;
+  }
+
+  EagerKernelExecuteAsync(
+      &ctx, op->Inputs(), op->remote_func_params(), std::move(kernel),
+      graph_collector, op->GetCancellationManager(), retvals, num_outputs,
+      [op, num_outputs, &retvals, done = std::move(done)](const Status& s) {
+        op->Clear();
+        // Since the operation failed, we need to Unref any outputs if they were
+        // allocated.
+        if (!s.ok()) {
+          for (int i = 0; i < num_outputs; ++i) {
+            if (retvals[i] != nullptr) {
+              retvals[i]->Unref();
+            }
+          }
+        }
+        done(s);
+      });
+}
 }  // namespace tensorflow

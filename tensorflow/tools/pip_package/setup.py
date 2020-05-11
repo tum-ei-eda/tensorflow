@@ -50,7 +50,7 @@ DOCLINES = __doc__.split('\n')
 # result for pip.
 # Also update tensorflow/tensorflow.bzl and
 # tensorflow/core/public/version.h
-_VERSION = '2.1.0'
+_VERSION = '2.2.0'
 
 REQUIRED_PACKAGES = [
     'absl-py >= 0.7.0',
@@ -65,7 +65,7 @@ REQUIRED_PACKAGES = [
     'opt_einsum >= 2.3.2',
     'protobuf >= 3.9.2',
     'tensorboard >= 2.2.0, < 2.3.0',
-    'tensorflow_estimator >= 2.1.0, < 2.2.0',
+    'tensorflow_estimator >= 2.2.0, < 2.3.0',
     'termcolor >= 1.1.0',
     'wrapt >= 1.11.1',
     # python3 requires wheel 0.26
@@ -252,6 +252,7 @@ headers = (
     list(find_files('*.h', 'tensorflow/c')) +
     list(find_files('*.h', 'tensorflow/cc')) +
     list(find_files('*.h', 'tensorflow/compiler')) +
+    list(find_files('*.h.inc', 'tensorflow/compiler')) +
     list(find_files('*.h', 'tensorflow/core')) +
     list(find_files('*.h', 'tensorflow/python')) +
     list(find_files('*.h', 'tensorflow/stream_executor')) +
