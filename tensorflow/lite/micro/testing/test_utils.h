@@ -60,11 +60,33 @@ inline float ScaleFromMinMax(const float min, const float max) {
                         std::numeric_limits<T>::min());
 }
 
-// Derives the quantization zero point from a min and max range.
+//@IFX_PATCH@
+// Derives the quantization scaling factor from a min and max range
+// and coding bitwidth.   N.b. no support for limited_range etc.
+
+inline float ScaleFromMinMaxPacked(const float min, const float max, 
+                                   const uint32_t num_bits) {
+  float code_points  = static_cast<float>((1<<num_bits)-1);
+  return (max - min) / code_points;
+}
+
+// Derives the quantization zero point from a min and max range
+// and coding bitwidth.   N.b. no support for limited_range, nudging etc.
+
 template <typename T>
 inline int ZeroPointFromMinMax(const float min, const float max) {
   return static_cast<int>(std::numeric_limits<T>::min()) +
          static_cast<int>(-min / ScaleFromMinMax<T>(min, max) + 0.5f);
+}
+
+//@IFX_PATCH@
+// Derives the quantization zero point from a min and max range
+// and coding bitwidth.   N.b. no support for limited_range, nudging etc.
+inline int ZeroPointFromMinMaxPacked(const float min, const float max, 
+                                     const uint32_t num_bits) {
+  int min_code = -(1<<(num_bits-1u));
+  return min_code +
+         static_cast<int>(-min / ScaleFromMinMaxPacked(min, max, num_bits) + 0.5f);
 }
 
 // Converts a float value into an unsigned eight-bit quantized value.
@@ -79,6 +101,23 @@ inline uint8_t F2Q(const float value, const float min, const float max) {
   }
   return result;
 }
+
+// Converts a float value into an unsigned eight-bit quantized value.
+template<uint32_t NUM_BITS>
+inline uint8_t F2QB(const float value, const float min, const float max) {
+  int32_t result = ZeroPointFromMinMaxPacked(min, max, NUM_BITS) +
+                   (value / ScaleFromMinMaxPacked(min, max, NUM_BITS)) + 0.5f;
+  const int32_t min_code = -(1<<(NUM_BITS-1u));
+  const int32_t max_code = (1<<(NUM_BITS-1u))-1;
+  if (result < min_code) {
+    result = min_code;
+  }
+  if (result > max_code) {
+    result = max_code;
+  }
+  return result;
+}
+
 
 // Converts a float value into a signed eight-bit quantized value.
 inline int8_t F2QS(const float value, const float min, const float max) {
@@ -123,7 +162,8 @@ inline TfLiteTensor CreateQuantizedTensor(const uint8_t* data,
   result.data.uint8 = const_cast<uint8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<uint8_t>(min, max),
-                   ZeroPointFromMinMax<uint8_t>(min, max)};
+                  ZeroPointFromMinMax<uint8_t>(min, max),
+                  0};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(uint8_t);
   result.allocation = nullptr;
@@ -148,7 +188,8 @@ inline TfLiteTensor CreateQuantizedTensor(const int8_t* data,
   result.data.int8 = const_cast<int8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<int8_t>(min, max),
-                   ZeroPointFromMinMax<int8_t>(min, max)};
+                   ZeroPointFromMinMax<int8_t>(min, max),
+                   0};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   result.allocation = nullptr;

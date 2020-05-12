@@ -276,7 +276,7 @@ typedef struct TfLiteQuantizationParams {
   float scale;
   int32_t zero_point;
   // @IFX_PATCH@  PoC hack Add flag for marking packing
-  uint8_t bits_per_item;
+  uint32_t bits_per_item;
 } TfLiteQuantizationParams;
 
 // Parameters for asymmetric quantization across a dimension (i.e per output
