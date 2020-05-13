@@ -162,8 +162,8 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
         print("path_prefix was specified to tf_workspace but is no longer used " +
               "and will be removed in the future.")
 
-    TFRT_COMMIT = "0bad623e8d99ace05f7f60e9e7f8b53ec813d66a"
-    TFRT_SHA256 = "d002429866d2d824a80dcf6c1602a15398412bc01324200d371c55b13b9a4b27"
+    TFRT_COMMIT = "26fb26d716545388edb9785f8f4b3e60a4ad5092"
+    TFRT_SHA256 = "f7419a3eaab8b7137a4de5b428045a731d93da91ef1bce9ba91fab81ed23a676"
     TFRT_URLS = [
         "http://mirror.tensorflow.org/github.com/tensorflow/runtime/archive/{commit}.zip".format(commit = TFRT_COMMIT),
         "https://github.com/tensorflow/runtime/archive/{commit}.zip".format(commit = TFRT_COMMIT),
@@ -354,11 +354,11 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
 
     tf_http_archive(
         name = "gemmlowp",
-        sha256 = "6678b484d929f2d0d3229d8ac4e3b815a950c86bb9f17851471d143f6d4f7834",  # SHARED_GEMMLOWP_SHA
-        strip_prefix = "gemmlowp-12fed0cd7cfcd9e169bf1925bc3a7a58725fdcc3",
+        sha256 = "43146e6f56cb5218a8caaab6b5d1601a083f1f31c06ff474a4378a7d35be9cfb",  # SHARED_GEMMLOWP_SHA
+        strip_prefix = "gemmlowp-fda83bdc38b118cc6b56753bd540caa49e570745",
         urls = [
-            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/google/gemmlowp/archive/12fed0cd7cfcd9e169bf1925bc3a7a58725fdcc3.zip",
-            "https://github.com/google/gemmlowp/archive/12fed0cd7cfcd9e169bf1925bc3a7a58725fdcc3.zip",
+            "https://storage.googleapis.com/mirror.tensorflow.org/github.com/google/gemmlowp/archive/fda83bdc38b118cc6b56753bd540caa49e570745.zip",
+            "https://github.com/google/gemmlowp/archive/fda83bdc38b118cc6b56753bd540caa49e570745.zip",
         ],
     )
 
@@ -679,8 +679,8 @@ def tf_repositories(path_prefix = "", tf_repo_name = ""):
     )
 
     # Check out LLVM and MLIR from llvm-project.
-    LLVM_COMMIT = "f40fc7b8d60e6897fd9514a46a26f4b84f57577a"
-    LLVM_SHA256 = "8f5ea1c26fc922b1b0752f6bd63b31d4137e04630828cb3a4f94a9bbdbcf575d"
+    LLVM_COMMIT = "897d8ee5cd693e17f95a7e84194bca4c089a520b"
+    LLVM_SHA256 = "994677daedf23bc93ce04f1a527c07c09b7fbbd0986d867b60bd6710057a40de"
     LLVM_URLS = [
         "https://storage.googleapis.com/mirror.tensorflow.org/github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT),
         "https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT),

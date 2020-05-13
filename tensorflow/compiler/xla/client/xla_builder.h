@@ -421,14 +421,9 @@ class XlaBuilder {
   virtual XlaOp SliceInDim(XlaOp operand, int64 start_index, int64 limit_index,
                            int64 stride, int64 dimno);
 
-  ABSL_DEPRECATED("Use span-of-indices form instead")
-  XlaOp DynamicSlice(XlaOp operand, XlaOp start_indices,
-                     absl::Span<const int64> slice_sizes);
   XlaOp DynamicSlice(XlaOp operand, absl::Span<const XlaOp> start_indices,
                      absl::Span<const int64> slice_sizes);
 
-  ABSL_DEPRECATED("Use span-of-indices form instead")
-  XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update, XlaOp start_indices);
   XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update,
                            absl::Span<const XlaOp> start_indices);
 
@@ -490,6 +485,16 @@ class XlaBuilder {
                            int64 feature_group_count = 1,
                            int64 batch_group_count = 1,
                            const PrecisionConfig* precision_config = nullptr);
+
+  virtual StatusOr<XlaOp> ConvGeneralDilatedInternal(
+      const Shape& shape, XlaOp lhs, XlaOp rhs, const Window& window,
+      absl::Span<const int64> window_strides,
+      absl::Span<const std::pair<int64, int64>> padding,
+      absl::Span<const int64> lhs_dilation,
+      absl::Span<const int64> rhs_dilation,
+      const ConvolutionDimensionNumbers& dimension_numbers,
+      int64 feature_group_count, int64 batch_group_count,
+      const PrecisionConfig* precision_config);
 
   XlaOp Fft(XlaOp operand, FftType fft_type,
             absl::Span<const int64> fft_length);
@@ -848,14 +853,10 @@ class XlaBuilder {
   friend XlaOp SliceInDim(XlaOp operand, int64 start_index, int64 limit_index,
                           int64 stride, int64 dimno);
 
-  friend XlaOp DynamicSlice(XlaOp operand, XlaOp start_indices,
-                            absl::Span<const int64> slice_sizes);
   friend XlaOp DynamicSlice(XlaOp operand,
                             absl::Span<const XlaOp> start_indices,
                             absl::Span<const int64> slice_sizes);
 
-  friend XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update,
-                                  XlaOp start_indices);
   friend XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update,
                                   absl::Span<const XlaOp> start_indices);
 
@@ -1428,10 +1429,6 @@ XlaOp SliceInDim(XlaOp operand, int64 start_index, int64 limit_index,
 XlaOp DynamicSlice(XlaOp operand, absl::Span<const XlaOp> start_indices,
                    absl::Span<const int64> slice_sizes);
 
-ABSL_DEPRECATED("Use span-of-indices form instead")
-XlaOp DynamicSlice(XlaOp operand, XlaOp start_indices,
-                   absl::Span<const int64> slice_sizes);
-
 // Enqueues a dynamic update slice operation onto the computation, which
 // updates a slice of 'operand' with 'update' at dynamic 'start_indices'.
 // The shape of 'update' determines the shape of the slice of 'operand'
@@ -1451,9 +1448,6 @@ XlaOp DynamicSlice(XlaOp operand, XlaOp start_indices,
 // prevent dynamic start indices from generating out-of-bound array accesses.
 XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update,
                          absl::Span<const XlaOp> start_indices);
-
-ABSL_DEPRECATED("Use span-of-indices form instead")
-XlaOp DynamicUpdateSlice(XlaOp operand, XlaOp update, XlaOp start_indices);
 
 // Enqueues a concatenate instruction onto the computation. 'operands' must
 // have >= 1 entry.

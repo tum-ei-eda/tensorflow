@@ -23,7 +23,7 @@ limitations under the License.
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
-include "mlir/Interfaces/SideEffects.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "tensorflow/compiler/mlir/xla/ir/hlo_ops_base.td"
 include "tensorflow/compiler/mlir/xla/ir/hlo_utils.td"
 
@@ -229,7 +229,7 @@ def HLO_SqrtOp: HLO_UnaryElementwiseOp<"sqrt",
     BASE_HLO_SqrtOp;
 
 def HLO_TanhOp: HLO_UnaryElementwiseOp<"tanh",
-    [ResultsAreFloatLike, NoSideEffect, SameOperandsAndResultType],
+    [NoSideEffect, SameOperandsAndResultType],
     HLO_FpOrComplexTensor>, BASE_HLO_TanhOp;
 
 //===----------------------------------------------------------------------===//

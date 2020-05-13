@@ -192,6 +192,44 @@ retained with length 1.
   let verifier = [{ return Verify(*this); }];
 }
 
+def TF_AllToAllOp : TF_Op<"AllToAll", [NoSideEffect]> {
+  let summary = "An Op to exchange data across TPU replicas.";
+
+  let description = [{
+On each replica, the input is split into `split_count` blocks along
+`split_dimension` and send to the other replicas given group_assignment. After
+receiving `split_count` - 1 blocks from other replicas, we concatenate the
+blocks along `concat_dimension` as the output.
+
+For example, suppose there are 2 TPU replicas:
+replica 0 receives input: `[[A, B]]`
+replica 1 receives input: `[[C, D]]`
+
+group_assignment=`[[0, 1]]`
+concat_dimension=0
+split_dimension=1
+split_count=2
+
+replica 0's output: `[[A], [C]]`
+replica 1's output: `[[B], [D]]`
+  }];
+
+  let arguments = (ins
+    TensorOf<[BF16, F16, F32, F64, I1, I16, I32, I64, I8, TF_Complex128, TF_Complex64, TF_Qint32, TF_Qint8, TF_Quint8, TF_Uint16, TF_Uint32, TF_Uint64, TF_Uint8]>:$input,
+    I32Tensor:$group_assignment,
+
+    I64Attr:$concat_dimension,
+    I64Attr:$split_dimension,
+    I64Attr:$split_count
+  );
+
+  let results = (outs
+    TensorOf<[BF16, F16, F32, F64, I1, I16, I32, I64, I8, TF_Complex128, TF_Complex64, TF_Qint32, TF_Qint8, TF_Quint8, TF_Uint16, TF_Uint32, TF_Uint64, TF_Uint8]>:$output
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
 def TF_AngleOp : TF_Op<"Angle", [NoSideEffect, SameOperandsAndResultShape]> {
   let summary = "Returns the argument of a complex number.";
 
@@ -1408,6 +1446,30 @@ tf.conj(input) ==> [-2.25 - 4.75j, 3.25 - 5.75j]
   let hasCanonicalizer = 1;
 }
 
+def TF_ConjugateTransposeOp : TF_Op<"ConjugateTranspose", [NoSideEffect]> {
+  let summary = [{
+Shuffle dimensions of x according to a permutation and conjugate the result.
+  }];
+
+  let description = [{
+The output `y` has the same rank as `x`. The shapes of `x` and `y` satisfy:
+  `y.shape[i] == x.shape[perm[i]] for i in [0, 1, ..., rank(x) - 1]`
+  `y[i,j,k,...,s,t,u] == conj(x[perm[i], perm[j], perm[k],...,perm[s], perm[t], perm[u]])`
+  }];
+
+  let arguments = (ins
+    TF_Tensor:$x,
+    TF_I32OrI64Tensor:$perm
+  );
+
+  let results = (outs
+    TF_Tensor:$y
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+  TF_DerivedOperandTypeAttr Tperm = TF_DerivedOperandTypeAttr<1>;
+}
+
 def TF_Conv2DOp : TF_Op<"Conv2D", [NoSideEffect, TF_LayoutSensitiveInterface]> {
   let summary = [{
 Computes a 2-D convolution given 4-D `input` and `filter` tensors.
@@ -1703,7 +1765,7 @@ of corresponding 3-element vectors is cross-multiplied independently.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
-def TF_CrossReplicaSumOp : TF_Op<"CrossReplicaSum", [AllTypesMatch<["input", "output"]>, NoSideEffect]> {
+def TF_CrossReplicaSumOp : TF_Op<"CrossReplicaSum", [NoSideEffect, TF_AllTypesMatch<["input", "output"]>]> {
   let summary = "An Op to sum inputs across replicated TPU instances.";
 
   let description = [{
@@ -1727,7 +1789,7 @@ and `B, D, F, H` as group 1. Thus we get the outputs:
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
-def TF_CumsumOp : TF_Op<"Cumsum", [AllTypesMatch<["x", "out"]>, NoSideEffect]> {
+def TF_CumsumOp : TF_Op<"Cumsum", [NoSideEffect, TF_AllTypesMatch<["x", "out"]>]> {
   let summary = "Compute the cumulative sum of the tensor `x` along `axis`.";
 
   let description = [{
@@ -3563,6 +3625,31 @@ tf.imag(input) ==> [4.75, 5.75]
   TF_DerivedResultTypeAttr Tout = TF_DerivedResultTypeAttr<0>;
 }
 
+def TF_InplaceUpdateOp : TF_Op<"InplaceUpdate", [NoSideEffect]> {
+  let summary = [{
+    Create a copy of `x` with the updated specified rows 'i' with values 'v'.
+
+  }];
+
+  let description = [{
+    Creates a copy of tensor 'x' and updates the columns specified in tensor 'i'
+    with the values 'v'. Originally this function was mutative however for 
+    compilation we make this operation create / operate on a copy.
+  }];
+
+  let arguments = (ins
+    TF_Tensor:$x,
+    I32Tensor:$i,
+    TF_Tensor:$v
+  );
+
+  let results = (outs
+    TF_Tensor:$y
+  );
+
+  TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
+}
+
 def TF_InvOp : TF_Op<"Inv", [NoSideEffect, SameOperandsAndResultType]> {
   let summary = "Computes the reciprocal of x element-wise.";
 
@@ -4263,7 +4350,7 @@ cublas.
   TF_DerivedOperandTypeAttr T = TF_DerivedOperandTypeAttr<0>;
 }
 
-def TF_MatrixBandPartOp : TF_Op<"MatrixBandPart", [AllTypesMatch<["input", "band"]>, NoSideEffect]> {
+def TF_MatrixBandPartOp : TF_Op<"MatrixBandPart", [NoSideEffect, TF_AllTypesMatch<["input", "band"]>]> {
   let summary = [{
 Copy a tensor setting everything outside a central band in each innermost matrix to zero.
   }];
