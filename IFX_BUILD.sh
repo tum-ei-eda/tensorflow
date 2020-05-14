@@ -176,6 +176,8 @@ then
 
     # Actual payload - installed confiured copy of tflite(u) library and makefiles
     make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
+    # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
+    echo 'TAGS := portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery

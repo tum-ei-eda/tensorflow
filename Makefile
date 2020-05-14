@@ -20,10 +20,12 @@ TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%,$(TESTING
 
 # Note that third-party download libraries are copied into place
 # as they appear in a sub-directory of tools/make
+MICROLITE_CC_SRCS_TO_COPY := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))
 install:  installed_settings $(TEST_SCRIPTS)
 	mkdir -p $(PREFIX)
-	cp --parent $(MICROLITE_CC_SRCS) $(MICROLITE_CC_HDRS)  $(PREFIX)
+	cp --parent $(MICROLITE_CC_SRCS_TO_COPY) $(MICROLITE_CC_HDRS)  $(PREFIX)
 	cp -r --parent tensorflow/lite/micro/testing $(PREFIX)
+	cp -r --parent tensorflow/lite/micro/kernels/portable_optimized $(PREFIX)
 	cd $(PROJECT_DIR) ; cp -r --parent tools/make $(PREFIX)
 
 clear_installation:

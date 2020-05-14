@@ -25,6 +25,12 @@ namespace tflite {
 namespace testing {
 namespace {
 
+MockAllocator *mock_allocator;
+TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
+{
+	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
+}
+
 void TestFullyConnectedFloat(
     const int* input_dims_data, const float* input_data,
     const int* weights_dims_data, const float* weights_data,
@@ -49,6 +55,11 @@ void TestFullyConnectedFloat(
 
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, &context);
+  const size_t buffer_arena_size = 1024;
+  const size_t bytes_alignment = 4;
+  uint8_t buffer_arena[buffer_arena_size];
+  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
+  context.AllocatePersistentBuffer = AllocatePersistentBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
@@ -65,9 +76,9 @@ void TestFullyConnectedFloat(
   if (registration->init) {
     user_data = registration->init(&context, init_data, init_data_size);
   }
-  int inputs_array_data[] = {3, 0, 1, 2};
+  int inputs_array_data[] = {inputs_size, 0, 1, 2};
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
-  int outputs_array_data[] = {1, 3};
+  int outputs_array_data[] = {outputs_size, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
   int temporaries_array_data[] = {0};
   TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
@@ -124,6 +135,11 @@ void TestFullyConnectedQuantized(
 
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, &context);
+  const size_t buffer_arena_size = 1024;
+  const size_t bytes_alignment = 4;
+  uint8_t buffer_arena[buffer_arena_size];
+  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
+  context.AllocatePersistentBuffer = AllocatePersistentBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
