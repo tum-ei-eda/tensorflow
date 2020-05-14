@@ -110,7 +110,7 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 }
 
 //
-// @IFX_PATCH@curedly hack fuly connect kernel for packed 4-bit weights
+// @IFX_PATCH@PoC fully connect kernel for packed 4-bit weights
 // (2 4-bit weights per 8-bit byte, least significant bits hold first weight)
 //
 inline void FullyConnected_2x4in8(
@@ -142,16 +142,21 @@ inline void FullyConnected_2x4in8(
                                        output_shape, output_dim_count - 1);
   const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
 
-    std::cout << "Packed implementation!: ";
+  //std::cout << "Packed implementation!: ";
   for (int b = 0; b < batches; ++b) {
     for (int out_c = 0; out_c < output_depth; ++out_c) {
       int32 acc = 0;
       for (int d = 0; d < accum_depth; d += 2) {
-        const uint8_t *input_val_p = &input_data[b * accum_depth + d];
-        int32 filter_vals = filter_data[out_c * accum_depth + (d>>1)];
-        acc += ((filter_vals&0xf) + filter_offset) * (*input_val_p + input_offset);
-        acc += (((filter_vals>>4)&0xf)  + filter_offset) * (*(input_val_p+1) + input_offset);
-        std::cout << " "<< std::hex << (filter_vals&0xf) << " " << ((filter_vals>>4)&0xf);
+        const uint8_t *input_vals = &input_data[b * accum_depth + d];
+        uint8_t filter_vals = filter_data[out_c * accum_depth + (d>>1)];
+        int32 input_val_0 = input_vals[0] + input_offset;
+        int32 filter_val_0 = (filter_vals&0xf) + filter_offset;
+        acc += filter_val_0 * input_val_0;
+        int32 input_val_1 = input_vals[1] + input_offset;
+        int32 filter_val_1 = ((filter_vals>>4)&0xf) + filter_offset;
+        acc += filter_val_1 * input_val_1;
+        //std::cout << "+" << input_val_0 << "*" << filter_val_0;
+        //std::cout << "+" << input_val_1 << "*" << filter_val_1;
       }
       if (bias_data) {
         acc += bias_data[out_c];
@@ -163,7 +168,7 @@ inline void FullyConnected_2x4in8(
       output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
     }
   }
-  std::cout <<std::endl;
+  //std::cout <<std::endl;
 }
 
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,

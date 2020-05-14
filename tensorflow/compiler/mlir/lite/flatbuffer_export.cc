@@ -632,19 +632,24 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
     auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
     std::vector<uint8_t> packed_data;
     uint8_t mask = 0xf;
+    for( size_t i = 0; i < tensor_data.size(); i+=2)
+    {
+        packed_data.push_back((raw_tensor_data[i] & mask) | ((raw_tensor_data[i+1] & mask)<<4));
+    }
+#if IFX_PATCH_LOGGING
     std::ostringstream msg;
     msg << "Packing ";
     for( size_t i = 0; i < tensor_data.size(); i+=2)
     {
-        msg << std::hex << " " << (uint32_t)raw_tensor_data[i] << " " << (uint32_t)raw_tensor_data[i+1];
-        packed_data.push_back((raw_tensor_data[i] & mask) | ((raw_tensor_data[i+1] & mask)<<4));
+        msg <<  " " << (uint32_t)raw_tensor_data[i] << " " << (uint32_t)raw_tensor_data[i+1];
     }
     msg << " as ";
     for( auto v :  packed_data)
     {
-      msg  << " " << std::hex << (uint32_t)giv;
+      msg  << " " << std::hex << (uint32_t)v;
     }
     inst->emitRemark(msg.str());
+#endif
     buffer_data = builder_.CreateVector(packed_data);
   } else {
     buffer_data = builder_.CreateVector(

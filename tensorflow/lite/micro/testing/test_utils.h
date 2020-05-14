@@ -84,15 +84,14 @@ inline int ZeroPointFromMinMax(const float min, const float max) {
 // and coding bitwidth.   N.b. no support for limited_range, nudging etc.
 inline int ZeroPointFromMinMaxPacked(const float min, const float max, 
                                      const uint32_t num_bits) {
-  int min_code = -(1<<(num_bits-1u));
-  return min_code +
-         static_cast<int>(-min / ScaleFromMinMaxPacked(min, max, num_bits) + 0.5f);
+  return static_cast<int>(-min / ScaleFromMinMaxPacked(min, max, num_bits) + 0.5f);
 }
 
 // Converts a float value into an unsigned eight-bit quantized value.
 inline uint8_t F2Q(const float value, const float min, const float max) {
-  int32_t result = ZeroPointFromMinMax<uint8_t>(min, max) +
-                   (value / ScaleFromMinMax<uint8_t>(min, max)) + 0.5f;
+  float scale = ScaleFromMinMax<uint8_t>(min, max);
+  int zero_point = ZeroPointFromMinMax<uint8_t>(min, max);
+  int32_t result = zero_point + (value / scale) + 0.5f;
   if (result < std::numeric_limits<uint8_t>::min()) {
     result = std::numeric_limits<uint8_t>::min();
   }
@@ -102,13 +101,15 @@ inline uint8_t F2Q(const float value, const float min, const float max) {
   return result;
 }
 
-// Converts a float value into an unsigned eight-bit quantized value.
+//@IFX_PATCH@
+// Derives the quantization scale from a min and max range
+// and coding bitwidth.   N.b. no support for limited_range, nudging etc.
 template<uint32_t NUM_BITS>
 inline uint8_t F2QB(const float value, const float min, const float max) {
   int32_t result = ZeroPointFromMinMaxPacked(min, max, NUM_BITS) +
                    (value / ScaleFromMinMaxPacked(min, max, NUM_BITS)) + 0.5f;
-  const int32_t min_code = -(1<<(NUM_BITS-1u));
-  const int32_t max_code = (1<<(NUM_BITS-1u))-1;
+  const uint32_t min_code = 0;
+  const uint32_t max_code = (1u<<NUM_BITS)-1u;
   if (result < min_code) {
     result = min_code;
   }

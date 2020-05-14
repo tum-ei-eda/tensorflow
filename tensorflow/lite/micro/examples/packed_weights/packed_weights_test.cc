@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 // #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/micro/examples/packed_weights/hello_world_4bit_q.h"
+#include "tensorflow/lite/micro/examples/packed_weights/hello_world_2x4in8.h"
 #include "tensorflow/lite/micro/kernels/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -32,6 +32,8 @@ float output_dquant( uint8_t x)
   return (x-128)*7.812500e-03;
 }
 
+#include "tensorflow/lite/micro/examples/packed_weights/hello_world_2x4in8refdata.h"
+
 TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(LoadModelAndPerformInference) {
@@ -41,7 +43,7 @@ TF_LITE_MICRO_TEST(LoadModelAndPerformInference) {
 
   // Map the model into a usable data structure. This doesn't involve any
   // copying or parsing, it's a very lightweight operation.
-  const tflite::Model* model = ::tflite::GetModel(hello_world_4bit_q);
+  const tflite::Model* model = ::tflite::GetModel(hello_world_2x4in8_data);
   if (model->version() != TFLITE_SCHEMA_VERSION) {
     TF_LITE_REPORT_ERROR(error_reporter,
                          "Model provided is schema version %d not equal "
@@ -85,48 +87,32 @@ TF_LITE_MICRO_TEST(LoadModelAndPerformInference) {
   TF_LITE_MICRO_EXPECT_EQ(1, input->dims->data[1]);
   // The input is a 32 bit floating point value
   TF_LITE_MICRO_EXPECT_EQ(kTfLiteUInt8, input->type);
-
-  // Provide an input value
-  input->data.uint8[0] = input_quant(0.);
-
-  // Run the model on this input and check that it succeeds
-  TfLiteStatus invoke_status = interpreter.Invoke();
-  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
-
-  // Obtain a pointer to the output tensor and make sure it has the
-  // properties we expect. It should be the same as the input tensor.
+  
   TfLiteTensor* output = interpreter.output(0);
   TF_LITE_MICRO_EXPECT_EQ(2, output->dims->size);
   TF_LITE_MICRO_EXPECT_EQ(1, input->dims->data[0]);
   TF_LITE_MICRO_EXPECT_EQ(1, input->dims->data[1]);
   TF_LITE_MICRO_EXPECT_EQ(kTfLiteUInt8, output->type);
 
-  // Obtain the output value from the tensor
-  float value = output_dquant(output->data.uint8[0]);
-  // Check that the output value is within 0.05 of the expected value
-  TF_LITE_MICRO_EXPECT_NEAR(0., value, 0.05);
+  for (int i = 0; i < 4; ++i)
+  {
+    float x = hello_world_model_refdata[i][0];
+    float ref_y = hello_world_model_refdata[i][2];
+    // Provide an input value
+    input->data.uint8[0] = input_quant(x);
 
-  // Run inference on several more values and confirm the expected outputs
-  input->data.f[0] = input_quant(1.);
-  invoke_status = interpreter.Invoke();
-  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
+    // Run the model on this input and check that it succeeds
+    TfLiteStatus invoke_status = interpreter.Invoke();
+    TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
 
-  value = output_dquant(output->data.uint8[0]);
-  TF_LITE_MICRO_EXPECT_NEAR(0.841, value, 0.05);
-
-  input->data.uint8[0] = input_quant(3.);
-  invoke_status = interpreter.Invoke();
-  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
-
-  value = output_dquant(output->data.uint8[0]);
-  TF_LITE_MICRO_EXPECT_NEAR(0.141, value, 0.05);
-
-  input->data.uint8[0] = input_quant(5.);
-  invoke_status = interpreter.Invoke();
-  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
-
-  value = output_dquant(output->data.uint8[0]);
-  TF_LITE_MICRO_EXPECT_NEAR(-0.959, value, 0.05);
+    // Obtain the output value from the tensor
+    float value = output_dquant(output->data.uint8[0]);
+    // Check that the output value is within 0.001 of the expected  value
+    // (produced using from a face-quantized prediction using the original model)
+    
+    TF_LITE_MICRO_EXPECT_NEAR(ref_y, value, 0.05);
+  }
+  
 }
 
 TF_LITE_MICRO_TESTS_END

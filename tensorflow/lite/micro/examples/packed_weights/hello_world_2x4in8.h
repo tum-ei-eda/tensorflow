@@ -6,5 +6,5 @@
 #include <stdint.h>
 #include <stddef.h>
 
-extern const uint8_t hello_world_4bit_q[];
-extern const size_t hello_world_4bit_q_len;
+extern const uint8_t hello_world_2x4in8_data[];
+extern const size_t hello_world_2x4in8_len;

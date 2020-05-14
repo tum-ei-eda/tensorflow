@@ -362,36 +362,38 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8) {
   using tflite::testing::F2Q32;
   using tflite::testing::F2QB;
 
-  const float input_min = -64.0f;
-  const float input_max = 63.5f;
-  const float weights_min = -8.0f;
-  const float weights_max = 7.0f;
-  const float bias_scale = 0.5f*1.0f;
-  const float output_min = -128.0f;
-  const float output_max = 127.0f;
+  const float input_sf = 2.0;
+  const float weights_sf = 32.0;
+  const float input_min = -128.0f / input_sf;
+  const float input_max = 127.0f / input_sf;
+  const float weights_min = -8.0f/weights_sf;
+  const float weights_max = 7.0f/weights_sf;
+  const float bias_scale = 1.0f/(input_sf*weights_sf);
+  const float output_min = -128.0f/32.0;
+  const float output_max = 127.0f/32.0;
 
   const int input_dims_data[] = {1, 1, 8};
   const uint8_t input_data[] = {
       F2Q(1, input_min, input_max), 
-      F2Q(1, input_min, input_max),  
-      F2Q(1, input_min, input_max),  
-      F2Q(1, input_min, input_max), 
-      F2Q(1, input_min, input_max), 
-      F2Q(1, input_min, input_max),  
-      F2Q(1, input_min, input_max),  
-      F2Q(1, input_min, input_max),  
+      F2Q(-2, input_min, input_max),  
+      F2Q(3, input_min, input_max),  
+      F2Q(-4, input_min, input_max), 
+      F2Q(5, input_min, input_max), 
+      F2Q(-6, input_min, input_max),  
+      F2Q(7, input_min, input_max),  
+      F2Q(-8, input_min, input_max),  
 
   };
   const int weights_dims_data[] = {2, 1, 8};
   const uint8_t weights_data[] = {
-      F2QB<4>(1, weights_min, weights_max), 
-      F2QB<4>(2, weights_min, weights_max), 
-      F2QB<4>(3, weights_min, weights_max),
-      F2QB<4>(4, weights_min, weights_max), 
-      F2QB<4>(5, weights_min, weights_max), 
-      F2QB<4>(6, weights_min, weights_max), 
-      F2QB<4>(7, weights_min, weights_max), 
-      F2QB<4>(7, weights_min, weights_max), 
+      F2QB<4>(1/32.0, weights_min, weights_max), 
+      F2QB<4>(2/32.0, weights_min, weights_max), 
+      F2QB<4>(3/32.0, weights_min, weights_max),
+      F2QB<4>(-4/32.0, weights_min, weights_max), 
+      F2QB<4>(5/32.0, weights_min, weights_max), 
+      F2QB<4>(6/32.0, weights_min, weights_max), 
+      F2QB<4>(7/32.0, weights_min, weights_max), 
+      F2QB<4>(7/32.0, weights_min, weights_max), 
   };
 
   auto packed_weights = tflite::testing::Pack_2x4bit(weights_data, 1u*8u);
@@ -402,7 +404,7 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8) {
       F2Q32(0, bias_scale),
   };
   const uint8_t expected_output_data[] = {
-      F2Q(36-1, output_min, output_max), 
+      F2Q((1*1+-2*2+3*3+-4*-4+5*5+-6*6+7*7+-8*7)/32.0, output_min, output_max), 
 
   };
   const int output_dims_data[] = {2, 1, 1};
