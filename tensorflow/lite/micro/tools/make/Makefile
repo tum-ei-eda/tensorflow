@@ -108,8 +108,8 @@ else ifeq ($(BUILD_TYPE), release)
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
     BUILD_SUFFIX := _release
 else
-	CXXFLAGS += -O3
-	CCFLAGS  += -O3
+	CXXFLAGS += -DNDEBUG -O3
+	CCFLAGS  += -DNDEBUG -O3
     BUILD_SUFFIX := 
 endif
 
