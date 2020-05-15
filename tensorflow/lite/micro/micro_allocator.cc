@@ -332,9 +332,11 @@ TfLiteStatus InitializeRuntimeTensor(
         static_cast<int32_t>(src_quantization->zero_point()->Get(0));
 
 
-    // @IFX_PATCH@ PoC hack  abuse min/max to carry packing information
+    // @IFX_PATCH@ GROSS PoC hack  abuse min/max to carry packing information
     result->params.bits_per_item = 0;
-    if( src_quantization->min() && src_quantization->min()->size()> 0 ) {
+    if( src_quantization->min() && src_quantization->min()->size()> 0 &&
+        src_quantization->max() && src_quantization->max()->size() == 1 &&
+        src_quantization->min()->Get(0) == 4 && src_quantization->max()->Get(0) == 8) {
       float hack_bpi = src_quantization->min()->Get(0);
         if(hack_bpi < 0.0 || hack_bpi > 8.0) {      
           TF_LITE_REPORT_ERROR(error_reporter,
