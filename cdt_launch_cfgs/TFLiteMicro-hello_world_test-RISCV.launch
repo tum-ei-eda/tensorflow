@@ -26,7 +26,7 @@
 <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_START_MODE" value="remote"/>
 <booleanAttribute key="org.eclipse.cdt.launch.DEBUGGER_STOP_AT_MAIN" value="true"/>
 <stringAttribute key="org.eclipse.cdt.launch.DEBUGGER_STOP_AT_MAIN_SYMBOL" value="main"/>
-<stringAttribute key="org.eclipse.cdt.launch.PROGRAM_NAME" value="${workspace_loc:tfref}\tensorflow\lite\micro\gen\ifx_riscv32_mcu_rv32imac_debug\bin\kernel_fully_connected_test"/>
+<stringAttribute key="org.eclipse.cdt.launch.PROGRAM_NAME" value="${workspace_loc:tfref}\tensorflow\lite\micro\gen\ifx_riscv32_mcu_rv32imac_debug\bin\hello_world_test"/>
 <stringAttribute key="org.eclipse.cdt.launch.PROJECT_ATTR" value="tfref"/>
 <booleanAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_AUTO_ATTR" value="false"/>
 <stringAttribute key="org.eclipse.cdt.launch.PROJECT_BUILD_CONFIG_ID_ATTR" value=""/>

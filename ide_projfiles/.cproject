@@ -14,7 +14,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506" name="Default" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock,org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506" name="Default" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.1259550790" name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.280867505" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.166268888" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
@@ -61,7 +61,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="IFX semi-hosted RV ILP2" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532" name="ifx_riscv" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="IFX semi-hosted RV ILP32" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532" name="ifx_riscv" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.2019898255" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.54387863" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
@@ -93,7 +93,7 @@
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614" moduleId="org.eclipse.cdt.core.settings" name="ifx_riscv (DEBUG)">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614" moduleId="org.eclipse.cdt.core.settings" name="ifx_riscv - DEBUG">
 				<macros>
 					<stringMacro name="TARGET" type="VALUE_TEXT" value="TARGET=ifx_riscv32_mcu"/>
 					<stringMacro name="BUILD" type="VALUE_TEXT" value="BUILD_TYPE=debug"/>
@@ -109,7 +109,7 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="ifx_risc (IFX semi-hosted RV ILP32, debug)" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614" name="ifx_riscv (DEBUG)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="IFX semi-hosted RV ILP32" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614" name="ifx_riscv - DEBUG" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.1053384153" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.1238457984" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
@@ -206,7 +206,7 @@
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1578665674." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.1986700879" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.169466456" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
-							<builder arguments="TARGET=${TARGET}" command="make" id="cdt.managedbuild.target.gnu.builder.base.19027797" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<builder arguments="${TARGET}" command="make" id="cdt.managedbuild.target.gnu.builder.base.19027797" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.2037360909" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.2014372004" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.591104797" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
@@ -234,7 +234,7 @@
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642" moduleId="org.eclipse.cdt.core.settings" name="host (DEBUG)">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642" moduleId="org.eclipse.cdt.core.settings" name="host - DEBUG">
 				<macros>
 					<stringMacro name="BUILD" type="VALUE_TEXT" value="BUILD_TYPE=debug"/>
 				</macros>
@@ -249,11 +249,11 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642" name="host (DEBUG)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642" name="host - DEBUG" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.1229464125" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.553160571" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
-							<builder arguments="${TARGET} ${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1765485092" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<builder arguments="${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1765485092" incrementalBuildTarget="" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.261729890" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.1191791561" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1997313725" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
@@ -281,7 +281,7 @@
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498" moduleId="org.eclipse.cdt.core.settings" name="host_portable_optimized (DEBUG)">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498" moduleId="org.eclipse.cdt.core.settings" name="host - PORTABLE_OPTIMIZED - DEBUG">
 				<macros>
 					<stringMacro name="TAGS" type="VALUE_TEXT" value="TAGS=portable_optimized"/>
 					<stringMacro name="BUILD" type="VALUE_TEXT" value="BUILD_TYPE=debug"/>
@@ -297,11 +297,11 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498" name="host_portable_optimized (DEBUG)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498" name="host - PORTABLE_OPTIMIZED - DEBUG" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.2128142911" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.294536819" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
-							<builder arguments="${TAGS} ${TARGET} ${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.409160112" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<builder arguments="${TAGS} ${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.409160112" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.131662943" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.999824163" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.923604835" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
@@ -329,7 +329,7 @@
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621" moduleId="org.eclipse.cdt.core.settings" name="Ifx_riscv_portable_optimized (DEBUG)">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621" moduleId="org.eclipse.cdt.core.settings" name="Ifx_riscv - PORTABLE_OPTIMIZED - DEBUG">
 				<macros>
 					<stringMacro name="TARGET" type="VALUE_TEXT" value="TARGET=ifx_riscv32_mcu"/>
 					<stringMacro name="TAGS" type="VALUE_TEXT" value="TAGS=portable_optimized"/>
@@ -346,11 +346,11 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621" name="Ifx_riscv_portable_optimized (DEBUG)" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="IFX semi-hosted RV ILP32" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621" name="Ifx_riscv - PORTABLE_OPTIMIZED - DEBUG" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.589442614.2004884621." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.149672390" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.1595568827" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
-							<builder arguments="${TAGS} ${TARGET} ${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1908214400" incrementalBuildTarget="test" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<builder arguments="${TARGET} ${TAGS} ${BUILD}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1908214400" incrementalBuildTarget="test" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.800405647" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.100252736" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.933497777" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
@@ -379,7 +379,7 @@
 			<storageModule moduleId="ilg.gnuarmeclipse.managedbuild.packs"/>
 		</cconfiguration>
 		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196">
-			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196" moduleId="org.eclipse.cdt.core.settings" name="Ifx_riscv_portable_optimized">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196" moduleId="org.eclipse.cdt.core.settings" name="Ifx_riscv - PORTABLE_OPTIMIZED">
 				<macros>
 					<stringMacro name="TARGET" type="VALUE_TEXT" value="TARGET=ifx_riscv32_mcu"/>
 					<stringMacro name="PLATFORM_OPT_FLAGS" type="VALUE_TEXT" value="PLATFORM_OPT_FLAGS=-funroll-loops"/>
@@ -396,11 +396,11 @@
 				</extensions>
 			</storageModule>
 			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
-				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196" name="Ifx_riscv_portable_optimized" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="org.eclipse.cdt.build.core.emptycfg">
+				<configuration artifactName="${ProjName}" buildProperties="" description="IFX semi-hosted RV ILP32" id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196" name="Ifx_riscv - PORTABLE_OPTIMIZED" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=" parent="org.eclipse.cdt.build.core.emptycfg">
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.434546532.1145928196." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.base.1818507931" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.36042701" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
-							<builder arguments="${TAGS} ${TARGET} ${PLATFORM_OPT_FLAGS}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1008002508" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<builder arguments="${TARGET} ${TAGS} ${PLATFORM_OPT_FLAGS}" command="make" id="cdt.managedbuild.target.gnu.builder.base.1008002508" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.archiver.base.187662522" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
 							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.470943604" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.272938468" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
@@ -427,27 +427,115 @@
 			</storageModule>
 			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
 		</cconfiguration>
+		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1216712723">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1216712723" moduleId="org.eclipse.cdt.core.settings" name="host">
+				<externalSettings/>
+				<extensions>
+					<extension id="org.eclipse.cdt.core.GNU_ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1216712723" name="host" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1216712723." name="/" resourcePath="">
+						<toolChain id="cdt.managedbuild.toolchain.gnu.base.362409875" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.98471002" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
+							<builder arguments="" command="make" id="cdt.managedbuild.target.gnu.builder.base.414664566" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.archiver.base.1943111330" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.1324518028" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.995424719" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.c.compiler.base.1632004072" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1095123884" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.c.linker.base.750884744" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.linker.base.614346268" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.base">
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.700963902" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.assembler.base.1884097029" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1657051589" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+							</tool>
+						</toolChain>
+					</folderInfo>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+		</cconfiguration>
+		<cconfiguration id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498.238782099">
+			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498.238782099" moduleId="org.eclipse.cdt.core.settings" name="host - PORTABLE_OPTIMIZED">
+				<macros>
+					<stringMacro name="TAGS" type="VALUE_TEXT" value="TAGS=portable_optimized"/>
+					<stringMacro name="PLATFORM_OPT_FLAGS" type="VALUE_TEXT" value="PLATFORM_OPT_FLAGS=-funroll-loops"/>
+				</macros>
+				<externalSettings/>
+				<extensions>
+					<extension id="org.eclipse.cdt.core.GNU_ELF" point="org.eclipse.cdt.core.BinaryParser"/>
+					<extension id="org.eclipse.cdt.core.GASErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GmakeErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GLDErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.CWDLocator" point="org.eclipse.cdt.core.ErrorParser"/>
+					<extension id="org.eclipse.cdt.core.GCCErrorParser" point="org.eclipse.cdt.core.ErrorParser"/>
+				</extensions>
+			</storageModule>
+			<storageModule moduleId="cdtBuildSystem" version="4.0.0">
+				<configuration artifactName="${ProjName}" buildProperties="" description="" id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498.238782099" name="host - PORTABLE_OPTIMIZED" optionalBuildProperties="org.eclipse.cdt.docker.launcher.containerbuild.property.selectedvolumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.volumes=,org.eclipse.cdt.docker.launcher.containerbuild.property.connection=unix:///var/run/docker.sock" parent="org.eclipse.cdt.build.core.emptycfg">
+					<folderInfo id="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.1396554498.238782099." name="/" resourcePath="">
+						<toolChain id="cdt.managedbuild.toolchain.gnu.base.222055845" name="Linux GCC" superClass="cdt.managedbuild.toolchain.gnu.base">
+							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.GNU_ELF" id="cdt.managedbuild.target.gnu.platform.base.1206883248" name="Debug Platform" osList="linux,hpux,aix,qnx" superClass="cdt.managedbuild.target.gnu.platform.base"/>
+							<builder arguments="${TAGS} ${PLATFORM_OPT_FLAGS}" command="make" id="cdt.managedbuild.target.gnu.builder.base.203414328" incrementalBuildTarget="microlite" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="8" superClass="cdt.managedbuild.target.gnu.builder.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.archiver.base.258163022" name="GCC Archiver" superClass="cdt.managedbuild.tool.gnu.archiver.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.compiler.base.1576846346" name="GCC C++ Compiler" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1727812395" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.c.compiler.base.1004610328" name="GCC C Compiler" superClass="cdt.managedbuild.tool.gnu.c.compiler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.728091876" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.c.linker.base.63801611" name="GCC C Linker" superClass="cdt.managedbuild.tool.gnu.c.linker.base"/>
+							<tool id="cdt.managedbuild.tool.gnu.cpp.linker.base.913284211" name="GCC C++ Linker" superClass="cdt.managedbuild.tool.gnu.cpp.linker.base">
+								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.1597772936" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
+									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
+									<additionalInput kind="additionalinput" paths="$(LIBS)"/>
+								</inputType>
+							</tool>
+							<tool id="cdt.managedbuild.tool.gnu.assembler.base.1537816548" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.base">
+								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1751858334" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
+							</tool>
+						</toolChain>
+					</folderInfo>
+					<sourceEntries>
+						<entry flags="VALUE_WORKSPACE_PATH|RESOLVED" kind="sourcePath" name=""/>
+					</sourceEntries>
+				</configuration>
+			</storageModule>
+			<storageModule moduleId="org.eclipse.cdt.core.externalSettings"/>
+		</cconfiguration>
 	</storageModule>
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="tfref.null.1140014494" name="tfref"/>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
-		<configuration configurationName="toco">
-			<resource resourceType="PROJECT" workspacePath="/tfref"/>
-		</configuration>
 		<configuration configurationName="ifx_riscv"/>
 		<configuration configurationName="ifx_riscv_ovp">
 			<resource resourceType="PROJECT" workspacePath="/tfref"/>
 		</configuration>
-		<configuration configurationName="Ifx_riscv_portable_optimized (DEBUG)"/>
+		<configuration configurationName="Ifx_riscv - PORTABLE_OPTIMIZED"/>
 		<configuration configurationName="ifx_riscv (DEBUG)">
 			<resource resourceType="PROJECT" workspacePath="/tfref"/>
 		</configuration>
-		<configuration configurationName="Ifx_riscv_portable_optimized">
-			<resource resourceType="PROJECT" workspacePath="/tfref"/>
-		</configuration>
-		<configuration configurationName="ifx_sh_rv"/>
+		<configuration configurationName="host - DEBUG"/>
+		<configuration configurationName="ifx_riscv - DEBUG"/>
+		<configuration configurationName="Ifx_riscv - PORTABLE_OPTIMIZED - DEBUG"/>
 		<configuration configurationName="Default">
 			<resource resourceType="PROJECT" workspacePath="/tfref"/>
 		</configuration>
@@ -456,26 +544,22 @@
 		<configuration configurationName="host DEBUG">
 			<resource resourceType="PROJECT" workspacePath="/tfref"/>
 		</configuration>
+		<configuration configurationName="toco">
+			<resource resourceType="PROJECT" workspacePath="/tfref"/>
+		</configuration>
+		<configuration configurationName="Ifx_riscv_portable_optimized (DEBUG)"/>
+		<configuration configurationName="Ifx_riscv_portable_optimized">
+			<resource resourceType="PROJECT" workspacePath="/tfref"/>
+		</configuration>
+		<configuration configurationName="host - PORTABLE_OPTIMIZED - DEBUG"/>
+		<configuration configurationName="host"/>
+		<configuration configurationName="host - PORTABLE_OPTIMIZED"/>
+		<configuration configurationName="ifx_sh_rv"/>
 		<configuration configurationName="host optimized (DEBUG)">
 			<resource resourceType="PROJECT" workspacePath="/tfref"/>
 		</configuration>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
-	<storageModule moduleId="scannerConfiguration">
-		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.530740838;cdt.managedbuild.toolchain.gnu.base.2080528506.530740838.;cdt.managedbuild.tool.gnu.cpp.compiler.base.263692538;cdt.managedbuild.tool.gnu.cpp.compiler.input.1197946075">
-			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506;cdt.managedbuild.toolchain.gnu.base.2080528506.1259550790;cdt.managedbuild.tool.gnu.c.compiler.base.463680903;cdt.managedbuild.tool.gnu.c.compiler.input.1353637574">
-			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506;cdt.managedbuild.toolchain.gnu.base.2080528506.1259550790;cdt.managedbuild.tool.gnu.cpp.compiler.base.1899226921;cdt.managedbuild.tool.gnu.cpp.compiler.input.833536740">
-			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		</scannerConfigBuildInfo>
-		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.530740838;cdt.managedbuild.toolchain.gnu.base.2080528506.530740838.;cdt.managedbuild.tool.gnu.c.compiler.base.410698204;cdt.managedbuild.tool.gnu.c.compiler.input.1976867951">
-			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-		</scannerConfigBuildInfo>
-	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
 		<buildTargets>
 			<target name="test (nopar)" path="" targetID="org.eclipse.cdt.build.MakeTargetBuilder">
@@ -582,5 +666,26 @@
 				<runAllBuilders>true</runAllBuilders>
 			</target>
 		</buildTargets>
+	</storageModule>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642;cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.;cdt.managedbuild.tool.gnu.cpp.compiler.base.1191791561;cdt.managedbuild.tool.gnu.cpp.compiler.input.1997313725">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506;cdt.managedbuild.toolchain.gnu.base.2080528506.1259550790;cdt.managedbuild.tool.gnu.c.compiler.base.463680903;cdt.managedbuild.tool.gnu.c.compiler.input.1353637574">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.530740838;cdt.managedbuild.toolchain.gnu.base.2080528506.530740838.;cdt.managedbuild.tool.gnu.c.compiler.base.410698204;cdt.managedbuild.tool.gnu.c.compiler.input.1976867951">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642;cdt.managedbuild.toolchain.gnu.base.2080528506.1594580642.;cdt.managedbuild.tool.gnu.c.compiler.base.576776189;cdt.managedbuild.tool.gnu.c.compiler.input.1167359903">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506.530740838;cdt.managedbuild.toolchain.gnu.base.2080528506.530740838.;cdt.managedbuild.tool.gnu.cpp.compiler.base.263692538;cdt.managedbuild.tool.gnu.cpp.compiler.input.1197946075">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.base.2080528506;cdt.managedbuild.toolchain.gnu.base.2080528506.1259550790;cdt.managedbuild.tool.gnu.cpp.compiler.base.1899226921;cdt.managedbuild.tool.gnu.cpp.compiler.input.833536740">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
 	</storageModule>
 </cproject>
