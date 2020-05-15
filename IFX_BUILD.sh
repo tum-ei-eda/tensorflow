@@ -79,17 +79,28 @@ then
 fi
 
 BAZEL_CMDLINE_OPTIONS=( )
-BAZEL_OPTIONS=(
-  "${BAZEL_DISTDIR_OPTIONS[@]}"
-  "${BAZEL_REPO_OVERRIDES[@]}"
-  --verbose_failures --local_cpu_resources="$LOCALJOBS" "${VERBOSE[@]}"
-  "${BAZEL_REMOTE_OPTIONS[@]}"
-  "${BAZEL_CXX_BUILD_SETTINGS[@]}"
-  --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON 
-  --verbose_failures=yes
-)
 
-
+if [ -n "$MINGW64_HOST" ] 
+then
+  BAZEL_OPTIONS=(
+      "${BAZEL_DISTDIR_OPTIONS[@]}"
+      "${BAZEL_REPO_OVERRIDES[@]}"
+      --verbose_failures --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
+      "${BAZEL_REMOTE_OPTIONS[@]}"
+      --config=dbg --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+      --verbose_failures=yes
+  )
+else
+  BAZEL_OPTIONS=(
+        "${BAZEL_DISTDIR_OPTIONS[@]}"
+      "${BAZEL_REPO_OVERRIDES[@]}"
+      --verbose_failures --local_cpu_resources="$LOCALJOBS" --config=monolithic "${VERBOSE[@]}"
+      "${BAZEL_REMOTE_OPTIONS[@]}"
+      --config=dbg
+      --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+      --strip=never --fission=yes --verbose_failures=yes
+  )
+fi
 # Build a statically linked toco command-line translator
 # and TF-lite(micro) libraries
 
@@ -138,7 +149,7 @@ then
   export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'from distutils.sysconfig import get_python_lib;print(get_python_lib())')"
   ./configure
 
-  rm .bazelrc.user
+  rm -f .bazelrc.user
   echo configured bazel build: "${BAZEL_OPTIONS[@]}"
   for o in "${BAZEL_OPTIONS[@]}"
   do
@@ -184,12 +195,14 @@ then
     make -j 4 test_executables
     echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
     echo make -j 4 BUILD_TYPE=debug test_executables
     make -j 4 BUILD_TYPE=debug microlite
 
     # Actual payload - installed confiured copy of tflite(u) library and makefiles
     make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
+    # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
+    echo 'TAGS := portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery
