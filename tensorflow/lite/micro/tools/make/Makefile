@@ -368,7 +368,7 @@ test: $(MICROLITE_TEST_TARGETS)
 # Just build the test targets
 build: $(MICROLITE_BUILD_TARGETS)
 
-ifdef ($(TFLITE_U_PATH),)
+ifndef TFLITE_U_PATH
 generate_projects: $(ALL_PROJECT_TARGETS)
 
 generate_non_kernel_projects: $(filter-out generate_kernel%,$(ALL_PROJECT_TARGETS))
