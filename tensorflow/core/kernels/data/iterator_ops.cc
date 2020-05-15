@@ -17,6 +17,7 @@ limitations under the License.
 #include <memory>
 
 #include "absl/memory/memory.h"
+#include "tensorflow/core/common_runtime/graph_constructor.h"
 #include "tensorflow/core/common_runtime/graph_runner.h"
 #include "tensorflow/core/common_runtime/input_colocation_exemption_registry.h"
 #include "tensorflow/core/common_runtime/metrics.h"
@@ -31,7 +32,6 @@ limitations under the License.
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/framework/variant_op_registry.h"
 #include "tensorflow/core/framework/variant_tensor_data.h"
-#include "tensorflow/core/graph/graph_constructor.h"
 #include "tensorflow/core/kernels/data/captured_function.h"
 #include "tensorflow/core/kernels/data/dataset_utils.h"
 #include "tensorflow/core/kernels/data/optional_ops.h"
@@ -394,7 +394,8 @@ IteratorHandleOp::~IteratorHandleOp() {
   }
 }
 
-void IteratorHandleOp::Compute(OpKernelContext* context) LOCKS_EXCLUDED(mu_) {
+void IteratorHandleOp::Compute(OpKernelContext* context)
+    TF_LOCKS_EXCLUDED(mu_) {
   {
     mutex_lock l(mu_);
     if (resource_ == nullptr) {
@@ -422,7 +423,7 @@ void IteratorHandleOp::Compute(OpKernelContext* context) LOCKS_EXCLUDED(mu_) {
           mgr->LookupOrCreate<IteratorResource>(
               cinfo_.container(), cinfo_.name(), &resource,
               [context, flr, &device_mgr, &flib_def, &pflr,
-               this](IteratorResource** ret) EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+               this](IteratorResource** ret) TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
                 *ret = new IteratorResource(
                     context->env(), output_dtypes_, output_shapes_,
                     graph_def_version_, std::move(device_mgr),
@@ -532,14 +533,14 @@ Status MakeIteratorOp::DoCompute(OpKernelContext* ctx) {
   return iterator_resource->SetIteratorFromDataset(ctx, dataset);
 }
 
-void DeleteIteratorOp::Compute(OpKernelContext* ctx) {
+Status DeleteIteratorOp::DoCompute(OpKernelContext* ctx) {
   tensorflow::ResourceTagger tag(kTFDataResourceTag,
                                  ctx->op_kernel().type_string());
-  ResourceHandle handle = ctx->input(0).flat<ResourceHandle>()(0);
+  const ResourceHandle& handle = ctx->input(0).flat<ResourceHandle>()(0);
   // The iterator resource is guaranteed to exist because the variant tensor
   // wrapping the deleter is provided as an unused input to this op, which
   // guarantees that it has not run yet.
-  OP_REQUIRES_OK(ctx, ctx->resource_manager()->Delete(handle));
+  return ctx->resource_manager()->Delete(handle);
 }
 
 namespace {
@@ -601,7 +602,7 @@ class ReduceDatasetOp : public HybridAsyncOpKernel {
     FunctionMetadata::Params params;
     OP_REQUIRES_OK(ctx, ctx->GetAttr("use_inter_op_parallelism",
                                      &params.use_inter_op_parallelism));
-    params.is_multi_device_function = true;
+    params.use_default_device = false;
     OP_REQUIRES_OK(ctx,
                    FunctionMetadata::Create(ctx, "f", params, &func_metadata_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr(kOutputTypes, &output_types_));
@@ -807,7 +808,7 @@ class OneShotIteratorOp : public AsyncOpKernel {
         ctx->resource_manager()->LookupOrCreate<IteratorResource>(
             cinfo->container(), cinfo->name(), iterator,
             [ctx, flr, this, &flib_def, &pflr](IteratorResource** ret)
-                EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+                TF_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
                   *ret = new IteratorResource(
                       ctx->env(), output_dtypes_, output_shapes_,
                       graph_def_version_, nullptr, std::move(flib_def),
@@ -835,16 +836,10 @@ class OneShotIteratorOp : public AsyncOpKernel {
     });
     opts.step_container = &step_container;
     opts.runner = ctx->runner();
-    Notification n;
-    Status factory_status;
+    opts.run_all_kernels_inline = ctx->run_all_kernels_inline();
     std::vector<Tensor> return_values;
-    ctx->function_library()->Run(opts, f_handle, {}, &return_values,
-                                 [&n, &factory_status](Status s) {
-                                   factory_status.Update(s);
-                                   n.Notify();
-                                 });
-    n.WaitForNotification();
-    TF_RETURN_IF_ERROR(factory_status);
+    TF_RETURN_IF_ERROR(ctx->function_library()->RunSync(
+        std::move(opts), f_handle, {}, &return_values));
     if (return_values.size() != 1 || return_values[0].dtype() != DT_VARIANT ||
         !TensorShapeUtils::IsScalar(return_values[0].shape())) {
       return errors::InvalidArgument(
@@ -886,22 +881,19 @@ class OneShotIteratorOp : public AsyncOpKernel {
   BackgroundWorker background_worker_;
 
   mutex mu_;
-  ContainerInfo cinfo_ GUARDED_BY(mu_);
-  IteratorResource* iterator_resource_ GUARDED_BY(mu_) = nullptr;
+  ContainerInfo cinfo_ TF_GUARDED_BY(mu_);
+  IteratorResource* iterator_resource_ TF_GUARDED_BY(mu_) = nullptr;
 
-  bool initialization_started_ GUARDED_BY(mu_) = false;
-  Status initialization_status_ GUARDED_BY(mu_);
+  bool initialization_started_ TF_GUARDED_BY(mu_) = false;
+  Status initialization_status_ TF_GUARDED_BY(mu_);
   std::vector<std::pair<OpKernelContext*, DoneCallback>> done_callbacks_
-      GUARDED_BY(mu_);
+      TF_GUARDED_BY(mu_);
   const int graph_def_version_;
 };
 
 }  // namespace
 
 AsyncOpKernel* IteratorGetNextOp::AsAsync() {
-  return type_string() == "IteratorGetNextSync" ? nullptr : this;
-}
-const AsyncOpKernel* IteratorGetNextOp::AsAsync() const {
   return type_string() == "IteratorGetNextSync" ? nullptr : this;
 }
 
@@ -933,6 +925,13 @@ Status IteratorGetNextOp::DoCompute(OpKernelContext* ctx) {
 }
 
 Status IteratorGetNextAsOptionalOp::DoCompute(OpKernelContext* ctx) {
+  profiler::TraceMe traceme(
+      [&] {
+        return strings::StrCat(
+            "IteratorGetNextAsOptionalOp::DoCompute#id=", ctx->step_id(),
+            ",iter_num=", ctx->frame_iter().iter_id, "#");
+      },
+      profiler::kInfo);
   tensorflow::ResourceTagger tag(kTFDataResourceTag,
                                  ctx->op_kernel().type_string());
   IteratorResource* iterator;
@@ -1103,9 +1102,8 @@ REGISTER_KERNEL_BUILDER(
     MakeIteratorOp);
 REGISTER_KERNEL_BUILDER(Name("DeleteIterator").Device(DEVICE_CPU).Priority(2),
                         DeleteIteratorOp);
-REGISTER_KERNEL_BUILDER(
-    Name("DeleteIterator").Device(DEVICE_GPU).HostMemory("deleter").Priority(1),
-    DeleteIteratorOp);
+REGISTER_KERNEL_BUILDER(Name("DeleteIterator").Device(DEVICE_GPU).Priority(1),
+                        DeleteIteratorOp);
 REGISTER_KERNEL_BUILDER(
     Name("AnonymousIterator").Device(DEVICE_CPU).Priority(2),
     AnonymousIteratorHandleOp);
@@ -1117,7 +1115,6 @@ REGISTER_KERNEL_BUILDER(
     AnonymousIteratorHandleOp);
 REGISTER_KERNEL_BUILDER(Name("AnonymousIteratorV2")
                             .Device(DEVICE_GPU)
-                            .HostMemory("deleter")
                             .Priority(1),
                         AnonymousIteratorHandleOp);
 REGISTER_KERNEL_BUILDER(Name("DatasetToSingleElement").Device(DEVICE_CPU),

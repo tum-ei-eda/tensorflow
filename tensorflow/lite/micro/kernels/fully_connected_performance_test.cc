@@ -113,7 +113,7 @@ void TestFullyConnectedQuantized(const int number_of_invocations,
   };
 
   TfLiteContext context;
-  PopulateContext(tensors, tensors_size, &context);
+  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
   const size_t buffer_arena_size = 1024;
   const size_t bytes_alignment = 4;
   uint8_t buffer_arena[buffer_arena_size];

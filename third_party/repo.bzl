@@ -153,6 +153,22 @@ tf_http_archive = repository_rule(
     implementation = _tf_http_archive,
 )
 
+def _tf_local_repo(ctx):
+    #_ = ctx.delete(ctx.path(ctx.attr.path))
+    ctx.symlink(ctx.attr.path, "")
+    if ctx.attr.additional_build_files:
+        for internal_src, external_dest in ctx.attr.additional_build_files.items():
+            _ = ctx.delete(ctx.path(external_dest))
+            ctx.symlink(Label(internal_src), ctx.path(external_dest))
+
+tf_local_repo = repository_rule(
+    attrs = {
+        "path": attr.string(),
+        "additional_build_files": attr.string_dict(),
+    },
+    implementation = _tf_local_repo,
+)
+
 """Downloads and creates Bazel repos for dependencies.
 
 This is a swappable replacement for both http_archive() and

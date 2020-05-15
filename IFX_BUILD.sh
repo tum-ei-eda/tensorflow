@@ -1,13 +1,21 @@
 #!/bin/bash
 set -e
 source ../SETTINGS_AND_VERSIONS.sh
+	
+BAZEL_CXX_BUILD_SETTINGS=(
+		--config=monolithic
+		--config=opt
+)
+TARGET_ARCH=native
 
 LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_toco]"
+        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
+	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
+	echo "  [--verbose]" 1>&2
         exit 1
         ;;
     "--no-config")
@@ -19,18 +27,35 @@ do
     "--no-tflite")
         NOTFLITE=1
         ;;
+    "--fast")
+	BAZEL_CXX_BUILD_SETTINGS=(
+                  --copt=-O1 --cxxopt=-O1 --strip=never
+	)
+	;;
+    "--debug")
+	BAZEL_CXX_BUILD_SETTINGS=(
+                --config=dbg
+                --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 
+                --strip=never --fission=yes 
+	)
+	;;
     "--jobs")
         LOCALJOBS="$2"
         shift
         ;;
     "--remote")
         BAZEL_REMOTE_OPTIONS=(
-           --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://localhost:8980
+           --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://pistol:8980
         )
+	TARGET_ARCH=sandybridge
         ;;
     "--override-llvm")
-	BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f ../..)/llvm-project )
-	;;
+	    BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f "$2")  )
+      shift
+	    ;;
+    "--no-override-llvm")
+	    BAZEL_REPO_OVERRIDES=(  )
+	    ;;
     "--verbose")
         VERBOSE=( --subcommands=true )
         ;;
@@ -111,7 +136,7 @@ then
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_COMPUTECPP=0
     export GCC_HOST_COMPILER_PATH=$(which gcc)
-    export CC_OPT_FLAGS="-march=native -Wno-sign-compare"
+    export CC_OPT_FLAGS="-march=${TARGET_ARCH} -Wno-sign-compare"
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_KAFKA=0
     export TF_NEED_TENSORRT=0 

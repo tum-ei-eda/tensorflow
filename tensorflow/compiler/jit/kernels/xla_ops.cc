@@ -172,8 +172,9 @@ class XlaExecutableClosureStore {
 
  private:
   mutex mutex_;
-  int64 key_counter_ GUARDED_BY(mutex_);
-  absl::flat_hash_map<KeyT, XlaExecutableClosure> closures_ GUARDED_BY(mutex_);
+  int64 key_counter_ TF_GUARDED_BY(mutex_);
+  absl::flat_hash_map<KeyT, XlaExecutableClosure> closures_
+      TF_GUARDED_BY(mutex_);
 
   TF_DISALLOW_COPY_AND_ASSIGN(XlaExecutableClosureStore);
 };
@@ -357,13 +358,6 @@ void XlaLocalLaunchBase::Compute(OpKernelContext* ctx) {
         ctx, function_, /*has_ref_vars=*/has_ref_vars_, platform_info_,
         resources_, constants_, /*lazy=*/false, &client, &variables, &kernel,
         &executable);
-    if (!s.ok() && (platform_info_.device_type().type_string() == DEVICE_CPU ||
-                    platform_info_.device_type().type_string() == DEVICE_GPU)) {
-      // Suggest auto jit if the failure was with GPU or CPU.
-      errors::AppendToMessage(&s,
-                              xla::status_macros::kPossibleAutoJitAlternative);
-    }
-
     OP_REQUIRES_OK(ctx, s);
   }
 

@@ -64,6 +64,12 @@ class ParallelMapFunctor {
   // to specify error checking logic that can fail early.
   virtual Status InitFunc(IteratorContext* ctx) { return Status::OK(); }
 
+  // Indicates whether the functor depends on any external state.
+  // If so, the method returns `errors::FailedPrecondition` with
+  // a message that identifies the external state. Otherwise, the method returns
+  // `Status::OK()`.
+  virtual Status CheckExternalState() = 0;
+
   // A function that transforms elements of one dataset into another
   // asynchronously. The arguments are:
   // 1. An `IteratorContext*` for the context in which the function should
@@ -71,7 +77,8 @@ class ParallelMapFunctor {
   // 2. A `std::vector<Tensor>` containing the input element.
   // 3. A `std::vector<Tensor>*` to which the function will write the result.
   // 4. A `StatusCallback` that should be invoked when the function is complete.
-  virtual void MapFunc(IteratorContext* ctx, const string& prefix,
+  virtual void MapFunc(IteratorContext* ctx,
+                       const std::shared_ptr<model::Node>& node,
                        std::vector<Tensor> input, std::vector<Tensor>* output,
                        StatusCallback callback) = 0;
 };

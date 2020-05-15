@@ -49,7 +49,7 @@ void TestPackTwoInputsFloat(std::initializer_list<int> input1_dims_data,
   }
 
   TfLiteContext context;
-  PopulateContext(tensors, tensors_size, &context);
+  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
   tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
       resolver.FindOp(tflite::BuiltinOperator_PACK, /* version= */ 1);
@@ -129,7 +129,7 @@ void TestPackThreeInputsFloat(std::initializer_list<int> input1_dims_data,
   }
 
   TfLiteContext context;
-  PopulateContext(tensors, tensors_size, &context);
+  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
 
   tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
@@ -207,7 +207,7 @@ void TestPackTwoInputsQuantized(
   }
 
   TfLiteContext context;
-  PopulateContext(tensors, tensors_size, &context);
+  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
   tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
       resolver.FindOp(tflite::BuiltinOperator_PACK, /* version= */ 1);
@@ -280,7 +280,7 @@ void TestPackTwoInputsQuantized32(
   }
 
   TfLiteContext context;
-  PopulateContext(tensors, tensors_size, &context);
+  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
   tflite::ops::micro::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
       resolver.FindOp(tflite::BuiltinOperator_PACK, /* version= */ 1);

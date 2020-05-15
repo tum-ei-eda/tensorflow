@@ -349,10 +349,14 @@ class ParseExampleDatasetOp : public UnaryDatasetOpKernel {
       explicit ParseExampleFunctor(const Dataset* dataset)
           : dataset_(dataset) {}
 
-      void MapFunc(IteratorContext* ctx, const string& prefix,
+      Status CheckExternalState() override { return Status::OK(); }
+
+      void MapFunc(IteratorContext* ctx,
+                   const std::shared_ptr<model::Node>& node,
                    std::vector<Tensor> input, std::vector<Tensor>* output,
                    StatusCallback callback) override {
-        (*ctx->runner())([this, ctx, prefix, input, output, callback]() {
+        (*ctx->runner())([this, ctx, node, input, output,
+                          callback = std::move(callback)]() {
           thread::ThreadPool* device_threadpool =
               ctx->flr()->device()->tensorflow_cpu_worker_threads()->workers;
           std::vector<tstring> slice_vec;
@@ -421,7 +425,7 @@ class ParseExampleDatasetOp : public UnaryDatasetOpKernel {
                 stats_aggregator->IncrementCounter(
                     stats_utils::kFeatureValuesCount, "trainer",
                     feature_stats.feature_values_count);
-                int64 steps = ctx->model()->NumElements(prefix);
+                int64 steps = node ? node->num_elements() : 0;
                 stats_aggregator->AddToHistogram(
                     stats_utils::FeatureHistogramName(dataset_->node_name()),
                     {static_cast<double>(feature_stats.features_count)}, steps);
