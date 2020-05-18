@@ -25,7 +25,7 @@ endif
     -march=$(TARGET_ARCH) \
     -mabi=$(TARGET_ABI) \
     -DTF_LITE_MCU_DEBUG_LOG \
-    -DTF_LITE_USE_GLOBAL_MATH \
+    -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
     -fno-exceptions \
     -fno-unwind-tables \
     -ffunction-sections \
