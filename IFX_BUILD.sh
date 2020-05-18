@@ -6,8 +6,8 @@ BAZEL_CXX_BUILD_SETTINGS=(
 		--config=monolithic
 		--config=opt
 )
+BAZEL_REPO_OVERRIDES=(  )
 TARGET_ARCH=native
-
 LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
@@ -47,15 +47,11 @@ do
         BAZEL_REMOTE_OPTIONS=(
            --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://pistol:8980
         )
-	TARGET_ARCH=sandybridge
+	      TARGET_ARCH=sandybridge
         ;;
     "--override-llvm")
-	    BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f "$2")  )
-      shift
-	    ;;
-    "--no-override-llvm")
-	    BAZEL_REPO_OVERRIDES=(  )
-	    ;;
+       BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f "../llvm-project")  )
+    ;;
     "--verbose")
         VERBOSE=( --subcommands=true )
         ;;
