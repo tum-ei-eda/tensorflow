@@ -44,6 +44,10 @@ public:
 	TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr) {
 		(*ptr) = &tensor_arena[next_buffer_index];
 		size_t aligned_size = (((bytes + (alignment - 1)) / alignment) * alignment);
+		if (&tensor_arena[next_buffer_index] + aligned_size > tensor_arena + arena_size ) {
+			ctx->ReportError(ctx, "Error in memory allocation. Buffer is too small.");
+			return kTfLiteError;
+		}
 		next_buffer_index += aligned_size;
 		return kTfLiteOk;
 	};
