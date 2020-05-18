@@ -345,7 +345,7 @@ $(BINDIR)%_test : $(OBJDIR)%_test.o $(MICROLITE_LIB_PATH)
 	-o $@ $< \
 	$(LIBFLAGS) $(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS)
 
-$(BINDIR)%.test_target: $(BINDIR)%_test
+$(BINDIR)%.test_target: $(BINDIR)%_test generated_test_scripts
 	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script. Is the software emulation available in $(TARGET)?'; exit 1)
 	$(TEST_SCRIPT) $< '~~~ALL TESTS PASSED~~~'
 
@@ -382,6 +382,7 @@ generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
 clean_downloads:
 	rm -rf $(MAKEFILE_DIR)/downloads
 
+generated_test_scripts: $(GENERATED_TEST_SCRIPTS)
 endif
 
 

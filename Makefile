@@ -16,7 +16,7 @@ test_executables: $(MICROLITE_BUILD_TARGETS)
 
 TESTING_TEMPLS:=$(wildcard $(TESTING_DIR)/*.sh.tpl)
 
-TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%,$(TESTING_TEMPLS))
+GENERATED_TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%,$(TESTING_TEMPLS))
 
 # Note that third-party download libraries are copied into place
 # as they appear in a sub-directory of tools/make

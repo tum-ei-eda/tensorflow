@@ -412,7 +412,7 @@ $$($(1)_BINARY): $$($(1)_LOCAL_OBJS) $$(MICROLITE_LIB_PATH)
 	$$(LIBFLAGS) $$(MICROLITE_LIB_PATH) $$(LDFLAGS) $$(MICROLITE_LIBS)
 $(1): $$($(1)_BINARY)
 $(1)_bin: $$($(1)_BINARY).bin
-test_$(1): $$($(1)_BINARY)
+test_$(1): $$($(1)_BINARY) generated_test_scripts
 	@test -f $$(TEST_SCRIPT) || (echo 'Unable to find the test script. Is the software emulation available in $$(TARGET)?'; exit 1)
 	$$(TEST_SCRIPT) $$($(1)_BINARY) '~~~ALL TESTS PASSED~~~'
 ifneq (,$(findstring _test,$(1)))
