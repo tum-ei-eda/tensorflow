@@ -1,0 +1,383 @@
+{
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "bazel build XX translator",
+            "command": "bazel",
+            "args": [
+                "build",
+                "--explain=explain.log",
+                "//tensorflow/compiler/mlir/lite:tf_tfl_translate"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+        
+        {
+            "type": "shell",
+            "label": "build tflite(u)",
+            "command": "make",
+            "args": [
+                "-j", "4",
+                "BUILD_TYPE=debug",
+                "microlite",
+                "packed_weights_test",
+                "person_detection_test",
+                "test_kernel_fully_connected_test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+        {
+            "type": "shell",
+            "label": "build RISCV tflite(u) ",
+            "command": "make",
+            "args": [
+                "-j", "4",
+                "BUILD_TYPE=debug",
+                "TARGET=ifx_riscv32_mcu",
+                "microlite",
+                "test_executables"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+        {
+            "type": "shell",
+            "label": "clean tflite(u)",
+            "command": "make",
+            "args": [
+                "-j", "4",
+                "BUILD_TYPE=debug",
+                "clean"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+        
+        {
+            "type": "shell",
+            "label": "test tflite(u)",
+            "command": "make",
+            "args": [
+                "BUILD_TYPE=debug",
+                "test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+                
+        {
+            "type": "shell",
+            "label": "test RISCV tflite(u)",
+            "command": "make",
+            "args": [
+                "BUILD_TYPE=debug",
+                "TARGET=ifx_riscv32_mcu",
+                "test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [ "relative", "${workspaceFolder}/bazel-tensorflow" ] ,
+                "pattern": [
+                    {
+                        "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                        // The first match group matches the file name which is relative.
+                        "file": 1,
+                        // The second match group matches the line on which the problem occurred.
+                        "line": 2,
+                        // The third match group matches the column at which the problem occurred.
+                        "column": 3,
+                        // The fourth match group matches the problem's severity. Can be ignored. Then all problems are captured as errors.
+                        "severity": 4,
+                        // The fifth match group matches the message.
+                        "message": 5
+                    }
+                ],
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+
+
+        {
+            "type": "shell",
+            "label": "run tf_tfl_translate 4-bit hello_world",
+            "command": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": [
+                // "--mlir-print-op-on-diagnostic",
+                "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=0.0", "--tf-input-max-values=6.283185307179586",
+                "--tf-input-arrays=quant_dense_input", "--tf-input-shapes=1,1", 
+                "--tf-output-arrays=Identity", 
+                //"--print-ir-after=tfl-optimize",
+                //"--print-ir-before=tfl-optimize",
+                //"--print-ir-after=tfl-legalize-tf",
+                "--print-ir-after=tfl-prepare-tf",
+                //"--print-ir-after=tfl-prepare-quantize",
+                "--print-ir-after=tfl-quantize",
+                "--print-ir-after=tfl-runtime-verify",
+                "hello_world_mlir_2.2.0-rc2.pbtxt",
+                "-o", "hello_world_mlir_2.2.0-rc2.tflite"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+        
+        {
+            "type": "shell",
+            "label": "run tf_tfl_translate b2b quant",
+            "command": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": [
+                // "--mlir-print-op-on-diagnostic",
+                "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=0.0", "--tf-input-max-values=6.283185307179586",
+                "--tf-input-arrays=quant_dense_input", "--tf-input-shapes=1,1", 
+                "--tf-output-arrays=Identity", 
+                //"--print-ir-after=tfl-optimize",
+                "--print-ir-before=tfl-optimize",
+                "--print-ir-after=tfl-legalize-tf",
+                "--print-ir-after=tfl-prepare-tf",
+                "--print-ir-before=tfl-prepare-tf", 
+                "--print-ir-before=tfl-prepare-quantize",
+                "--print-ir-after=tfl-prepare-quantize",
+                "tensorflow/compiler/mlir/lite/tests/end2end/back2back_fake_quant.pbtxt",
+                "-o", "tt.tflite"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+        
+        {
+            "type": "shell",
+            "label": "run tf_tfl_translate 6/8 quant",
+            "command": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": [
+                // "--mlir-print-op-on-diagnostic",
+                "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=-32", "--tf-input-max-values=16",
+                "--tf-input-arrays=quant_conv2d_input", "--tf-input-shapes=1,49,40,1", 
+                "--tf-output-arrays=Identity", 
+                "--print-ir-after=tfl-optimize",
+                "--print-ir-before=tfl-optimize",
+                "--print-ir-after=tfl-legalize-tf",
+                "--print-ir-after=tfl-prepare-tf",
+                "--print-ir-before=tfl-prepare-tf", 
+                "--print-ir-before=tfl-prepare-quantize",
+                "--print-ir-after=tfl-prepare-quantize",
+                "--print-ir-after=tfl-quantize",
+                "--print-ir-after=tfl-post-quantize",
+                "kwsnet_6_8_mlir.pbtxt",
+                "-o", "kwsnet_6_8_mlir.tflite"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+
+        {
+            "type": "shell",
+            "label": "run tf_tfl_translate b2b quant test",
+            "command": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": [
+                "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=0.0", "--tf-input-max-values=6.283185307179586",
+                "--tf-input-arrays=quant_dense_input", "--tf-input-shapes=1,1", 
+                "--tf-output-arrays=Identity", 
+                //"--print-ir-after=tfl-prepare-quantize",
+                "tensorflow/compiler/mlir/lite/tests/end2end/back2back_fake_quant.pbtxt",
+                "-o", "tt.tflite"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+        
+        {
+            "type": "shell",
+            "label": "test translator",
+            "command": "bazel",
+            "args": [
+                "test",
+                "//tensorflow/compiler/mlir/lite/tests/end2end:back2back_fake_quant.pbtxt.test"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+
+        {
+            "type": "shell",
+            "label": "test translator end2end",
+            "command": "bazel",
+            "args": [
+                "test",
+                "//tensorflow/compiler/mlir/lite/...:all",
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "test"
+        },
+
+        {
+            "type": "shell",
+            "label": "bazel build toco",
+            "command": "bazel",
+            "args": [
+                "build",
+                "//tensorflow/lite/toco:toco"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": "$gcc",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ],
+    "version": "2.0.0"
+}

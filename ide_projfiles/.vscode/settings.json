@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "*.inc": "cpp",
+        "__hash_table": "cpp",
+        "__tree": "cpp",
+        "hash_map": "cpp",
+        "list": "cpp",
+        "map": "cpp",
+        "set": "cpp",
+        "string": "cpp",
+        "unordered_map": "cpp",
+        "unordered_set": "cpp",
+        "vector": "cpp",
+        "hash_set": "cpp",
+        "*.tcc": "cpp",
+        "deque": "cpp",
+        "forward_list": "cpp"
+    }
+}
