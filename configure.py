@@ -1248,6 +1248,10 @@ def is_reduced_optimize_huge_functions_available(environ_cp):
 
 def set_windows_build_flags(environ_cp):
   """Set Windows specific build options."""
+
+  # @IFX_PATCH@ Currently lots of xla sources trigger false positive
+  # non-return warning that is by default promoted to error.
+  write_to_bazelrc('build --cxxopt=/wd4716')
   if is_reduced_optimize_huge_functions_available(environ_cp):
     write_to_bazelrc(
         'build --copt=/d2ReducedOptimizeHugeFunctions --host_copt=/d2ReducedOptimizeHugeFunctions'

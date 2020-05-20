@@ -83,7 +83,8 @@ then
       "${BAZEL_REPO_OVERRIDES[@]}"
       --verbose_failures --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
-      --config=dbg --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+      --config=opt 
+      #--cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
       --verbose_failures=yes
   )
 else
@@ -111,7 +112,6 @@ then
   then
       PYTHON_BIN_PATH=$(cygpath --windows "${PYTHON_BIN_PATH}" )
       EXE_SUFFIX=.exe
-      export CC_OPT_FLAGS="/arch:AVX"
       # Wild patching orgy is needed... including yes in 2020
       # workarounds for pathname/command-line length limitations.
      source msys_env.sh
