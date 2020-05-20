@@ -113,6 +113,39 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
   return kTfLiteOk;
 }
 
+template<typename T>
+inline void PrecomputeSumOfFiltersFactor(const int32* bias, const TfLiteTensor* filters, int32_t *sum_of_filters_factor,
+		RuntimeShape filter_shape, int32_t input_offset, int32_t filter_offset=0) {
+	if (filters->type == kTfLiteInt8) {
+		// Ensure that the filter offset is 0 in the signed integer case
+		TFLITE_DCHECK_EQ(filter_offset, 0);
+	}
+	const T* filter_data = GetTensorData<T>(filters);
+	const int filter_height = filter_shape.Dims(1);
+	const int filter_width = filter_shape.Dims(2);
+	const int input_depth = filter_shape.Dims(3);
+	const int output_depth = filter_shape.Dims(0);
+	for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
+		int32_t sum_of_filter_factor = 0;
+		if (filters->type == kTfLiteUInt8) {
+			sum_of_filter_factor += filter_width * filter_height * input_depth * filter_offset;
+		}
+		for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
+			for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
+				for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
+					sum_of_filter_factor +=
+		                      filter_data[Offset(filter_shape, out_channel, filter_y,
+		                                         filter_x, in_channel)];
+				}
+			}
+		}
+		sum_of_filters_factor[out_channel] = sum_of_filter_factor * input_offset;
+		if (bias) {
+			sum_of_filters_factor[out_channel] += bias[out_channel];
+		}
+	}
+}
+
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 	void* raw;
 	TfLiteStatus allocation_success = context->AllocatePersistentBuffer(context, sizeof(OpData), &raw);
@@ -126,44 +159,46 @@ void Free(TfLiteContext* context, void* buffer) {}
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 	OpData* data = reinterpret_cast<OpData*>(node->user_data);
-		const TfLiteTensor* filters = GetInput(context, node, kFilterTensor);
+	const TfLiteTensor* filters = GetInput(context, node, kFilterTensor);
 
-		if (filters->type == kTfLiteInt8 || filters->type == kTfLiteUInt8) {
+  if (filters->type == kTfLiteInt8 || filters->type == kTfLiteUInt8) {
 
-			const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
-			const int32* bias_data = GetTensorData<int32_t>(bias);
+    const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
+    const int32* bias_data = GetTensorData<int32_t>(bias);
 
-			const int32_t filter_offset = -filters->params.zero_point;
-			RuntimeShape filter_shape = GetTensorShape(filters);
-			TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
-			const int filter_height = filter_shape.Dims(1);
-		    const int filter_width = filter_shape.Dims(2);
-		    const int input_depth = filter_shape.Dims(3);
-		    const int output_depth = filter_shape.Dims(0);
-		    TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
+    const int32_t filter_offset = -filters->params.zero_point;
+    RuntimeShape filter_shape = GetTensorShape(filters);
+    TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
+    const int filter_height = filter_shape.Dims(1);
+      const int filter_width = filter_shape.Dims(2);
+      const int input_depth = filter_shape.Dims(3);
+      const int output_depth = filter_shape.Dims(0);
+      TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
 
-			void* raw;
-			context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
-		    data->sum_of_filters_factor = reinterpret_cast<int32_t*>(raw);
+    void* raw;
+    context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
+    data->sum_of_filters_factor = reinterpret_cast<int32_t*>(raw);
 
-		    context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
-			data->per_channel_output_multiplier = reinterpret_cast<int32_t*>(raw);
+    context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
+    data->per_channel_output_multiplier = reinterpret_cast<int32_t*>(raw);
 
-			context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
-			data->per_channel_output_shift = reinterpret_cast<int32_t*>(raw);
+    context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
+    data->per_channel_output_shift = reinterpret_cast<int32_t*>(raw);
 
-
-			const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-			const int32_t input_offset = -input->params.zero_point;
-			if (filters->type == kTfLiteUInt8) {
-				// Precompute sum of filters for uint8
-				const uint8* filter_data = GetTensorData<uint8_t>(filters);
-			}
-			else {
-				// Precompute sum of filters for int8
-			}
-		}
-		return kTfLiteOk;
+    const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+    const int32_t input_offset = -input->params.zero_point;
+    if (filters->type == kTfLiteUInt8) {
+      // Precompute sum of filters for uint8
+      PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
+        filter_shape, input_offset, filter_offset);
+    }
+    else {
+      // Precompute sum of filters for int8
+      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
+        filter_shape, input_offset, 0);
+    }
+  }
+  return kTfLiteOk;
 }
 
 void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
@@ -214,6 +249,7 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   for (int batch = 0; batch < batches; ++batch) {
     for (int out_y = 0; out_y < output_height; ++out_y) {
       for (int out_x = 0; out_x < output_width; ++out_x) {
+        // TODO(Jakob) int32 input_sum = CalculateInputSum(...);
         for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
           const int in_x_origin = (out_x * stride_width) - pad_width;
           const int in_y_origin = (out_y * stride_height) - pad_height;
@@ -234,14 +270,12 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                       filter_data[Offset(filter_shape, out_channel, filter_y,
                                          filter_x, in_channel)];
                   acc +=
-                      (filter_val + filter_offset) * (input_val + input_offset);
+                      (filter_val + filter_offset) * input_val;
                 }
               }
             }
           }
-          if (bias_data) {
-            acc += bias_data[out_channel];
-          }
+          acc += data->sum_of_filters_factor[out_channel];
           acc = MultiplyByQuantizedMultiplier(acc, output_multiplier,
                                               output_shift);
           acc += output_offset;
