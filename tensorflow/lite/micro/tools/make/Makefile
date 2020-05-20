@@ -346,7 +346,7 @@ $(BINDIR)%_test : $(OBJDIR)%_test.o $(MICROLITE_LIB_PATH)
 	$(LIBFLAGS) $(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS)
 
 $(BINDIR)%.test_target: $(BINDIR)%_test generated_test_scripts
-	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script. Is the software emulation available in $(TARGET)?'; exit 1)
+	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script $(TEST_SCRIPT). Is the software emulation available in $(TARGET)?'; exit 1)
 	$(TEST_SCRIPT) $< '~~~ALL TESTS PASSED~~~'
 
 # snease: Add %.bin rule here since BINDIR is now defined
@@ -382,7 +382,13 @@ generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
 clean_downloads:
 	rm -rf $(MAKEFILE_DIR)/downloads
 
+
+TESTING_TEMPLS:=$(wildcard $(TESTING_DIR)/*.sh.tpl)
+GENERATED_TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%.sh,$(TESTING_TEMPLS))
+
 generated_test_scripts: $(GENERATED_TEST_SCRIPTS)
+else
+generated_test_scripts:
 endif
 
 
