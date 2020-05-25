@@ -87,6 +87,18 @@ then
       #--cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
       --verbose_failures=yes
   )
+elif [ -n "$RD_CLUSTER_LINUX_HOST" ]
+then
+  BAZEL_OPTIONS=(
+        "${BAZEL_DISTDIR_OPTIONS[@]}"
+      "${BAZEL_REPO_OVERRIDES[@]}"
+      --verbose_failures --local_cpu_resources="$LOCALJOBS" --config=monolithic "${VERBOSE[@]}"
+      "${BAZEL_REMOTE_OPTIONS[@]}"
+	  --repository_cache=/home/aifordes.work/bazel_repo_cache
+	  # Cannot enable debug non-NFS scratch for bazel_root too small...
+	  --config opt
+	  --verbose_failures=yes
+  )
 else
   BAZEL_OPTIONS=(
         "${BAZEL_DISTDIR_OPTIONS[@]}"
@@ -95,7 +107,9 @@ else
       "${BAZEL_REMOTE_OPTIONS[@]}"
       --config=dbg
       --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
-      --strip=never --fission=yes --verbose_failures=yes
+      --strip=never --fission=yes 
+	  --config opt
+	  --verbose_failures=yes
   )
 fi
 # Build a statically linked toco command-line translator
