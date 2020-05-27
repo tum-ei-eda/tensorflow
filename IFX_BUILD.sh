@@ -126,6 +126,7 @@ then
   then
       PYTHON_BIN_PATH=$(cygpath --windows "${PYTHON_BIN_PATH}" )
       EXE_SUFFIX=.exe
+      export CC_OPT_FLAGS="/arch:AVX"
       # Wild patching orgy is needed... including yes in 2020
       # workarounds for pathname/command-line length limitations.
      source msys_env.sh
