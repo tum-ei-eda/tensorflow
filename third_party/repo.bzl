@@ -131,6 +131,32 @@ def _tf_http_archive(ctx):
         for internal_src, external_dest in ctx.attr.additional_build_files.items():
             ctx.symlink(Label(internal_src), ctx.path(external_dest))
 
+
+def _tf_local_repo(ctx):
+    #_ = ctx.delete(ctx.path(ctx.attr.path))
+
+    base = ctx.path(ctx.attr.base)
+    base = base.dirname
+    if ctx.attr.localdir[0] == "/":
+        local = ctx.path(ctx.attr.localdir)
+    else:
+        local = ctx.path(str(base.realpath)+"/"+ctx.attr.localdir)
+    local_path = local.realpath
+    ctx.symlink(local_path, "")
+    if ctx.attr.additional_build_files:
+        for internal_src, external_dest in ctx.attr.additional_build_files.items():
+            _ = ctx.delete(ctx.path(external_dest))
+            ctx.symlink(Label(internal_src), ctx.path(external_dest))
+
+
+def _tf_overrideable_http_archive(ctx):
+
+    if ctx.attr.localdir:
+        _tf_local_repo(ctx)
+    else:
+        _tf_http_archive(ctx)
+
+
 tf_http_archive = repository_rule(
     attrs = {
         "sha256": attr.string(mandatory = True),
@@ -146,12 +172,16 @@ tf_http_archive = repository_rule(
         "system_build_file": attr.label(),
         "system_link_files": attr.string_dict(),
         "additional_build_files": attr.string_dict(),
+        "localdir": attr.string(),
+        "base" : attr.label(default = "@//:WORKSPACE"),
     },
     environ = [
         "TF_SYSTEM_LIBS",
     ],
-    implementation = _tf_http_archive,
+    implementation = _tf_overrideable_http_archive,
 )
+
+
 
 """Downloads and creates Bazel repos for dependencies.
 

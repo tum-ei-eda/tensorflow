@@ -1,0 +1,36 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/bazel-tensorflow/external/com_google_protobuf/src",
+                "${workspaceFolder}/bazel-tensorflow/external/flatbuffers/include/",
+                "${workspaceFolder}/bazel-tensorflow/external/eigen_archive",
+                "${workspaceFolder}/bazel-tensorflow/external/llvm-project/llvm/include",
+                "${workspaceFolder}/bazel-tensorflow/external/llvm-project/mlir/include",
+                "${workspaceFolder}/bazel-tensorflow/external/com_google_absl",
+                "${workspaceFolder}/bazel-bin/external/llvm-project/mlir/include",
+                "${workspaceFolder}/bazel-bin/external/llvm-project/llvm/include",
+                "${workspaceFolder}/bazel-bin",
+                "${workspaceFolder}/bazel-tensorflow", 
+                "${workspaceFolder}"
+            ],
+            "defines": [
+                "GET_OP_CLASSES=1",
+                "GET_OP_LIST=1"
+            ],
+            "compilerPath": "/usr/bin/g++",
+            "intelliSenseMode": "gcc-x64",
+            "cppStandard": "c++14",
+            "cStandard": "c99",
+            "compilerArgs": [
+                "-std=c++14"
+            ],
+            "compileCommands": "",
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            }
+        }
+    ],
+    "version": 4
+}

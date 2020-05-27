@@ -49,6 +49,7 @@ load(
     "is_windows",
     "raw_exec",
     "read_dir",
+    "realpath",
     "which",
 )
 
@@ -360,8 +361,8 @@ def _cuda_include_path(repository_ctx, cuda_config):
             )
     inc_entries = []
     if target_dir != "":
-        inc_entries.append(target_dir)
-    inc_entries.append(cuda_config.cuda_toolkit_path + "/include")
+        inc_entries.append(realpath(repository_ctx, target_dir))
+    inc_entries.append(realpath(repository_ctx, cuda_config.cuda_toolkit_path + "/include"))
     return inc_entries
 
 def enable_cuda(repository_ctx):
@@ -602,7 +603,7 @@ def _exec_find_cuda_config(repository_ctx, script_path, cuda_libraries):
         "f = open('script.py', 'wb');" +
         "f.write(script);" +
         "f.close();" +
-        "system('%s script.py %s');" % (python_bin, " ".join(cuda_libraries))
+        "system('\"%s\" script.py %s');" % (python_bin, " ".join(cuda_libraries))
     )
 
     return execute(repository_ctx, [python_bin, "-c", decompress_and_execute_cmd])
@@ -713,6 +714,7 @@ def _create_dummy_repository(repository_ctx):
         {
             "%{cuda_is_configured}": "False",
             "%{cuda_extra_copts}": "[]",
+            "%{cuda_gpu_architectures}": "[]",
         },
     )
     _tpl(
@@ -770,10 +772,6 @@ filegroup(name="cudnn-include")
             "%{cuda_version}": "",
             "%{cuda_lib_version}": "",
             "%{cudnn_version}": "",
-            "%{cuda_compute_capabilities}": ",".join([
-                "CudaVersion(\"%s\")" % c
-                for c in _DEFAULT_CUDA_COMPUTE_CAPABILITIES
-            ]),
             "%{cuda_toolkit_path}": "",
         },
         "cuda/cuda/cuda_config.h",
@@ -843,10 +841,17 @@ def _compute_cuda_extra_copts(repository_ctx, compute_capabilities):
         "--cuda-gpu-arch=sm_" + cap.replace(".", "")
         for cap in compute_capabilities
     ]
+    return str(capability_flags)
 
-    # Capabilities are handled in the "crosstool_wrapper_driver_is_not_gcc" for nvcc
-    # TODO(csigg): Make this consistent with cuda clang and pass unconditionally.
-    return "if_cuda_clang(%s)" % str(capability_flags)
+def _compute_cuda_gpu_architectures(repository_ctx, compute_capabilities):
+    gpu_architectures = [
+        "sm_" + capability.replace(".", "")
+        for capability in compute_capabilities
+    ]
+
+    # Make the list unique.
+    gpu_architectures = dict(zip(gpu_architectures, gpu_architectures)).keys()
+    return str(gpu_architectures)
 
 def _tpl_path(repository_ctx, filename):
     return repository_ctx.path(Label("//third_party/gpus/%s.tpl" % filename))
@@ -979,6 +984,10 @@ def _create_local_cuda_repository(repository_ctx):
                 repository_ctx,
                 cuda_config.compute_capabilities,
             ),
+            "%{cuda_gpu_architectures}": _compute_cuda_gpu_architectures(
+                repository_ctx,
+                cuda_config.compute_capabilities,
+            ),
         },
     )
 
@@ -1023,8 +1032,10 @@ def _create_local_cuda_repository(repository_ctx):
     cuda_defines = {}
     cuda_defines["%{builtin_sysroot}"] = tf_sysroot
     cuda_defines["%{cuda_toolkit_path}"] = ""
+    cuda_defines["%{compiler}"] = "unknown"
     if is_cuda_clang:
         cuda_defines["%{cuda_toolkit_path}"] = cuda_config.config["cuda_toolkit_path"]
+        cuda_defines["%{compiler}"] = "clang"
 
     host_compiler_prefix = get_host_environ(repository_ctx, _GCC_HOST_COMPILER_PREFIX)
     if not host_compiler_prefix:
@@ -1093,9 +1104,6 @@ def _create_local_cuda_repository(repository_ctx):
             "%{cuda_version}": cuda_config.cuda_version,
             "%{nvcc_path}": nvcc_path,
             "%{gcc_host_compiler_path}": str(cc),
-            "%{cuda_compute_capabilities}": ", ".join(
-                ["\"%s\"" % c for c in cuda_config.compute_capabilities],
-            ),
             "%{nvcc_tmp_dir}": _get_nvcc_tmp_dir_for_windows(repository_ctx),
         }
         repository_ctx.template(
@@ -1137,10 +1145,6 @@ def _create_local_cuda_repository(repository_ctx):
             "%{cuda_version}": cuda_config.cuda_version,
             "%{cuda_lib_version}": cuda_config.cuda_lib_version,
             "%{cudnn_version}": cuda_config.cudnn_version,
-            "%{cuda_compute_capabilities}": ", ".join([
-                "CudaVersion(\"%s\")" % c
-                for c in cuda_config.compute_capabilities
-            ]),
             "%{cuda_toolkit_path}": cuda_config.cuda_toolkit_path,
         },
     )

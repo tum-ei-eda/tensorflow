@@ -1,6 +1,6 @@
-# Tensorflow Lite Hexagon delegate
+# TensorFlow Lite Hexagon delegate
 
-This document explains how to use the Tensorflow Lite Hexagon Delegate in your
+This document explains how to use the TensorFlow Lite Hexagon Delegate in your
 application using the Java and/or C API. The delegate leverages the Qualcomm
 Hexagon library to execute quantized kernels on the DSP. Note that the delegate
 is intended to *complement* NNAPI functionality, particularly for devices where
@@ -74,11 +74,11 @@ dependencies {
     “libhexagon_nn_skel_v66.so”
     *   [v1.10.3](https://storage.cloud.google.com/download.tensorflow.org/tflite/hexagon_nn_skel_1_10_3_1.run)
     *   [v1.14](https://storage.cloud.google.com/download.tensorflow.org/tflite/hexagon_nn_skel_v1.14.run)
+    *   [v1.17](https://storage.cloud.google.com/download.tensorflow.org/tflite/hexagon_nn_skel_v1.17.0.0.run)
 
 Note: You will need to accept the license agreement.
 
-Note: As of 27 Feb, 2020 you should use v1.10.3, v1.14 will be used in a future
-date.
+Note: As of 04/28/2020 you should use v1.17.
 
 Note: You must use the hexagon_nn libraries with the compatible version of
 interface library. Interface library is part of the AAR and fetched by bazel
@@ -183,8 +183,7 @@ dependencies {
 
 Note: You will need to accept the license agreement.
 
-Note: As of 27 Feb, 2020 you should use v1.10.3, v1.14 will be used in a future
-date.
+Note: As of 03/03/2020 you should use v1.14.
 
 Note: You must use the hexagon_nn libraries with the compatible version of
 interface library. Interface library is part of the AAR and fetched by bazel
@@ -260,42 +259,7 @@ ro.board.platform`).
     *   This is tentatively planned for a future release, though there is no
         concrete timeline.
 *   Which ops are supported by the delegate?
-    *   Initial list of supported ops:
-        *   Add
-        *   ArgMax
-        *   ArgMin
-        *   AveragePool2D (without any activation)
-        *   Concat
-        *   Conv2D with following constraints:
-            *   stride width/height <= 3
-        *   DepthToSpace
-        *   DepthwiseConv2D with following constraints:
-            *   Filter width == 3
-            *   depth_multiplier == 1
-            *   dilation only supported when stride == 1
-            *   Otherwise, stride height/width <= 3
-        *   FullyConnected (without any activation)
-        *   L2Normalization (without any activation)
-        *   Logistic (aka Sigmoid)
-        *   MaxPool2D (without any activation)
-        *   Mul (without any activation)
-        *   Neg
-        *   Pad: Only supports 0 padding
-        *   Relu
-        *   Relu6
-        *   Reshape
-        *   Resize Bilinear with following constraints:
-            *   Requested size <= 65
-        *   Resize Nearest Neighbor
-        *   SoftMax
-        *   SpaceToDepth
-        *   Split
-        *   Sub
-        *   Tanh
-        *   Transpose
-        *   TransposeConv2D with following constraints:
-            *   stride height/width <= 3
-            *   dilation height/width == 1
+    *   See the current list of [supported ops and constraints](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/experimental/delegates/hexagon/README.md)
 *   How can I tell that the model is using the DSP when I enable the delegate?
     *   Two log messages will be printed when you enable the delegate - one to
         indicate if the delegate was created and another to indicate how many

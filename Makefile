@@ -5,6 +5,7 @@ SWERV_ISS_HOME:=$(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION))
 ETISS_HOME:=$(IFX_TOOLSPREFIX)/etiss-$(IFX_ETISS_VERSION)
 PREFIX:=$(IFX_TOOLSPREFIX)/tflite_u-${IFX_TFLITE_MICRO_VERSION}
 
+#
 # Here's the real Makefile....
 include tensorflow/lite/micro/tools/make/Makefile
 
@@ -14,9 +15,6 @@ show_project_targets:
 	
 test_executables: $(MICROLITE_BUILD_TARGETS)
 
-TESTING_TEMPLS:=$(wildcard $(TESTING_DIR)/*.sh.tpl)
-
-TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%,$(TESTING_TEMPLS))
 
 # Note that third-party download libraries are copied into place
 # as they appear in a sub-directory of tools/make

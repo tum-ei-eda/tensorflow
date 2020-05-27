@@ -46,11 +46,7 @@ cc_library(
         "test_helpers.h",
     ],
     build_for_embedded = True,
-    copts = [
-        "-Werror",
-        "-Wdouble-promotion",
-        "-Wsign-compare",
-    ],
+    copts = micro_copts(),
     deps = [
         ":micro_compatibility",
         ":micro_string",
@@ -75,11 +71,20 @@ cc_library(
     ],
     build_for_embedded = True,
     copts = micro_copts(),
-    deps = [
-        "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/api",
-        "//tensorflow/lite/kernels/internal:compatibility",
+    deps = ["//tensorflow/lite/c:common"],
+)
+
+cc_library(
+    name = "micro_time",
+    srcs = [
+        "posix/micro_time.cc",
     ],
+    hdrs = [
+        "micro_time.h",
+    ],
+    build_for_embedded = True,
+    copts = micro_copts(),
+    deps = ["//tensorflow/lite/c:common"],
 )
 
 cc_library(
@@ -194,6 +199,17 @@ tflite_micro_cc_test(
     ],
     deps = [
         ":micro_string",
+        "//tensorflow/lite/micro/testing:micro_test",
+    ],
+)
+
+tflite_micro_cc_test(
+    name = "micro_time_test",
+    srcs = [
+        "micro_time_test.cc",
+    ],
+    deps = [
+        ":micro_time",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )

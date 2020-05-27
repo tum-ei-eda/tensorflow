@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <string>
@@ -98,7 +99,7 @@ class Subgraph {
         /*external_value_ids=*/context->tensors_size, /*flags=*/0,
         &subgraph_ptr);
     if (status != xnn_status_success) {
-      context->ReportError(context, "failed to create XNNPACK subgraph");
+      TF_LITE_KERNEL_LOG(context, "failed to create XNNPACK subgraph");
       return nullptr;
     }
 
@@ -138,7 +139,7 @@ class Subgraph {
     std::vector<uint32_t> xnnpack_tensors(tensors.back() + 1);
     for (int t : tensors) {
       if (context->tensors[t].type != kTfLiteFloat32) {
-        context->ReportError(
+        TF_LITE_KERNEL_LOG(
             context,
             "unsupported datatype (%s) of tensor %d in XNNPACK delegate",
             TfLiteTypeGetName(context->tensors[t].type), t);
@@ -168,8 +169,8 @@ class Subgraph {
           subgraph.get(), xnn_datatype_fp32, dims.size(), dims.data(), data,
           static_cast<uint32_t>(t), flags, &xnnpack_tensors[t]);
       if (status != xnn_status_success) {
-        context->ReportError(context,
-                             "failed to create XNNPACK Value for tensor %d", t);
+        TF_LITE_KERNEL_LOG(context,
+                           "failed to create XNNPACK Value for tensor %d", t);
         return nullptr;
       }
     }
@@ -194,7 +195,7 @@ class Subgraph {
     status = xnn_create_runtime_v2(subgraph.get(), threadpool, /*flags=*/0,
                                    &runtime_ptr);
     if (status != xnn_status_success) {
-      context->ReportError(context, "failed to create XNNPACK runtime");
+      TF_LITE_KERNEL_LOG(context, "failed to create XNNPACK runtime");
       return nullptr;
     }
 
@@ -216,7 +217,7 @@ class Subgraph {
       const xnn_status status = xnn_setup_runtime(
           runtime_.get(), external_values.size(), external_values.data());
       if (status != xnn_status_success) {
-        context->ReportError(context, "failed to setup XNNPACK runtime");
+        TF_LITE_KERNEL_LOG(context, "failed to setup XNNPACK runtime");
         return kTfLiteError;
       }
 
@@ -225,7 +226,7 @@ class Subgraph {
 
     const xnn_status status = xnn_invoke_runtime(runtime_.get());
     if (status != xnn_status_success) {
-      context->ReportError(context, "failed to invoke XNNPACK runtime");
+      TF_LITE_KERNEL_LOG(context, "failed to invoke XNNPACK runtime");
       return kTfLiteError;
     }
 
@@ -244,10 +245,9 @@ class Subgraph {
         *flags = 0;
         return kTfLiteOk;
       default:
-        if (context != nullptr) {
-          context->ReportError(context, "invalid padding mode (%d) in node #%d",
-                               static_cast<int>(padding), node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(context,
+                                 "invalid padding mode (%d) in node #%d",
+                                 static_cast<int>(padding), node_index);
         return kTfLiteError;
     }
   }
@@ -273,32 +273,24 @@ class Subgraph {
         *output_max = 6.0f;
         return kTfLiteOk;
       case kTfLiteActTanh:
-        if (context != nullptr) {
-          context->ReportError(
-              context, "unsupported fused activation (Tanh) in node #%d",
-              node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Tanh) in node #%d",
+            node_index);
         return kTfLiteError;
       case kTfLiteActSignBit:
-        if (context != nullptr) {
-          context->ReportError(
-              context, "unsupported fused activation (Sign) in node #%d",
-              node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Sign) in node #%d",
+            node_index);
         return kTfLiteError;
       case kTfLiteActSigmoid:
-        if (context != nullptr) {
-          context->ReportError(
-              context, "unsupported fused activation (Sigmoid) in node #%d",
-              node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Sigmoid) in node #%d",
+            node_index);
         return kTfLiteError;
       default:
-        if (context != nullptr) {
-          context->ReportError(context,
-                               "invalid fused activation (%d) in node #%d",
-                               static_cast<int>(activation), node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(context,
+                                 "invalid fused activation (%d) in node #%d",
+                                 static_cast<int>(activation), node_index);
         return kTfLiteError;
     }
   }
@@ -307,34 +299,26 @@ class Subgraph {
                                              const TfLiteConvParams* params,
                                              int node_index) {
     if (params->stride_width <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context, "invalid stride width %d in node #%d",
-                             params->stride_width, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride width %d in node #%d",
+                               params->stride_width, node_index);
       return kTfLiteError;
     }
     if (params->stride_height <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context, "invalid stride height %d in node #%d",
-                             params->stride_height, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride height %d in node #%d",
+                               params->stride_height, node_index);
       return kTfLiteError;
     }
 
     if (params->dilation_width_factor <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "invalid dilation width factor %d in node #%d",
-                             params->dilation_width_factor, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "invalid dilation width factor %d in node #%d",
+                               params->dilation_width_factor, node_index);
       return kTfLiteError;
     }
     if (params->dilation_height_factor <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "invalid dilation height factor %d in node #%d",
-                             params->dilation_height_factor, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "invalid dilation height factor %d in node #%d",
+                               params->dilation_height_factor, node_index);
       return kTfLiteError;
     }
 
@@ -345,52 +329,183 @@ class Subgraph {
       TfLiteContext* context, const TfLiteDepthwiseConvParams* params,
       int output_channels, int node_index) {
     if (params->stride_width <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context, "invalid stride width %d in node #%d",
-                             params->stride_width, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride width %d in node #%d",
+                               params->stride_width, node_index);
       return kTfLiteError;
     }
     if (params->stride_height <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context, "invalid stride height %d in node #%d",
-                             params->stride_height, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride height %d in node #%d",
+                               params->stride_height, node_index);
       return kTfLiteError;
     }
 
     if (params->depth_multiplier <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context, "invalid depth multiplier %d in node #%d",
-                             params->depth_multiplier, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "invalid depth multiplier %d in node #%d",
+                               params->depth_multiplier, node_index);
       return kTfLiteError;
     }
     if (output_channels % params->depth_multiplier != 0) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "depth multiplier %d is incompatible with "
-                             "number of output channels %d in node #%d",
-                             params->depth_multiplier, output_channels,
-                             node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "depth multiplier %d is incompatible with "
+                               "number of output channels %d in node #%d",
+                               params->depth_multiplier, output_channels,
+                               node_index);
       return kTfLiteError;
     }
 
     if (params->dilation_width_factor <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "invalid dilation width factor %d in node #%d",
-                             params->dilation_width_factor, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "invalid dilation width factor %d in node #%d",
+                               params->dilation_width_factor, node_index);
       return kTfLiteError;
     }
     if (params->dilation_height_factor <= 0) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "invalid dilation height factor %d in node #%d",
-                             params->dilation_height_factor, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "invalid dilation height factor %d in node #%d",
+                               params->dilation_height_factor, node_index);
+      return kTfLiteError;
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus CheckMediaPipeTransposedConvolutionParams(
+      TfLiteContext* context, const TfLiteTransposeConvParams* params,
+      int node_index) {
+    if (params->stride_width <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride width %d in node #%d",
+                               params->stride_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->stride_height <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride height %d in node #%d",
+                               params->stride_height, node_index);
+      return kTfLiteError;
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus CheckMediaPipePoolParams(TfLiteContext* context,
+                                               const TfLitePoolParams* params,
+                                               int node_index) {
+    if (params->stride_width <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride width %d in node #%d",
+                               params->stride_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->stride_height <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride height %d in node #%d",
+                               params->stride_height, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_width <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid filter width %d in node #%d",
+                               params->filter_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_height <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid filter height %d in node #%d",
+                               params->filter_height, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_width != params->stride_width) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context, "filter width %d does not match stride width %d in node #%d",
+          params->filter_width, params->stride_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_height != params->stride_height) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context,
+          "filter height %d does not match stride height %d in node #%d",
+          params->filter_height, params->stride_height, node_index);
+      return kTfLiteError;
+    }
+    switch (params->activation) {
+      case kTfLiteActNone:
+        break;
+      case kTfLiteActRelu:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Relu) in node #%d",
+            node_index);
+        return kTfLiteOk;
+      case kTfLiteActRelu1:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (ReluMinus1To1) in node #%d",
+            node_index);
+        return kTfLiteOk;
+      case kTfLiteActRelu6:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Relu6) in node #%d",
+            node_index);
+        return kTfLiteOk;
+      case kTfLiteActTanh:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Tanh) in node #%d",
+            node_index);
+        return kTfLiteError;
+      case kTfLiteActSignBit:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Sign) in node #%d",
+            node_index);
+        return kTfLiteError;
+      case kTfLiteActSigmoid:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "unsupported fused activation (Sigmoid) in node #%d",
+            node_index);
+        return kTfLiteError;
+      default:
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context, "invalid fused activation (%d) in node #%d",
+            static_cast<int>(params->activation), node_index);
+        return kTfLiteError;
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus CheckFullyConnectedParams(
+      TfLiteContext* context, const TfLiteFullyConnectedParams* params,
+      int node_index) {
+    if (params->weights_format != kTfLiteFullyConnectedWeightsFormatDefault) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context, "unsupported non-default weights format in node #%d",
+          node_index);
+      return kTfLiteError;
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus CheckPoolingParams(TfLiteContext* context,
+                                         const TfLitePoolParams* params,
+                                         int node_index) {
+    if (params->stride_width <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride width %d in node #%d",
+                               params->stride_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->stride_height <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid stride height %d in node #%d",
+                               params->stride_height, node_index);
+      return kTfLiteError;
+    }
+
+    if (params->filter_width <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid filter width %d in node #%d",
+                               params->filter_width, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_height <= 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "invalid filter height %d in node #%d",
+                               params->filter_height, node_index);
+      return kTfLiteError;
+    }
+    if (params->filter_width == 1 && params->filter_height == 1) {
+      TF_LITE_MAYBE_KERNEL_LOG(context, "meaningless 1x1 pooling in node #%d",
+                               node_index);
       return kTfLiteError;
     }
 
@@ -403,19 +518,15 @@ class Subgraph {
                                                int expected_num_outputs,
                                                int node_index) {
     if (node->inputs->size != expected_num_inputs) {
-      if (context != nullptr) {
-        context->ReportError(
-            context, "unexpected number of inputs (%d != %d) in node #%d",
-            node->inputs->size, expected_num_inputs, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context, "unexpected number of inputs (%d != %d) in node #%d",
+          node->inputs->size, expected_num_inputs, node_index);
       return kTfLiteError;
     }
     if (node->outputs->size != expected_num_outputs) {
-      if (context != nullptr) {
-        context->ReportError(
-            context, "unexpected number of output (%d != %d) in node #%d",
-            node->outputs->size, expected_num_outputs, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context, "unexpected number of output (%d != %d) in node #%d",
+          node->outputs->size, expected_num_outputs, node_index);
       return kTfLiteError;
     }
     return kTfLiteOk;
@@ -425,11 +536,9 @@ class Subgraph {
                                            const TfLiteTensor& tensor,
                                            int tensor_index, int node_index) {
     if (tensor.type != kTfLiteFloat32) {
-      if (context != nullptr) {
-        context->ReportError(
-            context, "unsupported type %s in tensor #%d in node #%d",
-            TfLiteTypeGetName(tensor.type), tensor_index, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context, "unsupported type %s in tensor #%d in node #%d",
+          TfLiteTypeGetName(tensor.type), tensor_index, node_index);
       return kTfLiteError;
     }
     return kTfLiteOk;
@@ -440,19 +549,17 @@ class Subgraph {
                                        int expected_num_dims,
                                        int tensor_index) {
     if (tensor.dims->size != expected_num_dims) {
-      if (context != nullptr) {
-        context->ReportError(
-            context,
-            "unexpected number of shape dimensions (%d != %d) in tensor #%d",
-            tensor.dims->size, expected_num_dims, tensor_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context,
+          "unexpected number of shape dimensions (%d != %d) in tensor #%d",
+          tensor.dims->size, expected_num_dims, tensor_index);
       return kTfLiteError;
     }
     for (int i = 0; i < tensor.dims->size; i++) {
       if (tensor.dims->data[i] <= 0) {
-        context->ReportError(context,
-                             "invalid dimension #%d (%d) in tensor #%d", i,
-                             tensor.dims->data[i], tensor_index);
+        TF_LITE_MAYBE_KERNEL_LOG(context,
+                                 "invalid dimension #%d (%d) in tensor #%d", i,
+                                 tensor.dims->data[i], tensor_index);
         return kTfLiteError;
       }
     }
@@ -463,25 +570,22 @@ class Subgraph {
                                             const TfLiteTensor& tensor,
                                             int tensor_index, int node_index) {
     if (tensor.dims->size < 1) {
-      if (context != nullptr) {
-        context->ReportError(context,
-                             "unexpected number of shape dimensions (%d) in "
-                             "tensor #%d in node #%d: "
-                             "expected at least a 1D tensor",
-                             tensor.dims->size, tensor_index, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(context,
+                               "unexpected number of shape dimensions (%d) in "
+                               "tensor #%d in node #%d: "
+                               "expected at least a 1D tensor",
+                               tensor.dims->size, tensor_index, node_index);
       return kTfLiteError;
     }
     // Validate that all non-channel dimensions (if any) are exactly 1.
     for (int i = 0; i < tensor.dims->size - 1; i++) {
       if (tensor.dims->data[i] != 1) {
-        if (context != nullptr) {
-          context->ReportError(context,
-                               "unexpected value %d of shape dimension #%d in "
-                               "tensor #%d in node #%d: "
-                               "expected 1 for non-channel dimensions",
-                               tensor.dims[i], i, tensor_index, node_index);
-        }
+        TF_LITE_MAYBE_KERNEL_LOG(
+            context,
+            "unexpected value %d of shape dimension #%d in "
+            "tensor #%d in node #%d: "
+            "expected 1 for non-channel dimensions",
+            tensor.dims[i], i, tensor_index, node_index);
         return kTfLiteError;
       }
     }
@@ -493,13 +597,11 @@ class Subgraph {
       int node_index) {
     // TODO(b/149120844): remove checks once dynamic tensors are supported
     if (tensor.allocation_type == kTfLiteDynamic) {
-      if (context != nullptr) {
-        context->ReportError(
-            context,
-            "invalid allocation type in tensor #%d in node #%d: "
-            "expected non-dynamic tensor",
-            tensor_index, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context,
+          "invalid allocation type in tensor #%d in node #%d: "
+          "expected non-dynamic tensor",
+          tensor_index, node_index);
       return kTfLiteError;
     }
     return kTfLiteOk;
@@ -511,13 +613,11 @@ class Subgraph {
                                                   int node_index) {
     if (tensor.allocation_type != kTfLiteMmapRo ||
         tensor.data.raw_const == nullptr) {
-      if (context != nullptr) {
-        context->ReportError(
-            context,
-            "invalid allocation type in tensor #%d in node #%d: "
-            "expected static read-only tensor",
-            tensor_index, node_index);
-      }
+      TF_LITE_MAYBE_KERNEL_LOG(
+          context,
+          "invalid allocation type in tensor #%d in node #%d: "
+          "expected static read-only tensor",
+          tensor_index, node_index);
       return kTfLiteError;
     }
     return kTfLiteOk;
@@ -541,6 +641,14 @@ class Subgraph {
         return VisitAddNode(subgraph, logging_context, node_index, node,
                             context->tensors, add_params, xnnpack_tensors);
       }
+      case kTfLiteBuiltinAveragePool2d: {
+        const TfLitePoolParams* pool_params =
+            static_cast<const TfLitePoolParams*>(node->builtin_data);
+
+        return VisitAveragePool2DNode(subgraph, logging_context, node_index,
+                                      node, context->tensors, pool_params,
+                                      xnnpack_tensors);
+      }
       case kTfLiteBuiltinConv2d: {
         const TfLiteConvParams* conv_params =
             static_cast<const TfLiteConvParams*>(node->builtin_data);
@@ -556,12 +664,28 @@ class Subgraph {
                                         node, context->tensors, dwconv_params,
                                         xnnpack_tensors);
       }
+      case kTfLiteBuiltinFullyConnected: {
+        const TfLiteFullyConnectedParams* fc_params =
+            static_cast<const TfLiteFullyConnectedParams*>(node->builtin_data);
+
+        return VisitFullyConnectedNode(subgraph, logging_context, node_index,
+                                       node, context->tensors, fc_params,
+                                       xnnpack_tensors);
+      }
       case kTfLiteBuiltinHardSwish:
         return VisitHardSwishNode(subgraph, logging_context, node_index, node,
                                   context->tensors, xnnpack_tensors);
       case kTfLiteBuiltinLogistic:
         return VisitLogisticNode(subgraph, logging_context, node_index, node,
                                  context->tensors, xnnpack_tensors);
+      case kTfLiteBuiltinMaxPool2d: {
+        const TfLitePoolParams* pool_params =
+            static_cast<const TfLitePoolParams*>(node->builtin_data);
+
+        return VisitMaxPool2DNode(subgraph, logging_context, node_index, node,
+                                  context->tensors, pool_params,
+                                  xnnpack_tensors);
+      }
       case kTfLiteBuiltinMul: {
         const TfLiteMulParams* mul_params =
             static_cast<const TfLiteMulParams*>(node->builtin_data);
@@ -589,6 +713,36 @@ class Subgraph {
         return VisitSoftmaxNode(subgraph, logging_context, node_index, node,
                                 context->tensors, softmax_params,
                                 xnnpack_tensors);
+      }
+      case kTfLiteBuiltinCustom: {
+        if (strcmp(registration->custom_name, "Convolution2DTransposeBias") ==
+            0) {
+          TfLiteTransposeConvParams deconv_params = {kTfLitePaddingUnknown};
+          std::memcpy(&deconv_params, node->custom_initial_data,
+                      node->custom_initial_data_size);
+
+          return VisitMediaPipeDeconvolutionNode(
+              subgraph, context, node_index, node, context->tensors,
+              &deconv_params, xnnpack_tensors);
+        } else if (strcmp(registration->custom_name,
+                          "MaxPoolingWithArgmax2D") == 0) {
+          TfLitePoolParams pool_params = {kTfLitePaddingUnknown};
+          std::memcpy(&pool_params, node->custom_initial_data,
+                      node->custom_initial_data_size);
+
+          return VisitMediaPipeMaxPoolingNode(subgraph, context, node_index,
+                                              node, context->tensors,
+                                              &pool_params, xnnpack_tensors);
+        } else if (strcmp(registration->custom_name, "MaxUnpooling2D") == 0) {
+          TfLitePoolParams pool_params = {kTfLitePaddingUnknown};
+          std::memcpy(&pool_params, node->custom_initial_data,
+                      node->custom_initial_data_size);
+
+          return VisitMediaPipeUnpoolingNode(subgraph, context, node_index,
+                                             node, context->tensors,
+                                             &pool_params, xnnpack_tensors);
+        }
+        return kTfLiteError;
       }
       default:
         return kTfLiteError;
@@ -636,8 +790,66 @@ class Subgraph {
           /*input2_id=*/xnnpack_tensors[node->inputs->data[1]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate ADD node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context, "failed to delegate ADD node #%d",
+                           node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitAveragePool2DNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLitePoolParams* pool_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 1, 1, node_index));
+
+    const TfLiteTensor& input_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+
+    const TfLiteTensor& output_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+
+    TF_LITE_ENSURE_STATUS(
+        CheckPoolingParams(logging_context, pool_params, node_index));
+
+    uint32_t flags = 0;
+    TF_LITE_ENSURE_STATUS(CalculatePadding(
+        logging_context, pool_params->padding, &flags, node_index));
+
+    float output_min = -std::numeric_limits<float>::infinity();
+    float output_max = +std::numeric_limits<float>::infinity();
+    TF_LITE_ENSURE_STATUS(ConvertActivationToOutputRange(
+        logging_context, node_index, pool_params->activation, &output_min,
+        &output_max));
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_average_pooling_2d(
+          subgraph,
+          /*input_padding_top=*/0,
+          /*input_padding_right=*/0,
+          /*input_padding_bottom=*/0,
+          /*input_padding_left=*/0,
+          static_cast<uint32_t>(pool_params->filter_height),
+          static_cast<uint32_t>(pool_params->filter_width),
+          static_cast<uint32_t>(pool_params->stride_height),
+          static_cast<uint32_t>(pool_params->stride_width), output_min,
+          output_max,
+          /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*output_id=*/xnnpack_tensors[node->outputs->data[0]], flags);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate AVERAGE_POOL_2D node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -722,8 +934,8 @@ class Subgraph {
           /*bias_id=*/xnnpack_tensors[node->inputs->data[2]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], flags);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate CONV_2D node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate CONV_2D node #%d", node_index);
         return kTfLiteError;
       }
     }
@@ -810,9 +1022,147 @@ class Subgraph {
           /*bias_id=*/xnnpack_tensors[node->inputs->data[2]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], flags);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate DEPTHWISE_CONV_2D node #%d",
-            node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate DEPTHWISE_CONV_2D node #%d",
+                           node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitFullyConnectedNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLiteFullyConnectedParams* fc_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckFullyConnectedParams(logging_context, fc_params, node_index));
+
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 3, 1, node_index));
+
+    const TfLiteTensor& input_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+
+    const TfLiteTensor& filter_tensor = tensors[node->inputs->data[1]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, filter_tensor, node->inputs->data[1], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, filter_tensor, 2,
+                                           node->inputs->data[1]));
+    TF_LITE_ENSURE_STATUS(CheckTensorStaticAllocation(
+        logging_context, filter_tensor, node->inputs->data[1], node_index));
+
+    const TfLiteTensor& bias_tensor = tensors[node->inputs->data[2]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, filter_tensor, node->inputs->data[2], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, bias_tensor, 1,
+                                           node->inputs->data[2]));
+    TF_LITE_ENSURE_STATUS(CheckTensorStaticAllocation(
+        logging_context, bias_tensor, node->inputs->data[2], node_index));
+
+    const TfLiteTensor& output_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+
+    const int32_t output_channels = filter_tensor.dims->data[0];
+    const int32_t input_channels = filter_tensor.dims->data[1];
+
+    if (input_tensor.dims->size == 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          logging_context,
+          "unexpected number of shape dimensions %d in tensor #%d",
+          input_tensor.dims->size, node->inputs->data[0]);
+      return kTfLiteError;
+    }
+
+    int32_t num_input_elements = 1;
+    for (int i = 0; i < input_tensor.dims->size; i++) {
+      if (input_tensor.dims->data[i] <= 0) {
+        TF_LITE_MAYBE_KERNEL_LOG(
+            logging_context, "invalid dimension #%d (%d) in tensor #%d", i,
+            input_tensor.dims->data[i], node->inputs->data[0]);
+        return kTfLiteError;
+      }
+      num_input_elements *= input_tensor.dims->data[i];
+    }
+
+    if (fc_params->keep_num_dims) {
+      TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_tensor,
+                                             input_tensor.dims->size,
+                                             node->outputs->data[0]));
+
+      for (int i = 0; i < input_tensor.dims->size - 1; i++) {
+        if (input_tensor.dims->data[i] != output_tensor.dims->data[i]) {
+          TF_LITE_MAYBE_KERNEL_LOG(
+              logging_context,
+              "mismatch in shape dimension %d (%d != %d) in input and output "
+              "tensors of FULLY_CONNECTED operator #%d",
+              i, input_tensor.dims->data[i], output_tensor.dims->data[i],
+              node_index);
+          return kTfLiteError;
+        }
+      }
+    } else {
+      if (num_input_elements % input_channels != 0) {
+        TF_LITE_MAYBE_KERNEL_LOG(
+            logging_context,
+            "number of elements in input tensor #%d in FULLY_CONNECTED "
+            "operator is not divisible by input channels (%d)",
+            node->inputs->data[0], input_channels);
+        return kTfLiteError;
+      }
+
+      TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_tensor, 2,
+                                             node->outputs->data[0]));
+
+      if (output_tensor.dims->data[0] != num_input_elements / input_channels) {
+        TF_LITE_MAYBE_KERNEL_LOG(
+            logging_context,
+            "batch size %d in output tensor #%d in FULLY_CONNECTED operator "
+            "does not match batch size %d in reshaped input tensor #%d",
+            output_tensor.dims->data[0], node->outputs->data[0],
+            num_input_elements / input_channels, node->inputs->data[0]);
+        return kTfLiteError;
+      }
+    }
+
+    if (output_tensor.dims->data[output_tensor.dims->size - 1] !=
+        output_channels) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          logging_context,
+          "number of channels %d in output tensor #%d does not match output "
+          "channels %d in filter tensor #%d",
+          output_tensor.dims->data[output_tensor.dims->size - 1],
+          node->outputs->data[0], output_channels, node->inputs->data[1]);
+      return kTfLiteError;
+    }
+
+    float output_min = -std::numeric_limits<float>::infinity();
+    float output_max = +std::numeric_limits<float>::infinity();
+    TF_LITE_ENSURE_STATUS(ConvertActivationToOutputRange(
+        logging_context, node_index, fc_params->activation, &output_min,
+        &output_max));
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_fully_connected(
+          subgraph, output_min, output_max,
+          /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*filter_id=*/xnnpack_tensors[node->inputs->data[1]],
+          /*bias_id=*/xnnpack_tensors[node->inputs->data[2]],
+          /*output_id=*/xnnpack_tensors[node->outputs->data[0]],
+          /*flags=*/fc_params->keep_num_dims ? 0
+                                             : XNN_FLAG_TENSORFLOW_RESHAPE_2D);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate FULLY_CONNECTED node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -844,9 +1194,9 @@ class Subgraph {
           subgraph, /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(logging_context,
-                                     "failed to delegate HARD_SWISH node #%d",
-                                     node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate HARD_SWISH node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -878,8 +1228,286 @@ class Subgraph {
           subgraph, /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate SIGMOID node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate SIGMOID node #%d", node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitMaxPool2DNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLitePoolParams* pool_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 1, 1, node_index));
+
+    const TfLiteTensor& input_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+
+    const TfLiteTensor& output_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+
+    TF_LITE_ENSURE_STATUS(
+        CheckPoolingParams(logging_context, pool_params, node_index));
+
+    uint32_t flags = 0;
+    TF_LITE_ENSURE_STATUS(CalculatePadding(
+        logging_context, pool_params->padding, &flags, node_index));
+
+    float output_min = -std::numeric_limits<float>::infinity();
+    float output_max = +std::numeric_limits<float>::infinity();
+    TF_LITE_ENSURE_STATUS(ConvertActivationToOutputRange(
+        logging_context, node_index, pool_params->activation, &output_min,
+        &output_max));
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_max_pooling_2d(
+          subgraph,
+          /*input_padding_top=*/0,
+          /*input_padding_right=*/0,
+          /*input_padding_bottom=*/0,
+          /*input_padding_left=*/0,
+          static_cast<uint32_t>(pool_params->filter_height),
+          static_cast<uint32_t>(pool_params->filter_width),
+          static_cast<uint32_t>(pool_params->stride_height),
+          static_cast<uint32_t>(pool_params->stride_width),
+          /*dilation_height=*/1,
+          /*dilation_width=*/1, output_min, output_max,
+          /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*output_id=*/xnnpack_tensors[node->outputs->data[0]], flags);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate MAX_POOL_2D node #%d",
+                           node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitMediaPipeDeconvolutionNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLiteTransposeConvParams* deconv_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 3, 1, node_index));
+
+    const TfLiteTensor& input_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, input_tensor, 4,
+                                           node->inputs->data[0]));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+
+    const TfLiteTensor& filter_tensor = tensors[node->inputs->data[1]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, filter_tensor, node->inputs->data[1], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, filter_tensor, 4,
+                                           node->inputs->data[1]));
+    TF_LITE_ENSURE_STATUS(CheckTensorStaticAllocation(
+        logging_context, filter_tensor, node->inputs->data[1], node_index));
+
+    const TfLiteTensor& bias_tensor = tensors[node->inputs->data[2]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, filter_tensor, node->inputs->data[2], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, bias_tensor, 1,
+                                           node->inputs->data[2]));
+    TF_LITE_ENSURE_STATUS(CheckTensorStaticAllocation(
+        logging_context, bias_tensor, node->inputs->data[2], node_index));
+
+    const TfLiteTensor& output_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_tensor, 4,
+                                           node->outputs->data[0]));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+
+    const int output_channels = filter_tensor.dims->data[0];
+    const int kernel_height = filter_tensor.dims->data[1];
+    const int kernel_width = filter_tensor.dims->data[2];
+    const int input_channels = filter_tensor.dims->data[3];
+
+    TF_LITE_ENSURE_STATUS(CheckMediaPipeTransposedConvolutionParams(
+        logging_context, deconv_params, node_index));
+
+    uint32_t flags = 0;
+    TF_LITE_ENSURE_STATUS(CalculatePadding(
+        logging_context, deconv_params->padding, &flags, node_index));
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_deconvolution_2d(
+          subgraph,
+          /*padding_top=*/0,
+          /*padding_right=*/0,
+          /*padding_bottom=*/0,
+          /*padding_left=*/0,
+          /*adjustment_height=*/0,
+          /*adjustment_width=*/0, static_cast<uint32_t>(kernel_height),
+          static_cast<uint32_t>(kernel_width),
+          static_cast<uint32_t>(deconv_params->stride_height),
+          static_cast<uint32_t>(deconv_params->stride_width),
+          /*dilation_height=*/1,
+          /*dilation_width=*/1,
+          /*groups=*/1,
+          /*group_input_channels=*/input_channels,
+          /*group_output_channels=*/output_channels,
+          /*output_min=*/-std::numeric_limits<float>::infinity(),
+          /*output_max=*/+std::numeric_limits<float>::infinity(),
+          /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*filter_id=*/xnnpack_tensors[node->inputs->data[1]],
+          /*bias_id=*/xnnpack_tensors[node->inputs->data[2]],
+          /*output_id=*/xnnpack_tensors[node->outputs->data[0]], flags);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(
+            logging_context,
+            "failed to delegate Convolution2DTransposeBias node #%d",
+            node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitMediaPipeMaxPoolingNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLitePoolParams* pool_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 1, 2, node_index));
+
+    const TfLiteTensor& input_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, input_tensor, 4,
+                                           node->inputs->data[0]));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, input_tensor, node->inputs->data[0], node_index));
+
+    const TfLiteTensor& output_value_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorFloatType(logging_context, output_value_tensor,
+                             node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_value_tensor,
+                                           4, node->outputs->data[0]));
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorNonDynamicAllocation(logging_context, output_value_tensor,
+                                        node->outputs->data[0], node_index));
+
+    const TfLiteTensor& output_index_tensor = tensors[node->outputs->data[1]];
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_index_tensor,
+                                           4, node->outputs->data[1]));
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorNonDynamicAllocation(logging_context, output_index_tensor,
+                                        node->outputs->data[1], node_index));
+
+    TF_LITE_ENSURE_STATUS(
+        CheckMediaPipePoolParams(logging_context, pool_params, node_index));
+
+    uint32_t flags = 0;
+    TF_LITE_ENSURE_STATUS(CalculatePadding(
+        logging_context, pool_params->padding, &flags, node_index));
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_argmax_pooling_2d(
+          subgraph,
+          /*input_padding_top=*/0,
+          /*input_padding_right=*/0,
+          /*input_padding_bottom=*/0,
+          /*input_padding_left=*/0,
+          static_cast<uint32_t>(pool_params->filter_height),
+          static_cast<uint32_t>(pool_params->filter_width),
+          /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*output_value_id=*/xnnpack_tensors[node->outputs->data[0]],
+          /*output_index_id=*/xnnpack_tensors[node->outputs->data[1]], flags);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(
+            logging_context,
+            "failed to delegate CUSTOM(MaxPoolingWithArgmax2D) node #%d",
+            node_index);
+        return kTfLiteError;
+      }
+    }
+
+    return kTfLiteOk;
+  }
+
+  static TfLiteStatus VisitMediaPipeUnpoolingNode(
+      xnn_subgraph_t subgraph, TfLiteContext* logging_context, int node_index,
+      TfLiteNode* node, const TfLiteTensor* tensors,
+      const TfLitePoolParams* pool_params,
+      const std::vector<uint32_t>& xnnpack_tensors) {
+    TF_LITE_ENSURE_STATUS(
+        CheckNumInputsAndOutputs(logging_context, node, 2, 1, node_index));
+
+    const TfLiteTensor& input_value_tensor = tensors[node->inputs->data[0]];
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorFloatType(logging_context, input_value_tensor,
+                             node->inputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, input_value_tensor,
+                                           4, node->inputs->data[0]));
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorNonDynamicAllocation(logging_context, input_value_tensor,
+                                        node->inputs->data[0], node_index));
+
+    const TfLiteTensor& input_index_tensor = tensors[node->inputs->data[1]];
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, input_index_tensor,
+                                           4, node->inputs->data[1]));
+    TF_LITE_ENSURE_STATUS(
+        CheckTensorNonDynamicAllocation(logging_context, input_index_tensor,
+                                        node->inputs->data[1], node_index));
+
+    const TfLiteTensor& output_tensor = tensors[node->outputs->data[0]];
+    TF_LITE_ENSURE_STATUS(CheckTensorFloatType(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+    TF_LITE_ENSURE_STATUS(CheckTensorShape(logging_context, output_tensor, 4,
+                                           node->outputs->data[0]));
+    TF_LITE_ENSURE_STATUS(CheckTensorNonDynamicAllocation(
+        logging_context, output_tensor, node->outputs->data[0], node_index));
+
+    TF_LITE_ENSURE_STATUS(
+        CheckMediaPipePoolParams(logging_context, pool_params, node_index));
+
+    uint32_t flags = 0;
+    TF_LITE_ENSURE_STATUS(CalculatePadding(
+        logging_context, pool_params->padding, &flags, node_index));
+    if (flags != 0) {
+      TF_LITE_MAYBE_KERNEL_LOG(
+          logging_context, "invalid padding mode (%d) in node #%d",
+          static_cast<int>(pool_params->padding), node_index);
+    }
+
+    if (subgraph != nullptr) {
+      const xnn_status status = xnn_define_unpooling_2d(
+          subgraph,
+          /*padding_top=*/0,
+          /*padding_right=*/0,
+          /*padding_bottom=*/0,
+          /*padding_left=*/0, static_cast<uint32_t>(pool_params->filter_height),
+          static_cast<uint32_t>(pool_params->filter_width),
+          /*input_value_id=*/xnnpack_tensors[node->inputs->data[0]],
+          /*input_index_id=*/xnnpack_tensors[node->inputs->data[1]],
+          /*output_id=*/xnnpack_tensors[node->outputs->data[0]],
+          /*flags=*/0);
+      if (status != xnn_status_success) {
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate CUSTOM(MaxUnpooling2D) node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -928,8 +1556,8 @@ class Subgraph {
           /*input2_id=*/xnnpack_tensors[node->inputs->data[1]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate MUL node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context, "failed to delegate MUL node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -974,8 +1602,8 @@ class Subgraph {
           /*slope_id=*/xnnpack_tensors[node->inputs->data[1]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate PRELU node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context, "failed to delegate PRELU node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -1008,8 +1636,8 @@ class Subgraph {
           /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate RELU node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context, "failed to delegate RELU node #%d",
+                           node_index);
         return kTfLiteError;
       }
     }
@@ -1024,9 +1652,9 @@ class Subgraph {
       const std::vector<uint32_t>& xnnpack_tensors) {
     if (params->beta != 1.0f) {
       if (logging_context != nullptr) {
-        logging_context->ReportError(
-            logging_context, "unsupported beta value %.7f in SOFTMAX node #%d",
-            params->beta, node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "unsupported beta value %.7f in SOFTMAX node #%d",
+                           params->beta, node_index);
       }
       return kTfLiteError;
     }
@@ -1051,8 +1679,8 @@ class Subgraph {
           subgraph, /*input_id=*/xnnpack_tensors[node->inputs->data[0]],
           /*output_id=*/xnnpack_tensors[node->outputs->data[0]], /*flags=*/0);
       if (status != xnn_status_success) {
-        logging_context->ReportError(
-            logging_context, "failed to delegate SOFTMAX node #%d", node_index);
+        TF_LITE_KERNEL_LOG(logging_context,
+                           "failed to delegate SOFTMAX node #%d", node_index);
         return kTfLiteError;
       }
     }
@@ -1077,7 +1705,7 @@ class Subgraph {
 TfLiteIntArray* GetOpsToReplace(TfLiteContext* context) {
   TfLiteIntArray* execution_plan = nullptr;
   if (context->GetExecutionPlan(context, &execution_plan) != kTfLiteOk) {
-    context->ReportError(context, "Unable to get graph execution plan.");
+    TF_LITE_KERNEL_LOG(context, "Unable to get graph execution plan.");
     return nullptr;
   }
 
@@ -1091,9 +1719,9 @@ TfLiteIntArray* GetOpsToReplace(TfLiteContext* context) {
     TfLiteRegistration* registration = nullptr;
     if (context->GetNodeAndRegistration(context, node_index, &node,
                                         &registration) != kTfLiteOk) {
-      context->ReportError(context,
-                           "Unable to get node and registration for node %d.",
-                           node_index);
+      TF_LITE_KERNEL_LOG(context,
+                         "Unable to get node and registration for node %d.",
+                         node_index);
       continue;  // Soft error (skip this node).
     }
 
@@ -1105,6 +1733,20 @@ TfLiteIntArray* GetOpsToReplace(TfLiteContext* context) {
 
     nodes_to_replace->data[nodes_to_replace->size++] = node_index;
   }
+
+#ifdef XNNPACK_DELEGATE_TEST_MODE
+  // In the test mode build (used by unit tests), XNNPACK delegate claims to
+  // support all operators in the execution plan to disable fallback to the
+  // default TensorFlow Lite kernels. Thus, if any of the ops in the model are
+  // not supported by the delegate, they will cause a failure in
+  // ::tflite::Interpreter::ModifyGraphWithDelegate, to be caught in the unit
+  // tests.
+  nodes_to_replace->size = execution_plan->size;
+  std::copy(&execution_plan->data[0],
+            &execution_plan->data[execution_plan->size],
+            &nodes_to_replace->data[0]);
+#endif
+
   return nodes_to_replace;
 }
 
@@ -1120,10 +1762,18 @@ void* SubgraphInit(TfLiteContext* context, const char* buffer, size_t length) {
 }
 
 TfLiteStatus SubgraphPrepare(TfLiteContext* context, TfLiteNode* node) {
+  if (node->user_data == nullptr) {
+    return kTfLiteError;
+  }
+
   return static_cast<Subgraph*>(node->user_data)->Prepare(context);
 }
 
 TfLiteStatus SubgraphInvoke(TfLiteContext* context, TfLiteNode* node) {
+  if (node->user_data == nullptr) {
+    return kTfLiteError;
+  }
+
   return static_cast<Subgraph*>(node->user_data)->Invoke(context);
 }
 

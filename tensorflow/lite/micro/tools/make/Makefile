@@ -1,4 +1,3 @@
-
 ifneq (3.82,$(firstword $(sort $(MAKE_VERSION) 3.82)))
   $(error "Requires make version 3.82 or later (current is $(MAKE_VERSION))")
 endif
@@ -6,6 +5,9 @@ endif
 here=$(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 # This is present only in installed copy and sets TFLITE_U_PATH 
 -include $(here)/installed_settings.inc
+
+# root directory of tensorflow
+MAKEFILE_DIR := tensorflow/lite/micro/tools/make
 
 
 ifneq ($(TFLITE_U_PATH),)
@@ -67,21 +69,22 @@ INCLUDES := \
 -I$(call portable_path,$(TFLITE_INCLUDE)) \
 -I$(PORTABLE_MAKEFILE_DIR)/downloads/ \
 -I$(PORTABLE_MAKEFILE_DIR)/downloads/gemmlowp \
--I$(PORTABLE_MAKEFILE_DIR)/downloads/flatbuffers/include
-
-
+-I$(PORTABLE_MAKEFILE_DIR)/downloads/flatbuffers/include \
+-I$(PORTABLE_MAKEFILE_DIR)/downloads/ruy
 # Same list of paths, but now relative to the generated project files.
 GENERATED_PROJECT_INCLUDES := \
 -I. \
 -I./third_party/gemmlowp \
--I./third_party/flatbuffers/include
+-I./third_party/flatbuffers/include \
+-I./third_party/ruy
 
 # Same list of paths, but now in the format the generate_keil_project.py
 # script expects them.
 PROJECT_INCLUDES := \
 . \
 third_party/gemmlowp \
-third_party/flatbuffers/include
+third_party/flatbuffers/include \
+third_party/ruy
 
 TEST_SCRIPT := $(TESTING_DIR)/test_linux_binary.sh
 
@@ -91,8 +94,10 @@ MICROLITE_LIBS := -lm
 CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY
 CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY
 ARFLAGS := -r
+
+# override these in the makefile.inc for specific compiler targets
 TARGET_TOOLCHAIN_PREFIX :=
-CC_PREFIX :=
+TARGET_TOOLCHAIN_ROOT :=
 
 ifeq ($(BUILD_TYPE), debug)
 	CXXFLAGS += -DDEBUG -g
@@ -103,8 +108,8 @@ else ifeq ($(BUILD_TYPE), release)
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
     BUILD_SUFFIX := _release
 else
-	CXXFLAGS += -O3
-	CCFLAGS  += -O3
+	CXXFLAGS += -DNDEBUG -O3
+	CCFLAGS  += -DNDEBUG -O3
     BUILD_SUFFIX := 
 endif
 
@@ -112,12 +117,18 @@ endif
 # runtime that can be linked in to other programs.
 MICROLITE_LIB_NAME := libtensorflow-microlite.a
 
-MICRO_LITE_EXAMPLE_TESTS := $(wildcard $(EXAMPLES_DIR)*/Makefile.inc)
+MICRO_LITE_EXAMPLE_TESTS := $(shell find  $(EXAMPLES_DIR) -name Makefile.inc)
+
+MICRO_LITE_BENCHMARKS := $(wildcard tensorflow/lite/micro/benchmarks/Makefile.inc)
 
 MICROLITE_TEST_SRCS := \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*test.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*test.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*test.cc)
+
+# TODO(b/152645559): move all benchmarks to benchmarks directory.
+MICROLITE_BENCHMARK_SRCS := \
+$(wildcard tensorflow/lite/micro/benchmarks/*.cc)
 
 MICROLITE_TEST_HDRS := \
 $(wildcard tensorflow/lite/micro/testing/*.h)
@@ -132,9 +143,11 @@ $(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/op_resolver.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/tensor_utils.cc \
 $(TFLITE_U_PATH)tensorflow/lite/kernels/internal/quantization_util.cc \
-$(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc
+$(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc \
+$(TFLITE_U_PATH)tensorflow/lite/micro/testing/test_utils.cc
 
 MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))
+MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_BENCHMARK_SRCS), $(MICROLITE_CC_SRCS))
 
 MICROLITE_CC_HDRS := \
 $(wildcard tensorflow/lite/micro/*.h) \
@@ -148,7 +161,6 @@ tensorflow/lite/core/api/error_reporter.h \
 tensorflow/lite/core/api/flatbuffer_conversions.h \
 tensorflow/lite/core/api/op_resolver.h \
 tensorflow/lite/core/api/tensor_utils.h \
-tensorflow/lite/experimental/ruy/profiler/instrumentation.h \
 tensorflow/lite/kernels/internal/common.h \
 tensorflow/lite/kernels/internal/compatibility.h \
 tensorflow/lite/kernels/internal/optimized/neon_check.h \
@@ -169,8 +181,10 @@ tensorflow/lite/kernels/internal/reference/integer_ops/add.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h \
+tensorflow/lite/kernels/internal/reference/integer_ops/logistic.h \
+tensorflow/lite/kernels/internal/reference/integer_ops/l2normalization.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/mul.h \
-tensorflow/lite/kernels/internal/reference/integer_ops/softmax.h \
+tensorflow/lite/kernels/internal/reference/l2normalization.h \
 tensorflow/lite/kernels/internal/reference/maximum_minimum.h \
 tensorflow/lite/kernels/internal/reference/mul.h \
 tensorflow/lite/kernels/internal/reference/neg.h \
@@ -181,12 +195,14 @@ tensorflow/lite/kernels/internal/reference/process_broadcast_shapes.h \
 tensorflow/lite/kernels/internal/reference/quantize.h \
 tensorflow/lite/kernels/internal/reference/reduce.h \
 tensorflow/lite/kernels/internal/reference/requantize.h \
+tensorflow/lite/kernels/internal/reference/resize_nearest_neighbor.h \
 tensorflow/lite/kernels/internal/reference/round.h \
 tensorflow/lite/kernels/internal/reference/softmax.h \
+tensorflow/lite/kernels/internal/reference/sub.h \
 tensorflow/lite/kernels/internal/reference/logistic.h \
 tensorflow/lite/kernels/internal/reference/strided_slice.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h \
-tensorflow/lite/kernels/internal/round.h \
+tensorflow/lite/kernels/internal/cppmath.h \
 tensorflow/lite/kernels/internal/strided_slice_logic.h \
 tensorflow/lite/kernels/internal/tensor.h \
 tensorflow/lite/kernels/internal/tensor_ctypes.h \
@@ -208,11 +224,13 @@ third_party/gemmlowp/LICENSE \
 third_party/flatbuffers/include/flatbuffers/base.h \
 third_party/flatbuffers/include/flatbuffers/stl_emulation.h \
 third_party/flatbuffers/include/flatbuffers/flatbuffers.h \
-third_party/flatbuffers/LICENSE.txt
+third_party/flatbuffers/LICENSE.txt \
+third_party/ruy/ruy/profiler/instrumentation.h
+
 
 MAKE_PROJECT_FILES := \
-  README_MAKE.md \
   Makefile \
+  README_MAKE.md \
   .vscode/tasks.json
 
 MBED_PROJECT_FILES := \
@@ -271,16 +289,18 @@ PRJDIR := $(GENDIR)prj/
 
 MICROLITE_LIB_PATH := $(LIBDIR)$(MICROLITE_LIB_NAME)
 
-CXX := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${CXX_TOOL}
-CC := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${CC_TOOL}
-AR := $(CC_PREFIX)${TARGET_TOOLCHAIN_PREFIX}${AR_TOOL}
-
+CXX := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CXX_TOOL}
+CC := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CC_TOOL}
+AR := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${AR_TOOL}
 
 # Load the examples.
 include $(MICRO_LITE_EXAMPLE_TESTS)
 
+# Load the benchmarks.
+include $(MICRO_LITE_BENCHMARKS)
+
 # Create rules for downloading third-party dependencies.
-THIRD_PARTY_TARGETS +=
+THIRD_PARTY_TARGETS :=
 $(foreach DOWNLOAD,$(THIRD_PARTY_DOWNLOADS),$(eval $(call create_download_rule,$(DOWNLOAD))))
 third_party_downloads: $(THIRD_PARTY_TARGETS)
 
@@ -325,19 +345,17 @@ $(BINDIR)%_test : $(OBJDIR)%_test.o $(MICROLITE_LIB_PATH)
 	-o $@ $< \
 	$(LIBFLAGS) $(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS)
 
-$(BINDIR)%.test_target: $(BINDIR)%_test
-	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script. Is the software emulation available in $(TARGET)?'; exit 1)
+$(BINDIR)%.test_target: $(BINDIR)%_test generated_test_scripts
+	@test -f $(TEST_SCRIPT) || (echo 'Unable to find the test script $(TEST_SCRIPT). Is the software emulation available in $(TARGET)?'; exit 1)
 	$(TEST_SCRIPT) $< '~~~ALL TESTS PASSED~~~'
 
 # snease: Add %.bin rule here since BINDIR is now defined
 # These are microcontroller-specific rules for converting the ELF output
 # of the linker into a binary image that can be loaded directly.
-OBJCOPY := $(TARGET_TOOLCHAIN_PREFIX)objcopy
+OBJCOPY := ${TARGET_TOOLCHAIN_ROOT}$(TARGET_TOOLCHAIN_PREFIX)objcopy
 $(BINDIR)%.bin: $(BINDIR)%
 	@mkdir -p $(dir $@)
 	$(OBJCOPY) $< $@ -O binary
-
-ifeq ($(TFLITE_U_PATH),)
 
 # Generate standalone makefile projects for all of the test targets.
 $(foreach TEST_TARGET,$(filter-out tensorflow/lite/micro/kernels/%,$(MICROLITE_TEST_SRCS)),\
@@ -350,6 +368,7 @@ test: $(MICROLITE_TEST_TARGETS)
 # Just build the test targets
 build: $(MICROLITE_BUILD_TARGETS)
 
+ifndef TFLITE_U_PATH
 generate_projects: $(ALL_PROJECT_TARGETS)
 
 generate_non_kernel_projects: $(filter-out generate_kernel%,$(ALL_PROJECT_TARGETS))
@@ -363,6 +382,13 @@ generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
 clean_downloads:
 	rm -rf $(MAKEFILE_DIR)/downloads
 
+
+TESTING_TEMPLS:=$(wildcard $(TESTING_DIR)/*.sh.tpl)
+GENERATED_TEST_SCRIPTS:=$(patsubst $(TESTING_DIR)/%.sh.tpl,$(MAKEFILE_DIR)/gen/%.sh,$(TESTING_TEMPLS))
+
+generated_test_scripts: $(GENERATED_TEST_SCRIPTS)
+else
+generated_test_scripts:
 endif
 
 

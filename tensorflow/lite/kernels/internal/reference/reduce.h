@@ -15,16 +15,12 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_REDUCE_H_
 #define TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_REDUCE_H_
 
-#include "tensorflow/lite/experimental/ruy/profiler/instrumentation.h"
+#include "ruy/profiler/instrumentation.h"  // from @ruy
 #include "tensorflow/lite/kernels/internal/common.h"
+#include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 
-#ifdef TF_LITE_USE_GLOBAL_MATH
-#define TF_LITE_round ::round
-#else
-#define	TF_LITE_round std::round
-#endif
 namespace tflite {
 
 namespace reference_ops {
@@ -376,7 +372,7 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
           -input_zero_point * scale * num_elements_in_axis + 0.5f;
       for (size_t idx = 0; idx < num_outputs; ++idx) {
         const U value =
-            static_cast<U>(TF_LITE_round(temp_sum[idx] * scale + bias)) +
+            static_cast<U>(TfLiteRound(temp_sum[idx] * scale + bias)) +
             output_zero_point;
         output_data[idx] = static_cast<T>(value);
       }
@@ -386,7 +382,7 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
         float float_mean = static_cast<float>(temp_sum[idx]) /
                            static_cast<float>(num_elements_in_axis);
         float result =
-            std::min(::roundf(float_mean * scale + bias) + output_zero_point,
+            std::min(TfLiteRound(float_mean * scale + bias) + output_zero_point,
                      static_cast<float>(std::numeric_limits<T>::max()));
         result =
             std::max(result, static_cast<float>(std::numeric_limits<T>::min()));
@@ -400,7 +396,5 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32 input_zero_point,
 }  // namespace reference_ops
 
 }  // namespace tflite
-
-#undef TF_LITE_round
 
 #endif  // TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_REDUCE_H_
