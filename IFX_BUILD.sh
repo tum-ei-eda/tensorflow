@@ -94,6 +94,7 @@ then
       --local_cpu_resources="$LOCALJOBS" "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
       "${BAZEL_CXX_BUILD_SETTINGS[@]}"
+      --config=monolithic
      --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
 	    "--repository_cache=/home/aifordes.work/bazel_repo_cache" 
 	    # Note: Cannot enable debug non-NFS scratch for bazel_root too small...
@@ -106,6 +107,7 @@ else
       --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
       "${BAZEL_CXX_BUILD_SETTINGS[@]}"
+      --config=monolithic
       --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
       --verbose_failures=yes
   )
