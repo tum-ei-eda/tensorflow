@@ -168,13 +168,13 @@ TfLiteTensor CreateQuantizedTensor(const uint8_t* data, TfLiteIntArray* dims,
   result.data.uint8 = const_cast<uint8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<uint8_t>(min, max),
-                   ZeroPointFromMinMax<uint8_t>(min, max),
-                   0};
+                   ZeroPointFromMinMax<uint8_t>(min, max)};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(uint8_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = false;
+  result.quantization.custom = nullptr;
   return result;
 }
 
@@ -192,13 +192,13 @@ TfLiteTensor CreateQuantizedTensor(const int8_t* data, TfLiteIntArray* dims,
   result.data.int8 = const_cast<int8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<int8_t>(min, max),
-                   ZeroPointFromMinMax<int8_t>(min, max),
-                   0};
+                   ZeroPointFromMinMax<int8_t>(min, max)};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.custom = nullptr;
   return result;
 }
 
@@ -222,6 +222,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, uint8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.custom = nullptr;
   return result;
 }
 
@@ -239,6 +240,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.custom = nullptr;
   return result;
 }
 
@@ -256,6 +258,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int16_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.custom = nullptr;
   return result;
 }
 
@@ -269,12 +272,13 @@ TfLiteTensor CreateQuantized32Tensor(const int32_t* data, TfLiteIntArray* dims,
   // Quantized int32 tensors always have a zero point of 0, since the range of
   // int32 values is large, and because zero point costs extra cycles during
   // processing.
-  result.params = {scale, 0, 0};
+  result.params = {scale, 0};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.custom = nullptr;
   return result;
 }
 

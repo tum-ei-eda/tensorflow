@@ -50,11 +50,38 @@ static std::vector<uint8_t> Pack_2x4bit(const uint8_t* data, size_t elts) {
   return packed;
 }
 
+// @IFX_PATCH@
+// TODO Should enforce 16-byte alignment to march flat-buffer...
+struct PackingFormatCustomQuantization
+{
+    PackingFormatCustomQuantization(uint8_t bits_per_item, uint8_t container_bits) {
+        size = 6;
+        data[4] = bits_per_item;
+        data[5] = container_bits;
+    }
+
+    inline uint32_t BitsPerItem() const
+    {
+        return data[4];
+    }
+
+    inline const TfLiteUInt8Array *CustomQuantizationVector() const
+    {
+        return reinterpret_cast<const TfLiteUInt8Array *>(this);
+    }
+
+private:
+
+    int size;
+    // Buffer for actual data - normally in flat buffer
+    uint8_t data[6];
+};
+
 static void SetPackingParams(TfLiteTensor &tensor, float min, float max,
-                             uint32_t bits_per_item) {
-    tensor.params.scale = ScaleFromMinMaxPacked(min, max, bits_per_item);
-    tensor.params.zero_point = ZeroPointFromMinMaxPacked(min, max, bits_per_item);
-    tensor.params.bits_per_item = bits_per_item;
+                             PackingFormatCustomQuantization &format) {
+    tensor.params.scale = ScaleFromMinMaxPacked(min, max, format.BitsPerItem() );
+    tensor.params.zero_point = ZeroPointFromMinMaxPacked(min, max, format.BitsPerItem());
+    tensor.quantization.custom = format.CustomQuantizationVector();
 }
 
 TfLiteStatus TestFullyConnectedFloat(
@@ -167,10 +194,11 @@ TfLiteStatus TestFullyConnectedQuantized(
                             output_min, output_max),
   };
 
+  PackingFormatCustomQuantization packing(weights_bits_per_item, 8);
   if (weights_bits_per_item != 0)
   {
       TF_LITE_MICRO_EXPECT_EQ(weights_bits_per_item, 4);
-      SetPackingParams(tensors[1], weights_min, weights_max, weights_bits_per_item);
+      SetPackingParams(tensors[1], weights_min, weights_max, packing);
   }
 
 

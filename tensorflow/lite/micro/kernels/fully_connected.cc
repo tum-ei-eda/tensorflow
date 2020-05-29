@@ -95,6 +95,18 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
+  // @IFX_PATCH@
+  if( auto custom_qinfo = filter->quantization.custom )
+  {
+    TF_LITE_ENSURE_MSG(context, custom_qinfo->size == 6,
+                       "Unrecognized custom quantization info block");
+    // ToDO Check magic number
+    // TODO Define TfLite Struct to reinterpret (known aligned!) data
+    TF_LITE_ENSURE_MSG(context, custom_qinfo->data[4] == 4 && custom_qinfo->data[5] == 8,
+                       "Currently unsupported packing format" );
+  }
+
+
   TF_LITE_ENSURE_EQ(context, input->type, output->type);
   TF_LITE_ENSURE_MSG(context, input->type == filter->type,
                      "Hybrid models are not supported on TFLite Micro.");
@@ -213,7 +225,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
       GetTensorShape(output), GetTensorData<output_data_type>(output))
   switch (output->type) {
     case kTfLiteUInt8:
-      if( filter->params.bits_per_item == 4 ) {
+      if( filter->quantization.custom )  {
         TF_LITE_FULLY_CONNECTED(FullyConnected_2x4in8, uint8_t);
       } else {
         TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);
