@@ -334,13 +334,6 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
 
     super(Model, self).__setattr__(name, value)
 
-    # Keep track of metric instance created in subclassed model/layer.
-    # We do this so that we can maintain the correct order of metrics by adding
-    # the instance to the `metrics` list as soon as it is created.
-    from tensorflow.python.keras import metrics as metrics_module  # pylint: disable=g-import-not-at-top
-    if isinstance(value, metrics_module.Metric):
-      self._metrics.append(value)
-
   @generic_utils.default
   def build(self, input_shape):
     """Builds the model based on input shapes received.
@@ -635,8 +628,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
       if self.compiled_metrics is not None:
         metrics += self.compiled_metrics.metrics
 
-    all_layers = self._gather_unique_layers()
-    for l in all_layers:
+    for l in self._flatten_layers():
       metrics.extend(l._metrics)  # pylint: disable=protected-access
     return metrics
 
@@ -2317,7 +2309,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
 
   @property
   def layers(self):
-    return self._unique_sublayers()
+    return list(self._flatten_layers(include_self=False, recursive=False))
 
   def get_layer(self, name=None, index=None):
     """Retrieves a layer based on either its name (unique) or index.
@@ -2372,14 +2364,6 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     specs = nest.pack_sequence_as(inputs, specs)
 
     self._saved_model_inputs_spec = specs
-
-  def _get_save_spec(self, dynamic_batch=True):
-    if self._saved_model_inputs_spec is None:
-      return None
-
-    return nest.map_structure(
-        lambda t: tf_utils.get_tensor_spec(t, dynamic_batch=dynamic_batch),
-        self._saved_model_inputs_spec)
 
   def _assert_weights_created(self):
     """Asserts that all the weights for the model have been created.

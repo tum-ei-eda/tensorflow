@@ -782,9 +782,15 @@ Status EagerRemoteExecute(EagerOperation* op, TensorHandle** retvals,
         }
       }
       auto* input_handle = remote_op->add_op_inputs()->mutable_remote_handle();
+      // For a multi-device function, a remote RunComponentFunction request is
+      // not sent through StreamingEnqueueAsync. It could arrive at a remote
+      // worker before a remote execution request which produces an input of the
+      // component function. So we wait until the remote input is ready before
+      // serializing it.
+      const bool wait_until_ready = op->is_function();
       TF_RETURN_IF_ERROR(ctx.RemoteMgr()->SerializeRemoteTensorHandle(
-          input, input_handle, input_device, *input_device_name,
-          serialize_resource_dtype_and_shape));
+          input, wait_until_ready, input_handle, input_device,
+          *input_device_name, serialize_resource_dtype_and_shape));
       if (!input_handle->resource_dtypes_and_shapes().empty()) {
         TF_RETURN_IF_ERROR(
             input->AddResourceShapeMirror(op_device, input_handle->op_id(),
@@ -1453,7 +1459,7 @@ void EagerLocalExecuteAsync(EagerOperation* op, TensorHandle** retvals,
   EagerKernelExecuteAsync(
       &ctx, op->Inputs(), op->remote_func_params(), std::move(kernel),
       graph_collector, op->GetCancellationManager(), retvals, num_outputs,
-      [op, num_outputs, &retvals, done = std::move(done)](const Status& s) {
+      [op, num_outputs, retvals, done = std::move(done)](const Status& s) {
         op->Clear();
         // Since the operation failed, we need to Unref any outputs if they were
         // allocated.
