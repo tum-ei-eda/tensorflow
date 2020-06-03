@@ -89,6 +89,33 @@ void* GetScratchBuffer(TfLiteContext* context, int buffer_index) {
 
 }  // namespace
 
+
+
+// Converts a quantized value to coded float
+float Q2F(int32_t code, float scale, float zero_point) {
+  return (code - zero_point) * scale;
+}
+
+// Converts a quantized value to coded float for quantization
+// params of specified tensor
+float Q2F(int32_t code, const TfLiteTensor *tensor)
+{
+    return (code - (int32_t)tensor->params.zero_point) * tensor->params.scale;
+}
+
+uint8_t F2Q(float value, const TfLiteTensor *tensor)
+{
+  int32_t result = tensor->params.zero_point +
+                   (value / tensor->params.scale) + 0.5f;
+  if (result < std::numeric_limits<uint8_t>::min()) {
+    result = std::numeric_limits<uint8_t>::min();
+  }
+  if (result > std::numeric_limits<uint8_t>::max()) {
+    result = std::numeric_limits<uint8_t>::max();
+  }
+  return result;
+} 
+
 uint8_t F2Q(float value, float min, float max) {
   int32_t result = ZeroPointFromMinMax<uint8_t>(min, max) +
                    (value / ScaleFromMinMax<uint8_t>(min, max)) + 0.5f;
