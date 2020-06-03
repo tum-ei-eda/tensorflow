@@ -171,7 +171,7 @@ else
   echo Skipping configure...
 fi
 
-BAZEL_TARGETS=( //tensorflow/lite/toco:toco //tensorflow/compiler/mlir/lite:tf_tfl_translate )
+BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate )
 
 if [ -z "$NOBUILD" ]
 then
@@ -192,6 +192,7 @@ then
     bazel build   "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
     mkdir -p ${TFLITE_MICRO_ROOT}/bin  
     rm -f ${TFLITE_MICRO_ROOT}/bin/*
+    echo Installing to ${TFLITE_MICRO_ROOT}/bin
     cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
         bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
@@ -213,7 +214,7 @@ then
     # Actual payload - installed confiured copy of tflite(u) library and makefiles
     make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
     # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
-    echo 'TAGS := portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
+    echo 'TAGS ?= portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery
