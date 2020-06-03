@@ -329,6 +329,7 @@ typedef struct TfLiteQuantization {
   // below.
   void* params;
 
+  //@IFX_PATCH@
   // Pointer to custom quantization vector in flat buffer (if defined)
   // 16-byte alignment defined in flat-buffer.
   const TfLiteUInt8Array *custom;
