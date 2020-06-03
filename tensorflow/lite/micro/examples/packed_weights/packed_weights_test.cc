@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <iostream>
 // #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/micro/examples/packed_weights/hello_world_2x4in8.h"
 #include "tensorflow/lite/micro/kernels/all_ops_resolver.h"
@@ -109,7 +110,7 @@ TF_LITE_MICRO_TEST(LoadModelAndPerformInference) {
     float value = output_dquant(output->data.uint8[0]);
     // Check that the output value is within 0.001 of the expected  value
     // (produced using from a face-quantized prediction using the original model)
-    
+    std::cout << ref_y << " " << value << std::endl;
     TF_LITE_MICRO_EXPECT_NEAR(ref_y, value, 0.05);
   }
   
