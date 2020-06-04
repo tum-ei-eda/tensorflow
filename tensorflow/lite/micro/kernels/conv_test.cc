@@ -104,7 +104,10 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
   node.delegate = nullptr;
 
   if (registration->prepare) {
-    TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, registration->prepare(&context, &node));
+    TfLiteStatus return_val = registration->prepare(&context, &node);
+    if (return_val != kTfLiteOk) {
+        return return_val;
+      }
   }
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
   TfLiteStatus return_val = registration->invoke(&context, &node);

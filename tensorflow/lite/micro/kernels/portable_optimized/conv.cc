@@ -26,6 +26,9 @@ limitations under the License.
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
+#define MAX(A,B) ((A) > (B) ? (A) : (B))
+#define MIN(A,B) ((A) < (B) ? (A) : (B))
+
 namespace tflite {
 namespace ops {
 namespace micro {
@@ -59,7 +62,7 @@ struct OpData {
   int32_t output_activation_min;
   int32_t output_activation_max;
 
-  // The sum of filters factor
+  // The precomputed sum of filters factor
   int32 *sum_of_filters_factor;
 };
 
@@ -125,19 +128,14 @@ inline void PrecomputeSumOfFiltersFactor(const int32* bias, const TfLiteTensor* 
 	const int filter_width = filter_shape.Dims(2);
 	const int input_depth = filter_shape.Dims(3);
 	const int output_depth = filter_shape.Dims(0);
+
+	int filter_size = filter_width * filter_height * input_depth;
+
 	for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
-		int32_t sum_of_filter_factor = 0;
-		if (filters->type == kTfLiteUInt8) {
-			sum_of_filter_factor += filter_width * filter_height * input_depth * filter_offset;
-		}
-		for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
-			for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
-				for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
-					sum_of_filter_factor +=
-		                      filter_data[Offset(filter_shape, out_channel, filter_y,
-		                                         filter_x, in_channel)];
-				}
-			}
+		int32_t sum_of_filter_factor = filter_size * filter_offset;
+
+    for (int filter_index = filter_size * out_channel; filter_index < filter_size + filter_size * out_channel; ++filter_index) {
+      sum_of_filter_factor += filter_data[filter_index];
 		}
 		sum_of_filters_factor[out_channel] = sum_of_filter_factor * input_offset;
 		if (bias) {
@@ -159,7 +157,18 @@ void Free(TfLiteContext* context, void* buffer) {}
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 	OpData* data = reinterpret_cast<OpData*>(node->user_data);
+	auto* params = reinterpret_cast<TfLiteConvParams*>(node->builtin_data);
+
 	const TfLiteTensor* filters = GetInput(context, node, kFilterTensor);
+	const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+	TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+
+  int input_width = input->dims->data[2];
+  int input_height = input->dims->data[1];
+  int filter_width = filters->dims->data[2];
+  int filter_height = filters->dims->data[1];
+  int output_width = output->dims->data[2];
+  int output_height = output->dims->data[1];
 
   if (filters->type == kTfLiteInt8 || filters->type == kTfLiteUInt8) {
 
@@ -169,11 +178,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     const int32_t filter_offset = -filters->params.zero_point;
     RuntimeShape filter_shape = GetTensorShape(filters);
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
-    const int filter_height = filter_shape.Dims(1);
-      const int filter_width = filter_shape.Dims(2);
-      const int input_depth = filter_shape.Dims(3);
-      const int output_depth = filter_shape.Dims(0);
-      TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
+
+    const int input_depth = filter_shape.Dims(3);
+    const int output_depth = filter_shape.Dims(0);
+    TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
 
     void* raw;
     context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
@@ -185,19 +193,22 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
     data->per_channel_output_shift = reinterpret_cast<int32_t*>(raw);
 
-    const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+    // Precompute the sum of filters
     const int32_t input_offset = -input->params.zero_point;
     if (filters->type == kTfLiteUInt8) {
-      // Precompute sum of filters for uint8
       PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
         filter_shape, input_offset, filter_offset);
     }
     else {
-      // Precompute sum of filters for int8
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
         filter_shape, input_offset, 0);
     }
   }
+
+  TF_LITE_ENSURE_STATUS(CalculateOpData(
+              context, node, params, input_width, input_height, filter_width,
+              filter_height, output_width, output_height, input->type, data));
+
   return kTfLiteOk;
 }
 
@@ -215,14 +226,15 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   const RuntimeShape& filter_shape = GetTensorShape(filter);
   const uint8* filter_data = GetTensorData<uint8_t>(filter);
   const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const uint32* bias_data = GetTensorData<uint32_t>(bias);
+  const int32* bias_data = GetTensorData<int32_t>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
   uint8* output_data = GetTensorData<uint8_t>(output);
 
   const int stride_width = params->stride_width;
   const int stride_height = params->stride_height;
-  const int dilation_width_factor = params->dilation_width_factor;
-  const int dilation_height_factor = params->dilation_height_factor;
+  const int dilation_width_factor = 1;
+  const int dilation_height_factor = 1;
+
   const int pad_width = data->padding.width;
   const int pad_height = data->padding.height;
   const int32 output_multiplier = data->output_multiplier;
@@ -246,43 +258,47 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   const int filter_width = filter_shape.Dims(2);
   const int output_height = output_shape.Dims(1);
   const int output_width = output_shape.Dims(2);
+
+  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+
   for (int batch = 0; batch < batches; ++batch) {
+    uint32 offset_input0 = batch * in_dims[1];
     for (int out_y = 0; out_y < output_height; ++out_y) {
       for (int out_x = 0; out_x < output_width; ++out_x) {
-        // TODO(Jakob) int32 input_sum = CalculateInputSum(...);
+        uint32_t filter_index = 0;
         for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
           const int in_x_origin = (out_x * stride_width) - pad_width;
           const int in_y_origin = (out_y * stride_height) - pad_height;
           int32 acc = 0;
-          for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
-            for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
+
+          const int32_t ker_y_start = MAX(0, -in_y_origin);
+          const int32_t ker_x_start = MAX(0, -in_x_origin);
+
+          const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+          const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+
+          for (int filter_y = ker_y_start; filter_y < ker_y_end; ++filter_y) {
+            const int in_y = in_y_origin + dilation_height_factor * filter_y;
+            uint32 offset_input1 = (offset_input0 + in_y) * in_dims[2];
+            for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
+              const int in_x = in_x_origin + dilation_width_factor * filter_x;
+              uint32 offset_input2 = (offset_input1 + in_x) * in_dims[3];
               for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
-                const int in_x = in_x_origin + dilation_width_factor * filter_x;
-                const int in_y =
-                    in_y_origin + dilation_height_factor * filter_y;
-                // If the location is outside the bounds of the input image,
-                // use zero as a default value.
-                if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
-                    (in_y < input_height)) {
-                  int32 input_val = input_data[Offset(input_shape, batch, in_y,
-                                                      in_x, in_channel)];
-                  int32 filter_val =
-                      filter_data[Offset(filter_shape, out_channel, filter_y,
-                                         filter_x, in_channel)];
-                  acc +=
-                      (filter_val + filter_offset) * input_val;
-                }
+
+                int32 input_val = input_data[offset_input2 + in_channel];
+                int32 filter_val = filter_data[filter_index++];
+
+                acc += (filter_val + filter_offset) * input_val;
               }
             }
           }
+
           acc += data->sum_of_filters_factor[out_channel];
-          acc = MultiplyByQuantizedMultiplier(acc, output_multiplier,
-                                              output_shift);
+          acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
           acc += output_offset;
           acc = std::max(acc, output_activation_min);
           acc = std::min(acc, output_activation_max);
-          output_data[Offset(output_shape, batch, out_y, out_x, out_channel)] =
-              static_cast<uint8>(acc);
+          output_data[Offset(output_shape, batch, out_y, out_x, out_channel)] = static_cast<uint8>(acc);
         }
       }
     }
@@ -291,29 +307,98 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
 
 void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                              TfLiteConvParams* params, OpData* data,
+                             const int32* output_multiplier, const int32* output_shift,
                              const TfLiteTensor* input,
                              const TfLiteTensor* filter,
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              TfLiteTensor* im2col) {
-  ConvParams op_params;
-  op_params.input_offset = -input->params.zero_point;
-  op_params.output_offset = output->params.zero_point;
-  op_params.stride_height = params->stride_height;
-  op_params.stride_width = params->stride_width;
-  op_params.dilation_height_factor = params->dilation_height_factor;
-  op_params.dilation_width_factor = params->dilation_width_factor;
-  op_params.padding_values.height = data->padding.height;
-  op_params.padding_values.width = data->padding.width;
-  op_params.quantized_activation_min = data->output_activation_min;
-  op_params.quantized_activation_max = data->output_activation_max;
+  const int32 input_offset = -input->params.zero_point;
+  const int32 filter_offset = 0;
+  const int32 output_offset = output->params.zero_point;
 
-  reference_integer_ops::ConvPerChannel(
-      op_params, data->per_channel_output_multiplier,
-      data->per_channel_output_shift, GetTensorShape(input),
-      GetTensorData<int8>(input), GetTensorShape(filter),
-      GetTensorData<int8>(filter), GetTensorShape(bias),
-      GetTensorData<int32>(bias), GetTensorShape(output),
-      GetTensorData<int8>(output));
+  const RuntimeShape& input_shape = GetTensorShape(input);
+  const int8* input_data = GetTensorData<int8>(input);
+  const RuntimeShape& filter_shape = GetTensorShape(filter);
+  const int8* filter_data = GetTensorData<int8>(filter);
+  const RuntimeShape& bias_shape = GetTensorShape(bias);
+  const int32* bias_data = GetTensorData<int32>(bias);
+  const RuntimeShape& output_shape = GetTensorShape(output);
+  int8* output_data = GetTensorData<int8>(output);
+
+  const int stride_width = params->stride_width;
+  const int stride_height = params->stride_height;
+  const int dilation_width_factor = 1;
+  const int dilation_height_factor = 1;
+  const int pad_width = data->padding.width;
+  const int pad_height = data->padding.height;
+  const int32 output_activation_min = data->output_activation_min;
+  const int32 output_activation_max = data->output_activation_max;
+  TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
+
+  TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
+  TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
+  TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
+  const int batches = MatchingDim(input_shape, 0, output_shape, 0);
+  const int input_depth = MatchingDim(input_shape, 3, filter_shape, 3);
+  const int output_depth = MatchingDim(filter_shape, 0, output_shape, 3);
+  if (bias_data) {
+    TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
+  }
+  const int input_height = input_shape.Dims(1);
+  const int input_width = input_shape.Dims(2);
+  const int filter_height = filter_shape.Dims(1);
+  const int filter_width = filter_shape.Dims(2);
+  const int output_height = output_shape.Dims(1);
+  const int output_width = output_shape.Dims(2);
+
+  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+  const int* fi_dims = reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
+
+  for (int batch = 0; batch < batches; ++batch) {
+    uint32 offset_input0 = batch * in_dims[1];
+    for (int out_y = 0; out_y < output_height; ++out_y) {
+      for (int out_x = 0; out_x < output_width; ++out_x) {
+        for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
+          const int in_x_origin = (out_x * stride_width) - pad_width;
+          const int in_y_origin = (out_y * stride_height) - pad_height;
+          uint32 offset_filter0 = out_channel * fi_dims[1];
+
+          const int32_t ker_y_start = MAX(0, -in_y_origin);
+          const int32_t ker_x_start = MAX(0, -in_x_origin);
+
+          const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+          const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+
+          int32 acc = 0;
+
+          for (int filter_y = ker_y_start; filter_y < ker_y_end; ++filter_y) {
+            const int in_y = in_y_origin + dilation_height_factor * filter_y;
+            uint32 offset_filter1 = (offset_filter0 + filter_y) * fi_dims[2];
+            uint32 offset_input1 = (offset_input0 + in_y) * in_dims[2];
+
+            for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
+              const int in_x = in_x_origin + dilation_width_factor * filter_x;
+              uint32 offset_filter2 = (offset_filter1 + filter_x) * fi_dims[3];
+              uint32 offset_input2 = (offset_input1 + in_x) * in_dims[3];
+
+              for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
+                int32 input_val = input_data[offset_input2 + in_channel];
+                int32 filter_val = filter_data[offset_filter2 + in_channel];
+                acc += filter_val * input_val;
+              }
+            }
+          }
+          acc += data->sum_of_filters_factor[out_channel];
+          acc = MultiplyByQuantizedMultiplier(
+                        acc, output_multiplier[out_channel], output_shift[out_channel]);
+          acc += output_offset;
+          acc = std::max(acc, output_activation_min);
+          acc = std::min(acc, output_activation_max);
+          output_data[Offset(output_shape, batch, out_y, out_x, out_channel)] = static_cast<int8>(acc);
+        }
+      }
+    }
+  }
 }
 
 void EvalFloat(TfLiteContext* context, TfLiteNode* node,
@@ -353,14 +438,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
   const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
 
-  int input_width = input->dims->data[2];
-  int input_height = input->dims->data[1];
-  int filter_width = filter->dims->data[2];
-  int filter_height = filter->dims->data[1];
-  int output_width = output->dims->data[2];
-  int output_height = output->dims->data[1];
-
-
   // All per-channel quantized tensors need valid zero point and scale arrays.
   if (input->type == kTfLiteInt8) {
     TF_LITE_ENSURE_EQ(context, filter->quantization.type,
@@ -372,7 +449,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
     TF_LITE_ENSURE(context, affine_quantization);
     TF_LITE_ENSURE(context, affine_quantization->scale);
     TF_LITE_ENSURE(context, affine_quantization->zero_point);
-
     TF_LITE_ENSURE(context,
                    affine_quantization->scale->size == 1 ||
                        affine_quantization->scale->size ==
@@ -381,27 +457,84 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                       affine_quantization->zero_point->size);
   }
 
-  TF_LITE_ENSURE_STATUS(CalculateOpData(
-      context, node, params, input_width, input_height, filter_width,
-      filter_height, output_width, output_height, input->type, data));
-
   switch (input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
+    {
       EvalFloat(context, node, params, data, input, filter, bias, nullptr,
                 nullptr, output);
       break;
+    }
     case kTfLiteInt8:
-      EvalQuantizedPerChannel(context, node, params, data, input, filter, bias,
-                              output, nullptr);
+    {
+      const int dilation_width_factor = params->dilation_width_factor;
+      const int dilation_height_factor = params->dilation_height_factor;
+      if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
+        ConvParams op_params;
+        op_params.input_offset = -input->params.zero_point;
+        op_params.output_offset = output->params.zero_point;
+        op_params.stride_height = params->stride_height;
+        op_params.stride_width = params->stride_width;
+        op_params.dilation_height_factor = params->dilation_height_factor;
+        op_params.dilation_width_factor = params->dilation_width_factor;
+        op_params.padding_values.height = data->padding.height;
+        op_params.padding_values.width = data->padding.width;
+        op_params.quantized_activation_min = data->output_activation_min;
+        op_params.quantized_activation_max = data->output_activation_max;
+
+        reference_integer_ops::ConvPerChannel(
+              op_params, data->per_channel_output_multiplier,
+              data->per_channel_output_shift, GetTensorShape(input),
+              GetTensorData<int8>(input), GetTensorShape(filter),
+              GetTensorData<int8>(filter), GetTensorShape(bias),
+              GetTensorData<int32>(bias), GetTensorShape(output),
+              GetTensorData<int8>(output));
+      }
+      else {
+        EvalQuantizedPerChannel(context, node, params, data, data->per_channel_output_multiplier, data->per_channel_output_shift,
+                                       input, filter, bias, output, nullptr);
+      }
       break;
+    }
     case kTfLiteUInt8:
-      EvalQuantized(context, node, params, data, input, filter, bias, nullptr,
-                    nullptr, output);
+    {
+      const int dilation_width_factor = params->dilation_width_factor;
+      const int dilation_height_factor = params->dilation_height_factor;
+
+      if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
+        ConvParams op_params;
+        op_params.padding_type = RuntimePaddingType(params->padding);
+        op_params.padding_values.width = data->padding.width;
+        op_params.padding_values.height = data->padding.height;
+        op_params.stride_width = params->stride_width;
+        op_params.stride_height = params->stride_height;
+        op_params.dilation_width_factor = params->dilation_width_factor;
+        op_params.dilation_height_factor = params->dilation_height_factor;
+        op_params.input_offset = -input->params.zero_point;
+        op_params.weights_offset = -filter->params.zero_point;
+        op_params.output_offset = output->params.zero_point;
+        op_params.output_multiplier = data->output_multiplier;
+        op_params.output_shift = -data->output_shift;
+        op_params.quantized_activation_min = data->output_activation_min;
+        op_params.quantized_activation_max = data->output_activation_max;
+        TfLiteTensor* im2col;
+        reference_ops::Conv(op_params, GetTensorShape(input),
+                            GetTensorData<uint8_t>(input), GetTensorShape(filter),
+                            GetTensorData<uint8_t>(filter), GetTensorShape(bias),
+                            GetTensorData<int32_t>(bias), GetTensorShape(output),
+                            GetTensorData<uint8_t>(output), GetTensorShape(im2col),
+                            GetTensorData<uint8_t>(im2col), nullptr);
+      }
+      else {
+        EvalQuantized(context, node, params, data, input, filter, bias, nullptr, nullptr, output);
+      }
       break;
+    }
     default:
+    {
       TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
                          TfLiteTypeGetName(input->type), input->type);
       return kTfLiteError;
+    }
   }
   return kTfLiteOk;
 }
