@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#define IFX_PATCH_LOGGING 1
 #include "tensorflow/compiler/mlir/lite/flatbuffer_export.h"
 
 #include <stddef.h>
@@ -387,7 +388,9 @@ class SubBytePacking {
     if (num_bits != 4) {
       return;
     }
-    qcst_op.emitWarning("Packing weights!!");
+  #if IFX_PATCH_LOGGING
+    qcst_op.emitRemark("Weights need to be packed!");
+  #endif
     bits_per_item = num_bits;
     container_bits = 8u;
   }
@@ -404,7 +407,7 @@ class SubBytePacking {
 
   flatbuffers::Offset<void> CustomDetails(
       flatbuffers::FlatBufferBuilder& _fbb) const {
-    if (bits_per_item != 0) return 0;
+    if (bits_per_item == 0) return 0;
 
     tflite::CustomQuantizationT qdetails;
     // Push back a "magic number" as this is for custom extensions and
@@ -639,6 +642,9 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
   // @IFX_PATCH@  PoC packed quantized data.. for now hard-wired 4-bit weights
   flatbuffers::Offset<flatbuffers::Vector<uint8_t>> buffer_data;
   if (packing && packing.bits_per_item == 4) {
+  #ifdef IFX_PATCH_LOGGING
+    inst->emitRemark("Actually Packing weights!!");
+  #endif
     auto vals = attr.getValues<uint8_t>();
     auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
     std::vector<uint8_t> packed_data;
@@ -760,13 +766,20 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
   tflite::TensorType tflite_element_type =
       GetTFLiteType(type.getElementType()).ValueOrDie();
 
-  // @IFX_PATCH@ PoC flag packing by abusing min and max parameters (for now)
-  // previously min max always 0 as unused.
+  // @IFX_PATCH@ PoC flag packing using CustiomDetails
   BufferOffset<tflite::QuantizationParameters> q_params;
   if (auto qtype = element_type.dyn_cast<mlir::quant::UniformQuantizedType>()) {
-    // @IFX_PATCH@  Horribly abuse min/max to hold packing
-    // parameters
-    // !!!!
+
+    auto details = packing.CustomDetails(builder_);
+    if( !details.IsNull() ) {
+          mlir::emitRemark(
+            value.getLoc(),
+            "CustomDetails are specified" );
+    }   else {
+          mlir::emitRemark(
+            value.getLoc(),
+            "none" );
+    }
     q_params = tflite::CreateQuantizationParameters(
         // TODO(fengliuai): min and max values are not stored in the
         // quantized type, so both are set to 0. The model couldn't be
@@ -776,7 +789,7 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
         builder_.CreateVector<float>({static_cast<float>(qtype.getScale())}),
         builder_.CreateVector<int64_t>({qtype.getZeroPoint()}),
         /*details_type=*/packing.QuantizationDetailsType(),
-        /*details=*/packing.CustomDetails(builder_));
+        /*details=*/details);
   } else if (auto qtype =
                  element_type
                      .dyn_cast<mlir::quant::UniformQuantizedPerAxisType>()) {
