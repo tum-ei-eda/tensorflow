@@ -12,7 +12,7 @@ node_modules
 *.pyc
 __pycache__
 *.swp
-.vscode/
+/.vscode/
 cmake_build/
 tensorflow/contrib/cmake/_build/
 .idea/**
@@ -28,9 +28,9 @@ tensorflow/contrib/cmake/_build/
 *.whl
 
 # eclipse specific
-.cproject
-.project
-.settings/
+/.cproject
+/.project
+/.settings/
 
 # Android
 .gradle
@@ -43,7 +43,10 @@ gradleBuild
 *.pbxproj
 *.xcworkspace
 /*.podspec
-/tensorflow/lite/**/[ios|objc|swift]*/BUILD
+/tensorflow/lite/**/coreml/**/BUILD
+/tensorflow/lite/**/ios/BUILD
+/tensorflow/lite/**/objc/BUILD
+/tensorflow/lite/**/swift/BUILD
 /tensorflow/lite/examples/ios/simple/data/*.tflite
 /tensorflow/lite/examples/ios/simple/data/*.txt
 Podfile.lock

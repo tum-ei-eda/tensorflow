@@ -32,6 +32,7 @@ from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.ops import gen_bitwise_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import parsing_ops
 from tensorflow.python.ops import string_ops
 from tensorflow.python.ops.ragged import ragged_dispatch
@@ -232,6 +233,10 @@ class RaggedElementwiseOpsTest(test_util.TensorFlowTestCase,
           {'op': array_ops.check_numerics,
            'x': ragged_factory_ops.constant_value([[-2.0, 3.0], [-3.0]]),
            'message': 'check-numerics'},
+          {'op': nn_ops.dropout,
+           'x': ragged_factory_ops.constant_value([[-2.0, 3.0], [-3.0]]),
+           'rate': 0.5,
+           'seed': 1},
       ]
       )  # pyformat: disable
   def testUnaryElementwiseOp(self, x, op=math_ops.abs, **extra_args):
@@ -543,7 +548,7 @@ class RaggedElementwiseOpsTest(test_util.TensorFlowTestCase,
               'depth':
                   4,
               'axis':
-                  1
+                  -1
           },
           expected=ragged_factory_ops.constant_value(
               [[[0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], [[1, 0, 0, 0]]],
@@ -771,6 +776,21 @@ class RaggedElementwiseOpsTest(test_util.TensorFlowTestCase,
     else:
       self.assertAllEqual(result, expected)
 
+  def testUnaryElementwiseOpsPreserveUniformRowLength(self):
+    # Unary elementwise op
+    rt = ragged_tensor.RaggedTensor.from_uniform_row_length(
+        ragged_factory_ops.constant([[1, 2], [3]]),
+        uniform_row_length=2)
+    self.assertAllEqual(rt.uniform_row_length,
+                        array_ops.zeros_like(rt).uniform_row_length)
+
+    # Unary-list elementwise op
+    rt = ragged_tensor.RaggedTensor.from_uniform_row_length(
+        ragged_factory_ops.constant([[1, 2], [3]]),
+        uniform_row_length=2)
+    self.assertAllEqual(rt.uniform_row_length,
+                        math_ops.add_n([rt, rt]).uniform_row_length)
+
   def test_ragged_op_list(self):
     # Ops that should be listed as supported in both v1 and v2.
     supported_ops = [
@@ -805,7 +825,8 @@ class RaggedElementwiseOpsTest(test_util.TensorFlowTestCase,
         'strings.substr', 'strings.to_hash_bucket_fast',
         'strings.to_hash_bucket_strong', 'strings.to_hash_bucket',
         'strings.to_number', 'strings.unicode_script', 'tile', 'truncatediv',
-        'truncatemod', 'zeros_like', 'dynamic_partition', 'reverse'
+        'truncatemod', 'zeros_like', 'dynamic_partition', 'reverse',
+        'nn.dropout',
     ]
 
     # Ops that should be listed as supported in v1 only.

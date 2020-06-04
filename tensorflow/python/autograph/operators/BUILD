@@ -29,8 +29,7 @@ py_library(
         "logical.py",
         "py_builtins.py",
         "slices.py",
-        "special_values.py",
-        "symbols.py",
+        "variables.py",
     ],
     srcs_version = "PY2AND3",
     visibility = ["//tensorflow:__subpackages__"],
@@ -126,7 +125,7 @@ py_test(
     srcs_version = "PY3",
     tags = [
         "no_windows",
-        # TODO(kkimlabs): Temporay workaround since KokoroPresubmit was failing.
+        # TODO(kkb): Temporay workaround since KokoroPresubmit was failing.
         #                 cl/259400943 for more context.
         "no_oss_py2",
     ],
@@ -148,19 +147,8 @@ py_test(
 )
 
 py_test(
-    name = "special_values_test",
-    srcs = ["special_values_test.py"],
-    python_version = "PY3",
-    srcs_version = "PY2AND3",
-    deps = [
-        ":operators",
-        "//tensorflow/python:client_testlib",
-    ],
-)
-
-py_test(
-    name = "symbols_test",
-    srcs = ["symbols_test.py"],
+    name = "variables_test",
+    srcs = ["variables_test.py"],
     python_version = "PY3",
     srcs_version = "PY2AND3",
     deps = [

@@ -25,7 +25,10 @@ namespace tensorflow {
 // the shape is known.
 class RemoteTensorHandleData {
  public:
-  // Constructor for lazy remote handles
+  // Constructor for lazy remote handles. A lazy remote handle is created on
+  // a remote worker with an op_id and an output_num sent by a client. The
+  // client won't serialize them until the corresponding remote tensor is ready.
+  // So the remote tensor should be ready when we create a lazy remote handle.
   RemoteTensorHandleData(int64 op_id, int output_num, uint64 context_view_id);
   // Constructor for unshaped remote handles
   RemoteTensorHandleData(int64 op_id, int output_num, const string& remote_task,
@@ -38,6 +41,7 @@ class RemoteTensorHandleData {
   Status NumDims(int* num_dims) const;
   Status Dim(int dim_index, int64* dim) const;
   Status NumElements(int64* num_elements) const;
+  Status Unprotect() { return Status::OK(); }
 
   bool IsReady() const;
   Status SetShape(const TensorShape& shape);
@@ -46,17 +50,20 @@ class RemoteTensorHandleData {
 
   string DebugString() const;
 
-  int64 op_id() const { return op_id_; }
-  int32 output_num() const { return output_num_; }
+  // Return the op id and output num. If wait_util_ready is true, block until
+  // the remote tensor is ready on a remote worker.
+  Status OpIdAndOutputNum(const bool wait_util_ready, int64* op_id,
+                          int32* output_num) const;
+
   uint64 context_view_id() const { return context_view_id_; }
 
  private:
   Status WaitReady(const char* caller) const;
 
   mutable mutex mu_;
-  bool is_ready_ GUARDED_BY(mu_);
-  Status is_poisoned_ GUARDED_BY(mu_);
-  TensorShape shape_ GUARDED_BY(mu_);
+  bool is_ready_ TF_GUARDED_BY(mu_);
+  Status is_poisoned_ TF_GUARDED_BY(mu_);
+  TensorShape shape_ TF_GUARDED_BY(mu_);
 
   // IDs required when this class is representing a remote tensor handle.
   const int64 op_id_;

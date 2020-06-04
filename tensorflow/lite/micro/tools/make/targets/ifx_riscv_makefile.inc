@@ -16,7 +16,7 @@ ifndef IFX_TOOLSPREFIX
   $(error IFX_TOOLSPREFIX not set - called without aiml_deployment/GET_PROJECT_SETTINGS.sh settings? Currentmy unsupported!) 
 endif
   
-  CC_PREFIX:=$(IFX_TOOLSPREFIX)/$(IFX_RV_TOOLCHAIN_ID)-$(IFX_RV_TOOLCHAIN_VERSION)/bin/
+  TARGET_TOOLCHAIN_ROOT:=$(IFX_TOOLSPREFIX)/$(IFX_RV_TOOLCHAIN_ID)-$(IFX_RV_TOOLCHAIN_VERSION)/bin/
   SWERV_ISS_HOME := $(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION)
 
 
@@ -25,7 +25,7 @@ endif
     -march=$(TARGET_ARCH) \
     -mabi=$(TARGET_ABI) \
     -DTF_LITE_MCU_DEBUG_LOG \
-    -DTF_LITE_USE_GLOBAL_MATH \
+    -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
     -fno-exceptions \
     -fno-unwind-tables \
     -ffunction-sections \

@@ -120,6 +120,9 @@ cuda_py_test(
     size = "small",
     srcs = ["list_ops_test.py"],
     grpc_enabled = True,
+    tags = [
+        "noasan",  # TODO(b/155406705): flaky
+    ],
     deps = [
         "//tensorflow/python:array_ops",
         "//tensorflow/python:client_testlib",
@@ -436,7 +439,7 @@ tf_py_test(
 
 cuda_py_test(
     name = "determinant_op_test",
-    size = "small",
+    size = "medium",
     srcs = ["determinant_op_test.py"],
     deps = [
         "//tensorflow/python:client_testlib",
@@ -477,6 +480,7 @@ tf_py_test(
     name = "fifo_queue_test",
     size = "small",
     srcs = ["fifo_queue_test.py"],
+    tags = ["no_rocm"],
     deps = [
         "//tensorflow/core:protos_all_py",
         "//tensorflow/python:array_ops",
@@ -651,6 +655,8 @@ tf_py_test(
         "//tensorflow/python:lookup_ops",
         "//tensorflow/python:sparse_tensor",
         "//tensorflow/python:training",
+        "//tensorflow/python/data/ops:dataset_ops",
+        "//tensorflow/python/data/ops:readers",
     ],
 )
 
@@ -1012,6 +1018,7 @@ tf_py_test(
         "//tensorflow/python:framework_for_generated_wrappers",
         "//tensorflow/python:sparse_ops",
         "//third_party/py/numpy",
+        "@absl_py//absl/testing:parameterized",
     ],
 )
 
@@ -1213,8 +1220,6 @@ cuda_py_test(
         "//tensorflow/python:variables",
         "//tensorflow/python/eager:context",
         "//tensorflow/python/eager:function",
-        "//tensorflow/python/keras:engine",
-        "//tensorflow/python/keras/layers",
         "@six_archive//:six",
     ],
 )
@@ -1504,7 +1509,7 @@ cuda_py_test(
     name = "diag_op_test",
     size = "medium",
     srcs = ["diag_op_test.py"],
-    shard_count = 2,
+    shard_count = 6,
     tags = ["no_windows_gpu"],
     deps = [
         "//tensorflow/python:array_ops",
@@ -1590,7 +1595,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "broadcast_to_ops_test",
-    size = "small",
+    size = "medium",
     srcs = ["broadcast_to_ops_test.py"],
     deps = [
         "//tensorflow/python:array_ops",
@@ -1618,7 +1623,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "batch_matmul_op_test",
-    size = "small",
+    size = "medium",
     srcs = ["batch_matmul_op_test.py"],
     shard_count = 20,
     deps = [
@@ -1675,7 +1680,6 @@ cuda_py_test(
     name = "bias_op_deterministic_test",
     size = "medium",
     srcs = ["bias_op_deterministic_test.py"],
-    xla_enable_strict_auto_jit = False,
     deps = [
         ":bias_op_base",
     ],
@@ -1755,7 +1759,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "control_flow_ops_py_test",
-    size = "small",
+    size = "medium",
     srcs = ["control_flow_ops_py_test.py"],
     shard_count = 16,
     tags = [
@@ -2114,7 +2118,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "lrn_op_test",
-    size = "small",
+    size = "medium",
     srcs = ["lrn_op_test.py"],
     deps = [
         "//tensorflow/python:array_ops",
@@ -2713,7 +2717,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "tensor_array_ops_test",
-    size = "small",
+    size = "medium",
     srcs = ["tensor_array_ops_test.py"],
     flaky = 1,  # create_local_cluster sometimes times out.
     shard_count = 10,
@@ -2823,7 +2827,7 @@ cuda_py_test(
 
 cuda_py_test(
     name = "zero_division_test",
-    size = "small",
+    size = "medium",
     srcs = ["zero_division_test.py"],
     deps = [
         "//tensorflow/python:client_testlib",
@@ -2916,6 +2920,7 @@ cuda_py_test(
     srcs = ["conv_ops_test.py"],
     shard_count = 4,
     tags = [
+        "nogpu",  # TODO(b/153763253); flaky
         "optonly",  # times out
     ],
     deps = [
@@ -2938,7 +2943,9 @@ cuda_py_test(
 cuda_py_test(
     name = "depthwise_conv_op_test",
     size = "medium",  # http://b/30603882
+    timeout = "long",
     srcs = ["depthwise_conv_op_test.py"],
+    shard_count = 3,
     # TODO(b/118842098): Re-enable this test in Kokoro.
     tags = ["no_oss"],
     deps = [
@@ -3408,7 +3415,6 @@ tf_py_test(
     data = ["//tensorflow/python/kernel_tests/testdata:self_adjoint_eig_op_test_files"],
     shard_count = 20,
     tags = [
-        "no_rocm",  # flaky test
         "no_windows",
     ],
     deps = [
@@ -3462,7 +3468,7 @@ cuda_py_test(
     name = "svd_op_test",
     size = "medium",
     srcs = ["svd_op_test.py"],
-    shard_count = 20,
+    shard_count = 30,
     tags = [
         "no_oss",  # b/117185141.
         "nomsan",  # TODO(b/117236102): Re-enable in msan build.
@@ -3620,7 +3626,7 @@ tf_py_test(
 
 cuda_py_test(
     name = "bucketize_op_test",
-    size = "small",
+    size = "medium",
     srcs = ["bucketize_op_test.py"],
     deps = [
         "//tensorflow/python:client_testlib",

@@ -1,13 +1,20 @@
 #!/bin/bash
 set -e
 source ../SETTINGS_AND_VERSIONS.sh
-
+	
+BAZEL_CXX_BUILD_SETTINGS=(
+		--config=opt
+)
+BAZEL_REPO_OVERRIDES=(  )
+TARGET_ARCH=native
 LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_toco]"
+        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
+	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
+	echo "  [--verbose]" 1>&2
         exit 1
         ;;
     "--no-config")
@@ -19,18 +26,31 @@ do
     "--no-tflite")
         NOTFLITE=1
         ;;
+    "--fast")
+	BAZEL_CXX_BUILD_SETTINGS=(
+                  --copt=-O1 --cxxopt=-O1 --strip=never
+	)
+	;;
+    "--debug")
+	BAZEL_CXX_BUILD_SETTINGS=(
+                --config=dbg
+                --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 
+                --strip=never --fission=yes 
+	)
+	;;
     "--jobs")
         LOCALJOBS="$2"
         shift
         ;;
     "--remote")
         BAZEL_REMOTE_OPTIONS=(
-           --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://localhost:8980
+           --jobs="$2" --spawn_strategy=local,remote --strategy=CppCompile=remote --remote_executor=grpc://pistol:8980
         )
+	      TARGET_ARCH=sandybridge
         ;;
     "--override-llvm")
-	BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f ../..)/llvm-project )
-	;;
+       BAZEL_REPO_OVERRIDES=( --override_repository=llvm-project=$(readlink -f "../llvm-project")  )
+    ;;
     "--verbose")
         VERBOSE=( --subcommands=true )
         ;;
@@ -60,20 +80,36 @@ then
   BAZEL_OPTIONS=(
       "${BAZEL_DISTDIR_OPTIONS[@]}"
       "${BAZEL_REPO_OVERRIDES[@]}"
-      --verbose_failures --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
+      --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
-      --config=dbg --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+      "${BAZEL_CXX_BUILD_SETTINGS[@]}"
+      #--cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
       --verbose_failures=yes
+  )
+elif [ -n "$RD_CLUSTER_LINUX_HOST" ]
+then
+  BAZEL_OPTIONS=(
+      "${BAZEL_DISTDIR_OPTIONS[@]}"
+      "${BAZEL_REPO_OVERRIDES[@]}"
+      --local_cpu_resources="$LOCALJOBS" "${VERBOSE[@]}"
+      "${BAZEL_REMOTE_OPTIONS[@]}"
+      "${BAZEL_CXX_BUILD_SETTINGS[@]}"
+      --config=monolithic
+     --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+	    "--repository_cache=/home/aifordes.work/bazel_repo_cache" 
+	    # Note: Cannot enable debug non-NFS scratch for bazel_root too small...
+	    --verbose_failures=yes
   )
 else
   BAZEL_OPTIONS=(
         "${BAZEL_DISTDIR_OPTIONS[@]}"
       "${BAZEL_REPO_OVERRIDES[@]}"
-      --verbose_failures --local_cpu_resources="$LOCALJOBS" --config=monolithic "${VERBOSE[@]}"
+      --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
-      --config=dbg
-      --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
-      --strip=never --fission=yes --verbose_failures=yes
+      "${BAZEL_CXX_BUILD_SETTINGS[@]}"
+      --config=monolithic
+      --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
+      --verbose_failures=yes
   )
 fi
 # Build a statically linked toco command-line translator
@@ -111,7 +147,7 @@ then
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_COMPUTECPP=0
     export GCC_HOST_COMPILER_PATH=$(which gcc)
-    export CC_OPT_FLAGS="-march=native -Wno-sign-compare"
+    export CC_OPT_FLAGS="-march=${TARGET_ARCH} -Wno-sign-compare"
     export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_KAFKA=0
     export TF_NEED_TENSORRT=0 

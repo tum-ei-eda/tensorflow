@@ -30,6 +30,7 @@ from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import data_flow_ops
 from tensorflow.python.ops import gen_bitwise_ops
 from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import parsing_ops
 from tensorflow.python.ops import string_ops
 from tensorflow.python.ops import variables
@@ -136,18 +137,16 @@ class UnaryRaggedElementwiseDispatcher(dispatch.OpDispatcher):
             if ragged_tensor.is_ragged(elt) else elt for elt in x
         ]
         x = ragged_tensor.match_row_splits_dtypes(*x)
-        nested_splits_lists = [
-            elt.nested_row_splits for elt in x if ragged_tensor.is_ragged(elt)
-        ]
+        ragged_elts = [elt for elt in x if ragged_tensor.is_ragged(elt)]
+        nested_splits_lists = [elt.nested_row_splits for elt in ragged_elts]
         flat_values = [
             elt.flat_values if ragged_tensor.is_ragged(elt) else elt
             for elt in x
         ]
         with ops.control_dependencies(
             ragged_util.assert_splits_match(nested_splits_lists)):
-          return ragged_tensor.RaggedTensor.from_nested_row_splits(
-              self._original_op(flat_values, *args, **kwargs),
-              nested_splits_lists[0], validate=False)
+          return ragged_elts[0].with_flat_values(
+              self._original_op(flat_values, *args, **kwargs))
       else:
         return self.NOT_SUPPORTED
     else:
@@ -455,6 +454,26 @@ def _ragged_dynamic_partition(data, partitions, num_partitions, name=None):
                                                      num_partitions, name)
   return [result[i] for i in range(num_partitions)]
 
+
+def _ragged_nn_dropout_v1(x, keep_prob=None, noise_shape=None, seed=None,
+                          name=None, rate=None):
+  if noise_shape is not None:
+    raise ValueError('noise_shape is not supported yet for RaggedTensor x')
+  with ops.name_scope(name, 'RaggedNNDropout', [x, rate]):
+    x = ragged_tensor.convert_to_tensor_or_ragged_tensor(x, name='x')
+    return x.with_flat_values(nn_ops.dropout(x.flat_values, keep_prob=keep_prob,
+                                             seed=seed, rate=rate))
+
+
+def _ragged_nn_dropout_v2(x, rate, noise_shape=None, seed=None, name=None):
+  if noise_shape is not None:
+    raise ValueError('noise_shape is not supported yet for RaggedTensor x')
+  with ops.name_scope(name, 'RaggedNNDropout', [x, rate]):
+    x = ragged_tensor.convert_to_tensor_or_ragged_tensor(x, name='x')
+    return x.with_flat_values(nn_ops.dropout_v2(x.flat_values, rate=rate,
+                                                seed=seed))
+
+
 # (original_op, ragged_op, ragged_args)
 _RAGGED_DISPATCH_OPS = [
     (array_ops.batch_gather, ragged_batch_gather_ops.batch_gather,
@@ -499,6 +518,8 @@ _RAGGED_DISPATCH_OPS = [
     (math_ops.reduce_mean, ragged_math_ops.reduce_mean, ['input_tensor']),
     (math_ops.reduce_any, ragged_math_ops.reduce_any, ['input_tensor']),
     (math_ops.reduce_all, ragged_math_ops.reduce_all, ['input_tensor']),
+    (nn_ops.dropout, _ragged_nn_dropout_v1, ['x']),
+    (nn_ops.dropout_v2, _ragged_nn_dropout_v2, ['x']),
 ]
 
 

@@ -1,0 +1,231 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        
+
+        
+        {
+            "name": "tf_tfl_translate (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": ["--mlir-print-op-on-diagnostic", "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=-32", "--tf-input-max-values=16", "--input-arrays=quant_conv2d_input",  "--tf-input-shapes=1,49,40,1",
+                "--tf-output-arrays=Identity", 
+                "/home/as/nobackup/aiml_deployment/egs_and_tests/tflite/speech_demo/kwsnet_mlir.pb",
+                "-o", "tt.tflite"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+
+        {
+            "name": "tf_tfl_translate b2b quant test(gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": ["--mlir-print-op-on-diagnostic", "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=0.0", "--tf-input-max-values=6.283185307179586",
+                "--tf-input-arrays=quant_dense_input", "--tf-input-shapes=1,1", 
+                "--tf-output-arrays=Identity",  
+                "tensorflow/compiler/mlir/lite/tests/end2end/back2back_fake_quant.pbtxt",
+                "-o", "tt.tflite"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+        
+        {
+            "name": "tf_tfl_translate 6_8 (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": ["--mlir-print-op-on-diagnostic", "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=-32", "--tf-input-max-values=16", "--tf-input-arrays=quant_conv2d_input",
+                "--tf-input-shapes=1,49,40,1", "--tf-input-shapes=1,49,40,1",
+                "--tf-output-arrays=Identity",
+                "-o=kwsnet_6_8_mlir.tflite", 
+                "/home/as/nobackup/aiml_deployment/egs_and_tests/tflite/speech_demo/kwsnet_mlir.pb"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+
+        {
+            "name": "tf_tfl_translate 4-bit pakced_models (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate",
+            "args": [
+                // "--mlir-print-op-on-diagnostic",
+                "--mlir-elide-elementsattrs-if-larger=10", 
+                "-emit-builtin-tflite-ops",  "--emit-select-tf-ops",
+                "--tf-inference-type=DT_QUINT8", 
+                "--tf-input-min-values=0.0", "--tf-input-max-values=6.283185307179586",
+                "--tf-input-arrays=quant_dense_input", "--tf-input-shapes=1,1", 
+                "--tf-output-arrays=Identity", 
+                //"--print-ir-after=tfl-optimize",
+                //"--print-ir-before=tfl-optimize",
+                //"--print-ir-after=tfl-legalize-tf",
+                //"--print-ir-after=tfl-prepare-tf",
+                //"--print-ir-after=tfl-prepare-quantize",
+                "--print-ir-after=tfl-quantize",
+                "--print-ir-after=tfl-runtime-verify",
+                "hello_world_mlir_2.2.0-rc2.pbtxt",
+                "-o", "hello_world_mlir_2.2.0-rc2.tflite"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+
+
+        {
+            "name": "packed_weights_test (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/tensorflow/lite/micro/gen/linux_x86_64_debug/bin/packed_weights_test",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+
+
+        {
+            "name": "kernel_fully_connected_test (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/tensorflow/lite/micro/gen/linux_x86_64_debug/bin/kernel_fully_connected_test",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+
+
+        {
+            "name": "person_detection_test (gdb) Launch ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/tensorflow/lite/micro/gen/linux_x86_64_debug/bin/person_detection_test",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set source path since its mangled by bazel setting PWD in env",
+                    "text": "-environment-directory ${workspaceFolder}/bazel-tensorflow",
+                    "ignoreFailures": true
+                },
+
+            ]
+        },
+    ]
+}

@@ -88,7 +88,10 @@ class StatefulNnApiDelegate : public TfLiteDelegate {
     // <max_number_delegated_partitions> of them will be actually accelerated.
     // The selection is currently done sorting partitions in decreasing order
     // of number of nodes and selecting them until the limit is reached.
-    int max_number_delegated_partitions = 0;
+    int max_number_delegated_partitions = 3;
+
+    // allow fp32 compuation to be run in fp16
+    bool allow_fp16 = false;
   };
 
   // Uses default options.
@@ -172,7 +175,7 @@ class StatefulNnApiDelegate : public TfLiteDelegate {
     bool disallow_nnapi_cpu;
     // Tensor to ANeuralNetworksMemory mapping.
     std::vector<MemoryRegistration> tensor_memory_map;
-    // Constains a non zero value if any NNAPI method call
+    // Contains a non zero value if any NNAPI method call
     // operation returned a non zero result code.
     int nnapi_errno;
     // Cache of kernels already built in StatefulNnApiDelegate::DoPrepare
@@ -184,6 +187,8 @@ class StatefulNnApiDelegate : public TfLiteDelegate {
     // Maximum number of NNAPI partition to delegate. Zero or negative means
     // no limit. Copied from StatefulNnApiDelegate::Options
     int max_number_delegated_partitions;
+    // allow fp32 computation to be run in fp32
+    bool allow_fp16 = false;
 
     ~Data();
 

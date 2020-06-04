@@ -850,6 +850,30 @@ op {
   is_stateful: true
 }
 op {
+  name: "AnonymousSeedGenerator"
+  input_arg {
+    name: "seed"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed2"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "reshuffle"
+    type: DT_BOOL
+  }
+  output_arg {
+    name: "handle"
+    type: DT_RESOURCE
+  }
+  output_arg {
+    name: "deleter"
+    type: DT_VARIANT
+  }
+  is_stateful: true
+}
+op {
   name: "Any"
   input_arg {
     name: "input"
@@ -1557,6 +1581,13 @@ op {
       b: false
     }
   }
+  attr {
+    name: "multiply_linear_by_lr"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
 }
 op {
   name: "ApplyFtrlV2"
@@ -1631,6 +1662,13 @@ op {
   }
   attr {
     name: "use_locking"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+  attr {
+    name: "multiply_linear_by_lr"
     type: "bool"
     default_value {
       b: false
@@ -2115,6 +2153,7 @@ op {
         type: DT_HALF
         type: DT_UINT32
         type: DT_UINT64
+        type: DT_BOOL
       }
     }
   }
@@ -2181,6 +2220,7 @@ op {
         type: DT_HALF
         type: DT_UINT32
         type: DT_UINT64
+        type: DT_BOOL
       }
     }
   }
@@ -10436,6 +10476,61 @@ op {
   }
 }
 op {
+  name: "DataServiceDataset"
+  input_arg {
+    name: "dataset_id"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "processing_mode"
+    type: DT_STRING
+  }
+  input_arg {
+    name: "address"
+    type: DT_STRING
+  }
+  input_arg {
+    name: "protocol"
+    type: DT_STRING
+  }
+  input_arg {
+    name: "job_name"
+    type: DT_STRING
+  }
+  input_arg {
+    name: "max_outstanding_requests"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "iteration_counter"
+    type: DT_RESOURCE
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
+  }
+  attr {
+    name: "task_refresh_interval_hint_ms"
+    type: "int"
+    default_value {
+      i: -1
+    }
+  }
+  attr {
+    name: "output_types"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "output_shapes"
+    type: "list(shape)"
+    has_minimum: true
+    minimum: 1
+  }
+  is_stateful: true
+}
+op {
   name: "DatasetCardinality"
   input_arg {
     name: "input_dataset"
@@ -11360,12 +11455,137 @@ op {
   is_stateful: true
 }
 op {
+  name: "DeleteSeedGenerator"
+  input_arg {
+    name: "handle"
+    type: DT_RESOURCE
+  }
+  input_arg {
+    name: "deleter"
+    type: DT_VARIANT
+  }
+  is_stateful: true
+}
+op {
   name: "DeleteSessionTensor"
   input_arg {
     name: "handle"
     type: DT_STRING
   }
   is_stateful: true
+}
+op {
+  name: "DenseBincount"
+  input_arg {
+    name: "input"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "size"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "weights"
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    type_attr: "T"
+  }
+  attr {
+    name: "Tidx"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+        type: DT_FLOAT
+        type: DT_DOUBLE
+      }
+    }
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+}
+op {
+  name: "DenseCountSparseOutput"
+  input_arg {
+    name: "values"
+    type_attr: "T"
+  }
+  input_arg {
+    name: "weights"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "output_indices"
+    type: DT_INT64
+  }
+  output_arg {
+    name: "output_values"
+    type_attr: "output_type"
+  }
+  output_arg {
+    name: "output_dense_shape"
+    type: DT_INT64
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "minlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "maxlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+  }
+  attr {
+    name: "output_type"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_FLOAT
+      }
+    }
+  }
 }
 op {
   name: "DenseToCSRSparseMatrix"
@@ -11603,6 +11823,15 @@ op {
       list {
         s: "SAME"
         s: "VALID"
+        s: "EXPLICIT"
+      }
+    }
+  }
+  attr {
+    name: "explicit_paddings"
+    type: "list(int)"
+    default_value {
+      list {
       }
     }
   }
@@ -11673,6 +11902,15 @@ op {
       list {
         s: "SAME"
         s: "VALID"
+        s: "EXPLICIT"
+      }
+    }
+  }
+  attr {
+    name: "explicit_paddings"
+    type: "list(int)"
+    default_value {
+      list {
       }
     }
   }
@@ -11743,6 +11981,15 @@ op {
       list {
         s: "SAME"
         s: "VALID"
+        s: "EXPLICIT"
+      }
+    }
+  }
+  attr {
+    name: "explicit_paddings"
+    type: "list(int)"
+    default_value {
+      list {
       }
     }
   }
@@ -12365,6 +12612,30 @@ op {
   }
 }
 op {
+  name: "DummyIterationCounter"
+  output_arg {
+    name: "handle"
+    type: DT_RESOURCE
+  }
+  is_stateful: true
+}
+op {
+  name: "DummyMemoryCache"
+  output_arg {
+    name: "handle"
+    type: DT_RESOURCE
+  }
+  is_stateful: true
+}
+op {
+  name: "DummySeedGenerator"
+  output_arg {
+    name: "handle"
+    type: DT_RESOURCE
+  }
+  is_stateful: true
+}
+op {
   name: "DynamicPartition"
   input_arg {
     name: "data"
@@ -12893,6 +13164,101 @@ op {
   is_stateful: true
 }
 op {
+  name: "EnqueueTPUEmbeddingRaggedTensorBatch"
+  input_arg {
+    name: "sample_splits"
+    type_attr: "T1"
+    number_attr: "N"
+  }
+  input_arg {
+    name: "embedding_indices"
+    type_attr: "T2"
+    number_attr: "N"
+  }
+  input_arg {
+    name: "aggregation_weights"
+    type_attr: "T3"
+    number_attr: "N"
+  }
+  input_arg {
+    name: "mode_override"
+    type: DT_STRING
+  }
+  attr {
+    name: "T1"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "T2"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "T3"
+    type: "type"
+    default_value {
+      type: DT_FLOAT
+    }
+    allowed_values {
+      list {
+        type: DT_FLOAT
+        type: DT_DOUBLE
+      }
+    }
+  }
+  attr {
+    name: "N"
+    type: "int"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "device_ordinal"
+    type: "int"
+    default_value {
+      i: -1
+    }
+  }
+  attr {
+    name: "combiners"
+    type: "list(string)"
+    default_value {
+      list {
+      }
+    }
+  }
+  attr {
+    name: "table_ids"
+    type: "list(int)"
+  }
+  attr {
+    name: "max_sequence_lengths"
+    type: "list(int)"
+    default_value {
+      list {
+      }
+    }
+  }
+  is_stateful: true
+}
+op {
   name: "EnqueueTPUEmbeddingSparseBatch"
   input_arg {
     name: "sample_indices"
@@ -13150,6 +13516,9 @@ op {
         type: DT_INT16
         type: DT_INT32
         type: DT_INT64
+        type: DT_UINT16
+        type: DT_UINT32
+        type: DT_UINT64
         type: DT_COMPLEX64
         type: DT_QUINT8
         type: DT_QINT8
@@ -15789,6 +16158,7 @@ op {
       list {
         type: DT_INT32
         type: DT_INT64
+        type: DT_UINT64
         type: DT_BFLOAT16
         type: DT_HALF
         type: DT_FLOAT
@@ -18118,6 +18488,13 @@ op {
     name: "interpolation"
     type: "string"
   }
+  attr {
+    name: "fill_mode"
+    type: "string"
+    default_value {
+      s: "CONSTANT"
+    }
+  }
 }
 op {
   name: "ImageSummary"
@@ -18410,6 +18787,18 @@ op {
     name: "Tval"
     type: "type"
   }
+}
+op {
+  name: "InitializeTableFromDataset"
+  input_arg {
+    name: "table_handle"
+    type: DT_RESOURCE
+  }
+  input_arg {
+    name: "dataset"
+    type: DT_VARIANT
+  }
+  is_stateful: true
 }
 op {
   name: "InitializeTableFromTextFile"
@@ -19956,8 +20345,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20007,8 +20394,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20054,8 +20439,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20105,8 +20488,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20148,8 +20529,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20195,8 +20574,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20246,8 +20623,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20293,8 +20668,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20344,8 +20717,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20395,8 +20766,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20438,8 +20807,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20485,8 +20852,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20528,8 +20893,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20575,8 +20938,100 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "LoadTPUEmbeddingProximalYogiParameters"
+  input_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "v"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "m"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "LoadTPUEmbeddingProximalYogiParametersGradAccumDebug"
+  input_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "v"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "m"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "gradient_accumulators"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
   }
   attr {
     name: "table_name"
@@ -20622,8 +21077,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20673,8 +21126,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -20712,8 +21163,47 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "LoadTPUEmbeddingStochasticGradientDescentParametersGradAccumDebug"
+  input_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  input_arg {
+    name: "gradient_accumulators"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
   }
   attr {
     name: "table_name"
@@ -23347,6 +23837,8 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_UINT8
+        type: DT_INT16
         type: DT_INT32
         type: DT_INT64
       }
@@ -23602,6 +24094,8 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_UINT8
+        type: DT_INT16
         type: DT_INT32
         type: DT_INT64
       }
@@ -23839,6 +24333,7 @@ op {
     type: "type"
     allowed_values {
       list {
+        type: DT_BFLOAT16
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
@@ -25000,6 +25495,9 @@ op {
         type: DT_INT16
         type: DT_INT32
         type: DT_INT64
+        type: DT_UINT16
+        type: DT_UINT32
+        type: DT_UINT64
         type: DT_COMPLEX64
         type: DT_QUINT8
         type: DT_QINT8
@@ -32664,6 +33162,250 @@ op {
   }
 }
 op {
+  name: "RaggedBincount"
+  input_arg {
+    name: "splits"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "values"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "size"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "weights"
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    type_attr: "T"
+  }
+  attr {
+    name: "Tidx"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+        type: DT_FLOAT
+        type: DT_DOUBLE
+      }
+    }
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+}
+op {
+  name: "RaggedCountSparseOutput"
+  input_arg {
+    name: "splits"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "values"
+    type_attr: "T"
+  }
+  input_arg {
+    name: "weights"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "output_indices"
+    type: DT_INT64
+  }
+  output_arg {
+    name: "output_values"
+    type_attr: "output_type"
+  }
+  output_arg {
+    name: "output_dense_shape"
+    type: DT_INT64
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "minlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "maxlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+  }
+  attr {
+    name: "output_type"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_FLOAT
+      }
+    }
+  }
+}
+op {
+  name: "RaggedCross"
+  input_arg {
+    name: "ragged_values"
+    type_list_attr: "ragged_values_types"
+  }
+  input_arg {
+    name: "ragged_row_splits"
+    type_list_attr: "ragged_splits_types"
+  }
+  input_arg {
+    name: "sparse_indices"
+    type: DT_INT64
+    number_attr: "Nsparse"
+  }
+  input_arg {
+    name: "sparse_values"
+    type_list_attr: "sparse_values_types"
+  }
+  input_arg {
+    name: "sparse_shape"
+    type: DT_INT64
+    number_attr: "Nsparse"
+  }
+  input_arg {
+    name: "dense_inputs"
+    type_list_attr: "dense_types"
+  }
+  output_arg {
+    name: "output_values"
+    type_attr: "out_values_type"
+  }
+  output_arg {
+    name: "output_row_splits"
+    type_attr: "out_row_splits_type"
+  }
+  attr {
+    name: "Nsparse"
+    type: "int"
+    has_minimum: true
+  }
+  attr {
+    name: "input_order"
+    type: "string"
+  }
+  attr {
+    name: "hashed_output"
+    type: "bool"
+  }
+  attr {
+    name: "num_buckets"
+    type: "int"
+    has_minimum: true
+  }
+  attr {
+    name: "hash_key"
+    type: "int"
+  }
+  attr {
+    name: "ragged_values_types"
+    type: "list(type)"
+    has_minimum: true
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_STRING
+      }
+    }
+  }
+  attr {
+    name: "ragged_splits_types"
+    type: "list(type)"
+    has_minimum: true
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "sparse_values_types"
+    type: "list(type)"
+    has_minimum: true
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_STRING
+      }
+    }
+  }
+  attr {
+    name: "dense_types"
+    type: "list(type)"
+    has_minimum: true
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_STRING
+      }
+    }
+  }
+  attr {
+    name: "out_values_type"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_STRING
+      }
+    }
+  }
+  attr {
+    name: "out_row_splits_type"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+}
+op {
   name: "RaggedGather"
   input_arg {
     name: "params_nested_splits"
@@ -34437,6 +35179,29 @@ op {
   }
 }
 op {
+  name: "RegisterDataset"
+  input_arg {
+    name: "dataset"
+    type: DT_VARIANT
+  }
+  input_arg {
+    name: "address"
+    type: DT_STRING
+  }
+  input_arg {
+    name: "protocol"
+    type: DT_STRING
+  }
+  output_arg {
+    name: "dataset_id"
+    type: DT_INT64
+  }
+  attr {
+    name: "external_state_policy"
+    type: "int"
+  }
+}
+op {
   name: "Relu"
   input_arg {
     name: "features"
@@ -34920,6 +35685,7 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_BFLOAT16
       }
     }
   }
@@ -34959,6 +35725,7 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_BFLOAT16
       }
     }
   }
@@ -35045,6 +35812,7 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_BFLOAT16
       }
     }
   }
@@ -35132,6 +35900,7 @@ op {
         type: DT_HALF
         type: DT_FLOAT
         type: DT_DOUBLE
+        type: DT_BFLOAT16
       }
     }
   }
@@ -35990,6 +36759,13 @@ op {
       b: false
     }
   }
+  attr {
+    name: "multiply_linear_by_lr"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
   is_stateful: true
 }
 op {
@@ -36057,6 +36833,13 @@ op {
   }
   attr {
     name: "use_locking"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+  attr {
+    name: "multiply_linear_by_lr"
     type: "bool"
     default_value {
       b: false
@@ -37573,6 +38356,13 @@ op {
       b: false
     }
   }
+  attr {
+    name: "multiply_linear_by_lr"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
   is_stateful: true
 }
 op {
@@ -37654,6 +38444,13 @@ op {
   }
   attr {
     name: "use_locking"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+  attr {
+    name: "multiply_linear_by_lr"
     type: "bool"
     default_value {
       b: false
@@ -38218,8 +39015,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38269,8 +39064,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38316,8 +39109,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38367,8 +39158,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38410,8 +39199,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38457,8 +39244,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38508,8 +39293,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38555,8 +39338,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38606,8 +39387,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38657,8 +39436,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38700,8 +39477,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38747,8 +39522,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38790,8 +39563,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38837,8 +39608,100 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "RetrieveTPUEmbeddingProximalYogiParameters"
+  output_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "v"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "m"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "RetrieveTPUEmbeddingProximalYogiParametersGradAccumDebug"
+  output_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "v"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "m"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "gradient_accumulators"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
   }
   attr {
     name: "table_name"
@@ -38884,8 +39747,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38935,8 +39796,6 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
   }
   attr {
     name: "table_name"
@@ -38974,8 +39833,47 @@ op {
     default_value {
       i: -1
     }
-    has_minimum: true
-    minimum: -1
+  }
+  attr {
+    name: "table_name"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  attr {
+    name: "num_shards"
+    type: "int"
+  }
+  attr {
+    name: "shard_id"
+    type: "int"
+  }
+  attr {
+    name: "config"
+    type: "string"
+    default_value {
+      s: ""
+    }
+  }
+  is_stateful: true
+}
+op {
+  name: "RetrieveTPUEmbeddingStochasticGradientDescentParametersGradAccumDebug"
+  output_arg {
+    name: "parameters"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "gradient_accumulators"
+    type: DT_FLOAT
+  }
+  attr {
+    name: "table_id"
+    type: "int"
+    default_value {
+      i: -1
+    }
   }
   attr {
     name: "table_name"
@@ -41597,6 +42495,64 @@ op {
     has_minimum: true
     minimum: 1
   }
+  attr {
+    name: "reshuffle_each_iteration"
+    type: "bool"
+    default_value {
+      b: true
+    }
+  }
+}
+op {
+  name: "ShuffleAndRepeatDatasetV2"
+  input_arg {
+    name: "input_dataset"
+    type: DT_VARIANT
+  }
+  input_arg {
+    name: "buffer_size"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed2"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "count"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed_generator"
+    type: DT_RESOURCE
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
+  }
+  attr {
+    name: "reshuffle_each_iteration"
+    type: "bool"
+    default_value {
+      b: true
+    }
+  }
+  attr {
+    name: "output_types"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "output_shapes"
+    type: "list(shape)"
+    has_minimum: true
+    minimum: 1
+  }
+  is_stateful: true
 }
 op {
   name: "ShuffleDataset"
@@ -41657,6 +42613,53 @@ op {
   output_arg {
     name: "handle"
     type: DT_VARIANT
+  }
+  attr {
+    name: "output_types"
+    type: "list(type)"
+    has_minimum: true
+    minimum: 1
+  }
+  attr {
+    name: "output_shapes"
+    type: "list(shape)"
+    has_minimum: true
+    minimum: 1
+  }
+  is_stateful: true
+}
+op {
+  name: "ShuffleDatasetV3"
+  input_arg {
+    name: "input_dataset"
+    type: DT_VARIANT
+  }
+  input_arg {
+    name: "buffer_size"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed2"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "seed_generator"
+    type: DT_RESOURCE
+  }
+  output_arg {
+    name: "handle"
+    type: DT_VARIANT
+  }
+  attr {
+    name: "reshuffle_each_iteration"
+    type: "bool"
+    default_value {
+      b: true
+    }
   }
   attr {
     name: "output_types"
@@ -43230,6 +44233,13 @@ op {
       b: false
     }
   }
+  attr {
+    name: "multiply_linear_by_lr"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
 }
 op {
   name: "SparseApplyFtrlV2"
@@ -43318,6 +44328,13 @@ op {
   }
   attr {
     name: "use_locking"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+  attr {
+    name: "multiply_linear_by_lr"
     type: "bool"
     default_value {
       b: false
@@ -43652,6 +44669,62 @@ op {
   }
 }
 op {
+  name: "SparseBincount"
+  input_arg {
+    name: "indices"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "values"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "dense_shape"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "size"
+    type_attr: "Tidx"
+  }
+  input_arg {
+    name: "weights"
+    type_attr: "T"
+  }
+  output_arg {
+    name: "output"
+    type_attr: "T"
+  }
+  attr {
+    name: "Tidx"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+        type: DT_FLOAT
+        type: DT_DOUBLE
+      }
+    }
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+    default_value {
+      b: false
+    }
+  }
+}
+op {
   name: "SparseConcat"
   input_arg {
     name: "indices"
@@ -43759,6 +44832,79 @@ op {
     }
   }
   is_stateful: true
+}
+op {
+  name: "SparseCountSparseOutput"
+  input_arg {
+    name: "indices"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "values"
+    type_attr: "T"
+  }
+  input_arg {
+    name: "dense_shape"
+    type: DT_INT64
+  }
+  input_arg {
+    name: "weights"
+    type: DT_FLOAT
+  }
+  output_arg {
+    name: "output_indices"
+    type: DT_INT64
+  }
+  output_arg {
+    name: "output_values"
+    type_attr: "output_type"
+  }
+  output_arg {
+    name: "output_dense_shape"
+    type: DT_INT64
+  }
+  attr {
+    name: "T"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "minlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "maxlength"
+    type: "int"
+    default_value {
+      i: -1
+    }
+    has_minimum: true
+    minimum: -1
+  }
+  attr {
+    name: "binary_count"
+    type: "bool"
+  }
+  attr {
+    name: "output_type"
+    type: "type"
+    allowed_values {
+      list {
+        type: DT_INT64
+        type: DT_FLOAT
+      }
+    }
+  }
 }
 op {
   name: "SparseCross"
@@ -44734,7 +45880,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   output_arg {
     name: "output"
@@ -44752,6 +45898,19 @@ op {
   }
   attr {
     name: "Tidx"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "Tsegmentids"
     type: "type"
     default_value {
       type: DT_INT32
@@ -44776,7 +45935,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   input_arg {
     name: "output_dim0"
@@ -44798,6 +45957,19 @@ op {
   }
   attr {
     name: "Tidx"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "Tsegmentids"
     type: "type"
     default_value {
       type: DT_INT32
@@ -44822,7 +45994,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   input_arg {
     name: "num_segments"
@@ -44868,6 +46040,19 @@ op {
       }
     }
   }
+  attr {
+    name: "Tsegmentids"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
 }
 op {
   name: "SparseSegmentSqrtN"
@@ -44881,7 +46066,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   output_arg {
     name: "output"
@@ -44910,6 +46095,19 @@ op {
       }
     }
   }
+  attr {
+    name: "Tsegmentids"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
 }
 op {
   name: "SparseSegmentSqrtNGrad"
@@ -44923,7 +46121,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   input_arg {
     name: "output_dim0"
@@ -44956,6 +46154,19 @@ op {
       }
     }
   }
+  attr {
+    name: "Tsegmentids"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
 }
 op {
   name: "SparseSegmentSqrtNWithNumSegments"
@@ -44969,7 +46180,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   input_arg {
     name: "num_segments"
@@ -45004,6 +46215,19 @@ op {
   }
   attr {
     name: "Tnumsegments"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "Tsegmentids"
     type: "type"
     default_value {
       type: DT_INT32
@@ -45028,7 +46252,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   output_arg {
     name: "output"
@@ -45067,6 +46291,19 @@ op {
       }
     }
   }
+  attr {
+    name: "Tsegmentids"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
 }
 op {
   name: "SparseSegmentSumWithNumSegments"
@@ -45080,7 +46317,7 @@ op {
   }
   input_arg {
     name: "segment_ids"
-    type: DT_INT32
+    type_attr: "Tsegmentids"
   }
   input_arg {
     name: "num_segments"
@@ -45125,6 +46362,19 @@ op {
   }
   attr {
     name: "Tnumsegments"
+    type: "type"
+    default_value {
+      type: DT_INT32
+    }
+    allowed_values {
+      list {
+        type: DT_INT32
+        type: DT_INT64
+      }
+    }
+  }
+  attr {
+    name: "Tsegmentids"
     type: "type"
     default_value {
       type: DT_INT32
@@ -47979,6 +49229,7 @@ op {
         type: DT_INT64
         type: DT_COMPLEX64
         type: DT_COMPLEX128
+        type: DT_UINT32
       }
     }
   }
@@ -52244,6 +53495,14 @@ op {
   attr {
     name: "shape"
     type: "shape"
+  }
+  attr {
+    name: "allowed_devices"
+    type: "list(string)"
+    default_value {
+      list {
+      }
+    }
   }
   is_stateful: true
 }
