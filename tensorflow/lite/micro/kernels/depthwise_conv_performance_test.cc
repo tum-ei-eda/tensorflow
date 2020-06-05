@@ -59,6 +59,8 @@ const int kOutputElements = batches*output_size*output_size*output_depth;
 static float kOutputData[kOutputElements];
 static float kGoldenData[kOutputElements];
 
+static const int number_of_invocations = 1000;
+
 
 void InitDepthwiseConvTestDataQuantized(
     const int filter_size, const int output_channels,
@@ -377,7 +379,6 @@ void TestDepthwiseConvQuantizedPerChannel(
 TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(Int8Performance) {
-  const int number_of_invocations = 1000;
 
   tflite::testing::InitDepthwiseConvTestDataQuantized(tflite::testing::filter_size, tflite::testing::output_depth,
                                                tflite::testing::input_channels, tflite::testing::batches, tflite::testing::input_size,
@@ -411,12 +412,10 @@ TF_LITE_MICRO_TEST(Int8Performance) {
       tflite::testing::input_shape, tflite::testing::kInputData, input_quantized, input_scale, input_zero_point,
       tflite::testing::filter_shape, tflite::testing::kFilterData, filter_quantized, tflite::testing::bias_shape, tflite::testing::kBiasData,
       bias_quantized, tflite::testing::output_shape, tflite::testing::kGoldenData, golden_quantized, output_data,
-      output_scale, output_zero_point, kTfLiteActNone, number_of_invocations);
+      output_scale, output_zero_point, kTfLiteActNone, tflite::testing::number_of_invocations);
 }
 
 TF_LITE_MICRO_TEST(Uint8Performance) {
-
-  const int number_of_invocations = 1000;
 
   tflite::testing::InitDepthwiseConvTestDataQuantized(tflite::testing::filter_size, tflite::testing::output_depth,
                                                tflite::testing::input_channels, tflite::testing::batches, tflite::testing::input_size,
@@ -450,7 +449,72 @@ TF_LITE_MICRO_TEST(Uint8Performance) {
       tflite::testing::filter_shape, tflite::testing::kFilterData, filter_quantized, filter_scale,
       filter_zero_point, tflite::testing::bias_shape, tflite::testing::kBiasData, bias_quantized, tflite::testing::kGoldenData,
       golden_quantized, tflite::testing::output_shape, output_data, output_scale,
-      output_zero_point, kTfLiteActNone, number_of_invocations);
+      output_zero_point, kTfLiteActNone, tflite::testing::number_of_invocations);
+}
+
+TF_LITE_MICRO_TEST(Uint8PerformanceSpecialImplementation) {
+
+  const int batches = 4;
+  const int input_size = 32;
+  const int input_channels = 1;
+  const int kInputElements = batches*input_size*input_size*input_channels;
+  const int input_shape[] = {4, batches, input_size, input_size, input_channels};
+  float kInputData[kInputElements];
+
+  const int filter_size = 8;
+  const int depth_multiplier = 2;
+  const int output_depth = input_channels*depth_multiplier;
+  const int kFilterElements = 1*filter_size*filter_size*output_depth;
+  const int filter_shape[] = {4, 1, filter_size, filter_size, output_depth};
+  float kFilterData[kFilterElements];
+
+  const int bias_shape[] = {4, 1, 1, 1, output_depth};
+  const int kBiasElements = output_depth;
+  float kBiasData[output_depth];
+
+  const int stride = 1;
+  const int output_size = ((input_size - filter_size) / stride) + 1;
+
+  int output_shape[] = {4, batches, output_size, output_size, output_depth};
+  int kOutputElements = batches*output_size*output_size*output_depth;
+  float kOutputData[kOutputElements];
+  float kGoldenData[kOutputElements];
+
+  TF_LITE_MICRO_EXPECT(output_depth * filter_size * filter_size * input_channels <= 1024);
+
+  tflite::testing::InitDepthwiseConvTestDataQuantized(filter_size, output_depth,
+                                               input_channels, batches, input_size,
+                                               kInputData,
+                                               kFilterData,
+                                               kBiasData);
+
+  tflite::testing::InitGoldenData(filter_size, output_depth,
+                                  input_channels, batches, input_size,
+                                  kInputData,
+                                  kFilterData,
+                                  kBiasData,
+                                  kGoldenData,
+                                  stride, output_size);
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 0;
+  const float filter_scale = 0.5f;
+  const int filter_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+  uint8_t golden_quantized[kOutputElements];
+  uint8_t output_data[kOutputElements];
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, kInputData, input_quantized, input_scale, input_zero_point,
+      filter_shape, kFilterData, filter_quantized, filter_scale,
+      filter_zero_point, bias_shape, kBiasData, bias_quantized, kGoldenData,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, kTfLiteActNone, tflite::testing::number_of_invocations);
 }
 
 TF_LITE_MICRO_TESTS_END

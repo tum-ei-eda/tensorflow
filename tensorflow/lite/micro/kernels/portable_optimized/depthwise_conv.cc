@@ -447,6 +447,13 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
     static TfLiteNode* initialized_node_address = node;
     if (initialized_node_address == node) {
       use_optimized_path = true;
+      static bool has_informed = false;
+      if (!has_informed) {
+        TF_LITE_KERNEL_LOG(
+            context,
+            "Using the optimized version for depthwise convolution");
+        has_informed = true;
+      }
     } else {
       static bool has_warned = false;
       if (!has_warned) {
