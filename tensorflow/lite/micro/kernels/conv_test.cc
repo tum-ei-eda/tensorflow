@@ -48,6 +48,12 @@ static TfLiteConvParams common_conv_params = {
     1,                    // dilation_height_factor
 };
 
+MockAllocator *mock_allocator;
+TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
+{
+	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
+}
+
 template <typename T>
 TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
                                  const T* expected_output_data, T* output_data,
@@ -56,6 +62,14 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
                                  float tolerance = 1e-5) {
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
+
+  // Memory allocation mock
+  const size_t buffer_arena_size = 1024;
+  const size_t bytes_alignment = 4;
+  uint8_t buffer_arena[buffer_arena_size];
+  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
+  context.AllocatePersistentBuffer = AllocatePersistentBuffer;
+
 
   ::tflite::ops::micro::AllOpsResolver resolver;
 
@@ -90,7 +104,10 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
   node.delegate = nullptr;
 
   if (registration->prepare) {
-    TF_LITE_ENSURE_OK(context, registration->prepare(&context, &node));
+    TfLiteStatus return_val = registration->prepare(&context, &node);
+    if (return_val != kTfLiteOk) {
+        return return_val;
+      }
   }
 
   // TODO(b/154240825): Use a test macro here which fails and returns.
