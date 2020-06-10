@@ -15,7 +15,6 @@ show_project_targets:
 	
 test_executables: $(MICROLITE_BUILD_TARGETS)
 
-
 # Note that third-party download libraries are copied into place
 # as they appear in a sub-directory of tools/make
 MICROLITE_CC_SRCS_TO_COPY := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))

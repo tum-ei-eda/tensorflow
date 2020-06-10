@@ -1,9 +1,12 @@
 #!/bin/bash
 set -e
 source ../SETTINGS_AND_VERSIONS.sh
-	
+
+
+# Monolothic needed to produce isntallable tf_tfl_translate	
 BAZEL_CXX_BUILD_SETTINGS=(
 		--config=opt
+                --config=monolithic
 )
 BAZEL_REPO_OVERRIDES=(  )
 TARGET_ARCH=native
@@ -29,12 +32,17 @@ do
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
+                  --config=monolithic
 	)
 	;;
     "--debug")
+	# includes workaround for mis-documented and buggy 
+	# per_object_debug_info feature.
 	BAZEL_CXX_BUILD_SETTINGS=(
-                --config=dbg
-                --copt=-gsplit-dwarf --copt=-O1 --cxxopt=-gsplit-dwarf --cxxopt=-O1 
+                --config=monolithic --config=dbg
+                --features=per_object_debug_info
+                --define='per_object_debug_info_file=yes'
+                --copt=-O0 --cxxopt=-O0 
                 --strip=never --fission=yes 
 	)
 	;;
@@ -94,7 +102,6 @@ then
       --local_cpu_resources="$LOCALJOBS" "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
       "${BAZEL_CXX_BUILD_SETTINGS[@]}"
-      --config=monolithic
      --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
 	    "--repository_cache=/home/aifordes.work/bazel_repo_cache" 
 	    # Note: Cannot enable debug non-NFS scratch for bazel_root too small...
@@ -107,7 +114,6 @@ else
       --local_cpu_resources="$LOCALJOBS"  "${VERBOSE[@]}"
       "${BAZEL_REMOTE_OPTIONS[@]}"
       "${BAZEL_CXX_BUILD_SETTINGS[@]}"
-      --config=monolithic
       --cxxopt=-DTF_LITE_DISABLE_X86_NEON --copt=-DTF_LITE_DISABLE_X86_NEON
       --verbose_failures=yes
   )

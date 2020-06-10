@@ -316,17 +316,17 @@ $(patsubst %.S,%.o,$(patsubst %.cc,%.o,$(patsubst %.c,%.o,$(THIRD_PARTY_CC_SRCS)
 # For normal manually-created TensorFlow C++ source files.
 $(OBJDIR)%.o: %.cc $(THIRD_PARTY_TARGETS)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $(abspath $<) -o $@
 
 # For normal manually-created TensorFlow C source files.
 $(OBJDIR)%.o: %.c $(THIRD_PARTY_TARGETS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CCFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CCFLAGS) $(INCLUDES) -c $(abspath $<) -o $@
 
 # For normal manually-created TensorFlow ASM source files.
 $(OBJDIR)%.o: %.S $(THIRD_PARTY_TARGETS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CCFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CCFLAGS) $(INCLUDES) -c $(abspath $<) -o $@
 
 # The target that's compiled if there's no command-line arguments.
 all: $(MICROLITE_LIB_PATH)
@@ -345,7 +345,7 @@ $(MICROLITE_LIB_PATH): $(TFLITE_U_PATH)tensorflow/lite/schema/schema_generated.h
 $(BINDIR)%_test : $(OBJDIR)%_test.o $(MICROLITE_LIB_PATH)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) \
-	-o $@ $< \
+	-o $@ $(abspath $<) \
 	$(LIBFLAGS) $(MICROLITE_LIB_PATH) $(LDFLAGS) $(MICROLITE_LIBS)
 
 $(BINDIR)%.test_target: $(BINDIR)%_test generated_test_scripts
