@@ -264,7 +264,7 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
     auto start = std::chrono::high_resolution_clock::now();
 
     TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
-    for (int i = 0; i < number_of_invocations; i++) {
+    for (int j = 0; j < number_of_invocations; j++) {
       TfLiteStatus return_val = registration->invoke(&context, &node);
       if (return_val != kTfLiteOk) {
         return return_val;
