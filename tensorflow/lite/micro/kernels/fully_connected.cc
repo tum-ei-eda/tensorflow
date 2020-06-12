@@ -23,7 +23,10 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
+//#define IFX_DEBUG_LOGGING 1
+#if IFX_DEBUG_LOGGING
 #include <iostream>
+#endif
 
 namespace tflite {
 namespace ops {
@@ -100,9 +103,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   {
     TF_LITE_ENSURE_MSG(context, custom_qinfo->size == 6,
                        "Unrecognized custom quantization info block");
-    // ToDO Check magic number
+    // TODO Check magic number
     // TODO Define TfLite Struct to reinterpret (known aligned!) data
-    TF_LITE_ENSURE_MSG(context, custom_qinfo->data[4] == 4 && custom_qinfo->data[5] == 8,
+    TF_LITE_ENSURE_MSG(context, custom_qinfo->data[4] >= 4 && custom_qinfo->data[4] <= 6,
                        "Currently unsupported packing format" );
   }
 
@@ -137,16 +140,25 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
   return kTfLiteOk;
 }
 
+
+
 //
-// @IFX_PATCH@PoC fully connect kernel for packed 4-bit weights
-// (2 4-bit weights per 8-bit byte, least significant bits hold first weight)
+// @IFX_PATCH@PoC
+//  Uint8 Quantized fully connect kernel for < 8-bit packed weights
+// "little-endian" format (first weight in LSB) ordering assumed.
 //
-inline void FullyConnected_2x4in8(
-    const FullyConnectedParams& params, const RuntimeShape& input_shape,
-    const uint8* input_data, const RuntimeShape& filter_shape,
-    const uint8* filter_data, const RuntimeShape& bias_shape,
-    const int32* bias_data, const RuntimeShape& output_shape,
-    uint8* output_data) {
+// TODO Use specializations to handle fast case where dimensions
+// allow efficient loop-unroll etc.
+// accum_container_depth should really be  a params value
+//
+
+template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
+void EvalFullyConnectedUint8PackedWeightsImpl(
+        const FullyConnectedParams& params,
+        const RuntimeShape& input_shape, const uint8* input_data,
+        const RuntimeShape& filter_shape, const CONTAINER_T* filter_data,
+        const RuntimeShape& bias_shape, const int32* bias_data,
+        const RuntimeShape& output_shape, uint8* output_data) {
   const int32 input_offset = params.input_offset;
   const int32 filter_offset = params.weights_offset;
   const int32 output_offset = params.output_offset;
@@ -156,8 +168,12 @@ inline void FullyConnected_2x4in8(
   const int32 output_activation_max = params.quantized_activation_max;
   TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
   TFLITE_DCHECK_GE(output_shape.DimensionsCount(), 1);
-
   TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
+
+
+#if IFX_DEBUG_LOGGING
+  std::cout << "Packed implementation!: filter_offset = " << std::dec << filter_offset << std::endl;
+#endif
   // TODO(benoitjacob): This really should be:
   //     const int batches = ArraySize(output_dims, 1);
   // but the current --variable_batch hack consists in overwriting the 3rd
@@ -166,26 +182,73 @@ inline void FullyConnected_2x4in8(
   const int output_dim_count = output_shape.DimensionsCount();
   const int filter_dim_count = filter_shape.DimensionsCount();
   const int batches = FlatSizeSkipDim(output_shape, output_dim_count - 1);
-  const int output_depth = MatchingDim(filter_shape, filter_dim_count - 2,
+  const unsigned int output_depth = MatchingDim(filter_shape, filter_dim_count - 2,
                                        output_shape, output_dim_count - 1);
-  const int accum_depth = filter_shape.Dims(filter_dim_count - 1);
-
-  //std::cout << "Packed implementation!: ";
+  const unsigned int accum_depth = filter_shape.Dims(filter_dim_count - 1);
+  const unsigned int accum_container_depth = (accum_depth + (items_per_container-1u))/items_per_container;
+  const int32 mask = (1<<bits_per_item)-1;
+#if IFX_DEBUG_LOGGING
+  std::cout << "Packed implementation!: accum-depth = " << std::dec << accum_depth << std::endl;
+#endif
+  bool once = false;
+  unsigned int final_container_begin = accum_depth-(accum_depth%items_per_container);
   for (int b = 0; b < batches; ++b) {
-    for (int out_c = 0; out_c < output_depth; ++out_c) {
+    for (unsigned int out_c = 0; out_c < output_depth; ++out_c) {
       int32 acc = 0;
-      for (int d = 0; d < accum_depth; d += 2) {
-        const uint8_t *input_vals = &input_data[b * accum_depth + d];
-        uint8_t filter_vals = filter_data[out_c * accum_depth + (d>>1)];
-        int32 input_val_0 = input_vals[0] + input_offset;
-        int32 filter_val_0 = (filter_vals&0xf) + filter_offset;
-        acc += filter_val_0 * input_val_0;
-        int32 input_val_1 = input_vals[1] + input_offset;
-        int32 filter_val_1 = ((filter_vals>>4)&0xf) + filter_offset;
-        acc += filter_val_1 * input_val_1;
-        //std::cout << "+" << input_val_0 << "*" << filter_val_0;
-        //std::cout << "+" << input_val_1 << "*" << filter_val_1;
+      unsigned int t;
+      const uint8_t *input_vals;
+      CONTAINER_T filter_vals;
+      unsigned int i;
+      unsigned int last_d = 0;
+      unsigned int d = 0;
+      unsigned int container = 0;
+      for (;;) {
+        input_vals = &input_data[b * accum_depth + d];
+        filter_vals = filter_data[out_c * accum_container_depth + container];
+        i = 0;
+        // Exit loop once last complete container processed...
+        // Next container is setup
+        if (d >= final_container_begin)
+          break;
+        // Unrollable loop!!
+        for( unsigned int i = 0; i < items_per_container; ++i) {
+            int32 input_val = input_vals[i] + input_offset;
+            int32 filter_val = (filter_vals & mask) + filter_offset;
+#if IFX_DEBUG_LOGGING
+            if( !once ) {
+                std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
+            }
+#endif
+            filter_vals >>= bits_per_item;
+            acc += filter_val * input_val;
+        }
+        d += items_per_container;
+        ++container;
       }
+      // Remaining items if accum_depth%items_per_container !=0
+      // TODO template params to handle no bias / weight container type
+      // aligned cases.
+
+      while( d < accum_depth ) {
+          int32 input_val = input_vals[i] + input_offset;
+          int32 filter_val = (filter_vals & mask) + filter_offset;
+#if IFX_DEBUG_LOGGING
+        if( !once ) {
+          std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
+        }
+#endif
+          filter_vals >>= bits_per_item;
+          acc += filter_val * input_val;
+          ++d;
+          ++i;
+      }
+
+#if IFX_DEBUG_LOGGING
+      if( !once ) {
+        std::cout << "RAW ACC " << acc << std::endl;
+      }
+      once = true;
+#endif
       if (bias_data) {
         acc += bias_data[out_c];
       }
@@ -195,9 +258,80 @@ inline void FullyConnected_2x4in8(
       acc = std::min(acc, output_activation_max);
       output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
     }
+
   }
-  //std::cout <<std::endl;
 }
+
+template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
+inline void EvalFullyConnectedUint8PackedWeights(
+        const FullyConnectedParams& params,
+        const TfLiteTensor* input,
+        const TfLiteTensor* filter, const TfLiteTensor* bias,
+        TfLiteTensor* output) {
+
+    const RuntimeShape &input_shape = GetTensorShape(input);
+    auto input_data = GetTensorData<uint8_t>(input);
+    const RuntimeShape &filter_shape = GetTensorShape(filter);
+    auto filter_data =  GetTensorData<CONTAINER_T>(filter);
+    const RuntimeShape &bias_shape = GetTensorShape(bias);
+    auto bias_data = GetTensorData<int32_t>(bias);
+    const RuntimeShape &output_shape = GetTensorShape(output);
+    auto output_data = GetTensorData<uint8>(output);
+
+    // here could "Intercept" arguments for offlikne pre-interpretation
+    return EvalFullyConnectedUint8PackedWeightsImpl<CONTAINER_T, bits_per_item, items_per_container>(
+            params,
+            input_shape, input_data,
+            filter_shape, filter_data,
+            bias_shape, bias_data,
+            output_shape, output_data);
+}
+
+
+
+TfLiteStatus EvalQuantizedPacked(
+        const FullyConnectedParams &params,
+        const TfLiteTensor* input,
+        const TfLiteTensor* filter, const TfLiteTensor* bias,
+        TfLiteTensor* output,
+        TfLiteContext* context,
+        const TfLiteUInt8Array &custom) {
+
+    unsigned int bits_per_item = custom.data[4];
+    unsigned int container_bits = custom.data[5]; // TODO does it even make sense to pass this??
+
+    // TODO Check magic # in custom data vector
+    switch (bits_per_item) {
+
+        case 4: {
+            assert(container_bits == 8);
+            EvalFullyConnectedUint8PackedWeights<uint8_t, 4, 8 / 4>(params, input,
+                                                                    filter, bias,
+                                                                    output);
+            return kTfLiteOk;
+        }
+        case 5: {
+            assert(container_bits == 16);
+            EvalFullyConnectedUint8PackedWeights<uint16_t, 5, 16 / 5>(params, input,
+                                                                      filter, bias,
+                                                                      output);
+            return kTfLiteOk;
+        }
+        case 6: {
+            assert(container_bits == 32);
+            EvalFullyConnectedUint8PackedWeights<uint32_t, 6, 32 / 6>(params, input,
+                                                                      filter, bias,
+                                                                      output);
+            return kTfLiteOk;
+        }
+        default: {
+            TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
+                               bits_per_item);
+            return kTfLiteError;
+        }
+    }
+}
+
 
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                            const OpData& data, const TfLiteTensor* input,
@@ -226,7 +360,11 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   switch (output->type) {
     case kTfLiteUInt8:
       if( filter->quantization.custom )  {
-        TF_LITE_FULLY_CONNECTED(FullyConnected_2x4in8, uint8_t);
+            return EvalQuantizedPacked(
+                    op_params,
+                    input, filter, bias, output,
+                    context,
+                    *filter->quantization.custom);
       } else {
         TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);
       }

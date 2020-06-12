@@ -80,6 +80,9 @@ limitations under the License.
 #include "tensorflow/lite/tools/versioning/runtime_version.h"
 #include "tensorflow/lite/version.h"
 
+#if IFX_PATCH_LOGGING
+#include <iostream>
+#endif
 using llvm::dyn_cast;
 using llvm::formatv;
 using llvm::isa;
@@ -342,30 +345,39 @@ class SubBytePacking {
 
     bits_per_item = 0u;
 
+    // TODO We should be emitting warnings if sub-bytpe bitwidtchs
+    // for values that are no simply constants or are inputs to unsupported
+    // op types (which should be specifiable as a option to allow for customized
+    // implementations of the interpreter)
+
     // Must be a quantized constant value only used by supported
-    // TFL operation
+    // TFL operation - no support for sub-byte packed variable values
+    // as little practical value.
     if (!qcst_op) return;
 
-    for (auto user_i : value.getUsers()) {
-      Operation* op = user_i;
-      if (!op) return;
-      if (!isa<tfl::FullyConnectedOp>(op)) {
-        return;
-      }
-    }
-
-    // Op ocur has to be quantized and for now we handle only 8 bit
-    // uniform quantization.
+    // Op ocur has to be quantized and for now we handle only < 8 bit
+    // uniform quantization.  At this point the conversion will have
+    // selected 8-bit integral storage type with Max-Min <= 2^7-1 indicating
+    // less than 8-bits actually used)
     auto etype = qcst_op.qtype().getElementType();
     if (!etype) return;
     auto uqtype = etype.dyn_cast<mlir::quant::UniformQuantizedType>();
     if (!uqtype) return;
     if (uqtype.getStorageTypeIntegralWidth() != 8) return;
 
-    // PoC only: 4 bits packed in UINT8 for now
-    auto value_attr = qcst_op.value();
-    if (value_attr.getNumElements() % 2 != 0) {
-      return;
+    // Check consumers of constant are all supported ops.
+    for (auto user_i : value.getUsers()) {
+      Operation* op = user_i;
+      // Can we really have a null "user"? If so  will it eventually
+      // get normalized away?   Might be safer to simply play safe and avoid
+      // a packed constant in this case...
+      if (!op) continue;
+      if (!isa<tfl::FullyConnectedOp>(op)) {
+        op->emitWarning(
+            "Packed < 8-bit uniform quantized values used but not supported.  "
+            "Will be stored as 8 bits.");
+        return;
+      }
     }
 
     // Reconstruct required bit-width... difference will be 2^N-1 or 2^N - 2
@@ -383,22 +395,53 @@ class SubBytePacking {
       }
     }
 
-    // PoC only just 4 bits for now
+    // TODO IFX_PATCH THis should really be a nice utility function in TFlite to ensure commonality
+    // between conversion and implementation
+    // Compute packing format base on number of bits
     unsigned int num_bits = bit + 1u;
-    if (num_bits != 4) {
-      return;
+    switch (num_bits) {
+      case 4:
+        // 2 4 bit weights per byte
+        bits_per_item = num_bits;
+        container_bits = 8u;
+        break;
+      case 5:
+        // 3 5 bit weights per half-word
+        bits_per_item = num_bits;
+        container_bits = 16u;
+        break;
+      case 6:
+        // 3 5 bit weights per half-word
+        bits_per_item = num_bits;
+        container_bits = 32u;
+        break;
+      default:
+        // 8 bits and above requires no special handling but for unsupported
+        // bitwidths below 8 we should warn that the user is wasting
+        // precision because theyŕe going to be stored in 8 bits.
+        if (num_bits < 8) {
+          auto msg =
+              "Packed  " + Twine(num_bits) +
+              " bit quantized values not supported.  Will be stored as 8 bits.";
+          qcst_op.emitWarning(msg);
+        }
+        return;
     }
-  #if IFX_PATCH_LOGGING
+#if IFX_PATCH_LOGGING
     qcst_op.emitRemark("Weights need to be packed!");
-  #endif
-    bits_per_item = num_bits;
-    container_bits = 8u;
+#endif
   }
 
-  unsigned int container_bits;
-  unsigned int bits_per_item;
-
-  operator bool() const { return bits_per_item != 0; }
+  void SetShape(const std::vector<int32_t>& shape) {
+    // Record size of minor dimensions so we can
+    // align on container boundary for major dimension
+    // (N.b. this has to be taken into accout in operator
+    // implementations)
+    if (shape.empty())
+      minor_dim_size = 1;
+    else
+      minor_dim_size = shape.back();
+  }
 
   tflite::QuantizationDetails QuantizationDetailsType() const {
     return bits_per_item != 0 ? tflite::QuantizationDetails_CustomQuantization
@@ -422,6 +465,130 @@ class SubBytePacking {
 
     return tflite::CustomQuantization::Pack(_fbb, &qdetails).Union();
   }
+
+  // Create buffer holding  data coding sub-8-bit uniform quantized
+  // tensor values packed into `container_bits` container values.
+  //
+  template <typename CONTAINER_T, size_t container_bits>
+  BufferOffset<tflite::Buffer>
+  CreatePackedValueBuffer(
+      flatbuffers::FlatBufferBuilder& builder, 
+      Operation* inst,
+      const uint8_t* tensor_data,
+      size_t tensor_data_size) const {
+
+    assert(container_bits <= 32u);
+    std::vector<uint8_t> packed_data;
+    CONTAINER_T mask = (static_cast<CONTAINER_T>(1) << bits_per_item) - static_cast<CONTAINER_T>(1);
+    uint32_t container_buf = 0;   
+    CONTAINER_T bits_in_container = 0;
+    for (size_t i = 0; i < tensor_data_size; ++i) {
+      // Little-ending packing...
+      container_buf |= (tensor_data[i] & mask) << bits_in_container;
+      bits_in_container += bits_per_item;
+      // Flush container when insufficient space for another item
+      // Start of each minor dimension to ensure CONTAINER_T aligned...
+      // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+      // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
+        if (bits_in_container+bits_per_item > container_bits || (i%minor_dim_size == (minor_dim_size-1))) {
+          // Flatbuffers are stored little-endian
+          for( size_t i=0; i < container_bits; i+=8 ) {
+            uint8_t byte = (container_buf & 0xff);
+            packed_data.push_back(byte);
+            container_buf >>= 8;
+          }
+          bits_in_container = 0;
+          container_buf = 0;
+        }
+    }
+
+    assert( bits_in_container == 0 );
+    // flatbuffers::Offset<flatbuffers::Vector<CONTAINER_T>>
+    //
+    auto buffer_data = builder.CreateVector(packed_data);
+
+#if IFX_PATCH_LOGGING
+    std::ostringstream msg;
+    msg << "Packing ";
+    for (size_t i = 0; i < tensor_data_size; ++i) {
+      msg << " " << std::hex << (uint32_t)(tensor_data[i] & mask);
+    }
+    msg << " into";
+    unsigned int i = 0;
+    const size_t container_bytes = (container_bits/8);
+    for (size_t i = 0; i < packed_data.size(); ++i) {
+      // TFlite flatbuffers are little-endian
+      if (i%container_bytes==0) {
+        msg << "|";
+      }
+      size_t j = (i/container_bytes)*container_bytes+container_bytes-1u-(i%container_bytes);
+      uint32_t v = packed_data[j];
+      msg << " " << std::hex << v;
+    }
+
+    inst->emitRemark(msg.str());
+    
+#endif
+
+    return tflite::CreateBuffer(builder, buffer_data);
+  }
+
+  //
+  // Create buffer holding coding <= 8-bit uniform quantized
+  // tensor value.  For sub-8-bit values packed formats are
+  // used where supported.
+  //
+  BufferOffset<tflite::Buffer> CreateQuantizedValuesBuffer(
+      flatbuffers::FlatBufferBuilder& builder, Operation* inst,
+      const absl::string_view tensor_data) const {
+    auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
+
+    switch (container_bits) {
+      case 8: {
+#ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 8-bit container with " +
+                         Twine(bits_per_item) + " bit weights!!");
+#endif
+        return CreatePackedValueBuffer<uint8_t, 8>(builder, inst, 
+                                                  raw_tensor_data,
+                                                  tensor_data.size());
+      }
+
+      case 16: {
+#ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 16-bit container with " +
+                        Twine(bits_per_item) + " bit weights!!");
+#endif
+        return CreatePackedValueBuffer<int16_t, 16>(builder, inst, 
+                                                    raw_tensor_data,
+                                                    tensor_data.size());
+      }
+
+      case 32: {
+#ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 32-bit container with " +
+                         Twine(bits_per_item) + " bit weights!!");
+#endif
+        return CreatePackedValueBuffer<uint32_t, 32>(builder, inst, 
+                                                    raw_tensor_data,
+                                                    tensor_data.size());
+      }
+
+      default: {
+#ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Leaving " + Twine(bits_per_item) +
+                         " bit weights as 8 bit!!");
+#endif
+        auto buffer_data =
+            builder.CreateVector(raw_tensor_data, tensor_data.size());
+        return tflite::CreateBuffer(builder, buffer_data);
+      }
+    }
+  }
+
+  unsigned int container_bits;
+  unsigned int bits_per_item;
+  unsigned int minor_dim_size;
 };
 
 // Translates an MLIR module in TFLite dialect to TFLite FlatBuffer.
@@ -475,7 +642,7 @@ class Translator {
   // corresponding buffer. Emits error and returns llvm::None on failure.
   Optional<BufferOffset<tflite::Tensor>> BuildTensor(
       Value value, const std::string& name, unsigned buffer_idx,
-      const SubBytePacking& packable_bitwidth);
+      SubBytePacking& packable_bitwidth);
 
   // TODO(b/137395003): Legalize control flow ops to TFLite dialect, and
   // remove these 2 functions here.
@@ -640,12 +807,17 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
 
   absl::string_view tensor_data = tensor.tensor_data();
   // @IFX_PATCH@  PoC packed quantized data.. for now hard-wired 4-bit weights
+
+#if 1
+  return packing.CreateQuantizedValuesBuffer(builder_, inst, tensor_data);
+#else
+
   flatbuffers::Offset<flatbuffers::Vector<uint8_t>> buffer_data;
-  if (packing && packing.bits_per_item == 4) {
-  #ifdef IFX_PATCH_LOGGING
+
+  if (packing.bits_per_item == 4) {
+#ifdef IFX_PATCH_LOGGING
     inst->emitRemark("Actually Packing weights!!");
-  #endif
-    auto vals = attr.getValues<uint8_t>();
+#endif
     auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
     std::vector<uint8_t> packed_data;
     uint8_t mask = 0xf;
@@ -673,6 +845,7 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
         tensor_data.size());
   }
   return tflite::CreateBuffer(builder_, buffer_data);
+#endif
 }
 
 Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensorFromType(
@@ -705,7 +878,7 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensorFromType(
 
 Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
     Value value, const std::string& name, unsigned buffer_idx,
-    const SubBytePacking& packing) {
+    SubBytePacking& packing) {
   auto type = value.getType().cast<TensorType>();
 
   // TFLite requires tensor shape only for the inputs and constants.
@@ -753,6 +926,8 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
     shape_signature = std::vector<int32_t>(shape_ref.begin(), shape_ref.end());
   }
 
+  packing.SetShape(shape);
+
   BufferOffset<tflite::SparsityParameters> s_params = 0;
   if (auto* inst = value.getDefiningOp()) {
     if (auto cst = dyn_cast<tfl::SparseConstOp>(inst)) {
@@ -769,16 +944,11 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
   // @IFX_PATCH@ PoC flag packing using CustiomDetails
   BufferOffset<tflite::QuantizationParameters> q_params;
   if (auto qtype = element_type.dyn_cast<mlir::quant::UniformQuantizedType>()) {
-
     auto details = packing.CustomDetails(builder_);
-    if( !details.IsNull() ) {
-          mlir::emitRemark(
-            value.getLoc(),
-            "CustomDetails are specified" );
-    }   else {
-          mlir::emitRemark(
-            value.getLoc(),
-            "none" );
+    if (!details.IsNull()) {
+      mlir::emitRemark(value.getLoc(), "CustomDetails are specified");
+    } else {
+      mlir::emitRemark(value.getLoc(), "none");
     }
     q_params = tflite::CreateQuantizationParameters(
         // TODO(fengliuai): min and max values are not stored in the

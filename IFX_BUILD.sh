@@ -29,6 +29,9 @@ do
     "--no-tflite")
         NOTFLITE=1
         ;;
+    "--no-install")
+        NOINSTALL=1
+        ;;
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
@@ -186,7 +189,6 @@ then
     #bazel build "${BAZEL_OPTIONS[@]}" //third_party/aws:aws || true  # EXPECTED FAILURE but needed to unpack packages
     #bazel build --local_cpu_resources="$LOCALJOBS" --config=dbg --strip=never "${VERBOSE[@]}" //tensorflow/compiler/mlir/lite:tf_tfl_translate
     #sed -e'1,$s/"+[cd]/"+g/g' -i bazel-$(basename $(pwd))/external/aws-checksums/source/intel/crc32c_sse42_asm.c  #  BUILD FAILS MISERABG:Y WITH GCC7 FFS
-  (
     # Wild patching orgy is needed... including yes in 2020
     # workarounds for pathname/command-line length limitations.
     if [ -n "$MINGW64_HOST" ] 
@@ -196,13 +198,15 @@ then
     # 
     echo bazel build "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
     bazel build   "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
-    mkdir -p ${TFLITE_MICRO_ROOT}/bin  
-    rm -f ${TFLITE_MICRO_ROOT}/bin/*
-    echo Installing to ${TFLITE_MICRO_ROOT}/bin
-    cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
+    if [ -z "$NOINSTALL" ]
+    then
+      mkdir -p ${TFLITE_MICRO_ROOT}/bin  
+      rm -f ${TFLITE_MICRO_ROOT}/bin/*
+      echo Installing to ${TFLITE_MICRO_ROOT}/bin
+      cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
         bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
-  )
+    fi
 fi
 
 if [ -z "$NOTFLITE" ] 
