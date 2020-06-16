@@ -72,6 +72,10 @@ struct TensorDescriptor : public GPUObjectDescriptor {
 
   bool HasAxis(Axis axis) const;
 
+  absl::Status GetLinkingContextFromWriteSelector(
+      const std::vector<std::string>& args, std::string* value_name,
+      std::string* x_coord, std::string* y_coord, std::string* s_coord) const;
+
   DataType data_type = DataType::UNKNOWN;
   TensorStorageType storage_type = TensorStorageType::UNKNOWN;
   // This field describes logical layout, actual(physical) GPU layout can be
@@ -100,9 +104,27 @@ struct TensorDescriptor : public GPUObjectDescriptor {
   std::string Write(const std::string& var_name,
                     const std::string& global_address) const;
 
+  bool IsBatchedWidth() const;
+
   absl::Status GetDataTypeFromTemplateArgs(const std::string& template_arg,
                                            DataType* result) const;
 
+  std::string GetGlobalAddressNoDeclarationWHS(const std::string& x,
+                                               const std::string& y,
+                                               const std::string& s) const;
+  std::string GetGlobalAddressNoDeclarationWHSB(const std::string& x,
+                                                const std::string& y,
+                                                const std::string& s,
+                                                const std::string& b) const;
+  std::string GetGlobalAddressNoDeclarationWHDS(const std::string& x,
+                                                const std::string& y,
+                                                const std::string& z,
+                                                const std::string& s) const;
+  std::string GetGlobalAddressNoDeclarationWHDSB(const std::string& x,
+                                                 const std::string& y,
+                                                 const std::string& z,
+                                                 const std::string& s,
+                                                 const std::string& b) const;
   std::string GetGlobalAddressNoDeclaration(const std::string& xc,
                                             const std::string& yc,
                                             const std::string& zc,

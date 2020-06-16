@@ -11,7 +11,7 @@ load(
 licenses(["notice"])  # Apache 2.0
 
 config_setting(
-    name = "xtensa_hifimini",
+    name = "xtensa_hifimini_legacy",
     define_values = {"tflm_build": "xtensa_hifimini"},
 )
 
@@ -33,6 +33,7 @@ cc_library(
         "concatenation.cc",
         "dequantize.cc",
         "elementwise.cc",
+        "ethosu.cc",
         "floor.cc",
         "l2norm.cc",
         "logical.cc",
@@ -62,14 +63,14 @@ cc_library(
             "softmax.cc",
             "svdf.cc",
         ],
-        ":xtensa_hifimini": [
-            "xtensa_hifimini/conv.cc",
-            "xtensa_hifimini/depthwise_conv.cc",
-            "xtensa_hifimini/fixedpoint_utils.h",
-            "xtensa_hifimini/fully_connected.cc",
-            "xtensa_hifimini/quantize.cc",
-            "xtensa_hifimini/softmax.cc",
-            "xtensa_hifimini/svdf.cc",
+        ":xtensa_hifimini_legacy": [
+            "xtensa_hifimini_legacy/conv.cc",
+            "xtensa_hifimini_legacy/depthwise_conv.cc",
+            "xtensa_hifimini_legacy/fixedpoint_utils.h",
+            "xtensa_hifimini_legacy/fully_connected.cc",
+            "xtensa_hifimini_legacy/quantize.cc",
+            "xtensa_hifimini_legacy/softmax.cc",
+            "xtensa_hifimini_legacy/svdf.cc",
         ],
     }),
     hdrs = ["micro_ops.h"],
@@ -100,7 +101,7 @@ cc_library(
         "//tensorflow/lite/micro:micro_utils",
     ] + select({
         "//conditions:default": [],
-        ":xtensa_hifimini": [
+        ":xtensa_hifimini_legacy": [
             #"//third_party/xtensa/cstub64s:hifi_mini",
         ],
     }),
@@ -121,6 +122,7 @@ cc_library(
         "conv.cc",
         "dequantize.cc",
         "elementwise.cc",
+        "ethosu.cc",
         "floor.cc",
         "fully_connected.cc",
         "l2norm.cc",
@@ -235,6 +237,7 @@ tflite_micro_cc_test(
         "//tensorflow/lite/micro:micro_framework",
         "//tensorflow/lite/micro:micro_utils",
         "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )
@@ -514,6 +517,7 @@ tflite_micro_cc_test(
         "//tensorflow/lite/c:common",
         "//tensorflow/lite/micro:micro_framework",
         "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )
@@ -527,6 +531,7 @@ tflite_micro_cc_test(
         "//tensorflow/lite/c:common",
         "//tensorflow/lite/micro:micro_framework",
         "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )
@@ -548,6 +553,7 @@ tflite_micro_cc_test(
         "//tensorflow/lite/micro:micro_framework",
         "//tensorflow/lite/micro:micro_utils",
         "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )
@@ -585,6 +591,7 @@ tflite_micro_cc_test(
         "//tensorflow/lite/c:common",
         "//tensorflow/lite/micro:micro_framework",
         "//tensorflow/lite/micro:op_resolvers",
+        "//tensorflow/lite/micro:test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
 )

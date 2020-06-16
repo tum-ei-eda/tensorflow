@@ -19,7 +19,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import functools
 import math
 import numpy as np
 import six
@@ -31,6 +30,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import linalg_ops
+from tensorflow.python.ops import manip_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import sort_ops
 from tensorflow.python.ops.numpy_ops import np_arrays
@@ -84,8 +84,8 @@ def zeros(shape, dtype=float):  # pylint: disable=redefined-outer-name
   Returns:
     An ndarray.
   """
-  if dtype:
-    dtype = np_utils.result_type(dtype)
+  dtype = (
+      np_utils.result_type(dtype) if dtype else np_dtypes.default_float_type())
   if isinstance(shape, np_arrays.ndarray):
     shape = shape.data
   return np_arrays.tensor_to_ndarray(array_ops.zeros(shape, dtype=dtype))
@@ -223,9 +223,10 @@ def full(shape, fill_value, dtype=None):  # pylint: disable=redefined-outer-name
   Raises:
     ValueError: if `fill_value` can not be broadcast to shape `shape`.
   """
+  if not isinstance(shape, np_arrays.ndarray):
+    shape = asarray(np_arrays.convert_to_tensor(shape, dtype_hint=np.int32))
+  shape = atleast_1d(shape).data
   fill_value = asarray(fill_value, dtype=dtype)
-  if np_utils.isscalar(shape):
-    shape = array_ops.reshape(shape, [1])
   return np_arrays.tensor_to_ndarray(
       array_ops.broadcast_to(fill_value.data, shape))
 
@@ -295,7 +296,15 @@ def array(val, dtype=None, copy=True, ndmin=0):  # pylint: disable=redefined-out
 
     # Handles lists of ndarrays
     result_t = nest.map_structure(maybe_data, result_t)
-    result_t = np_arrays.convert_to_tensor(result_t)
+    # EagerTensor conversion complains about "mixed types" when converting
+    # tensors with no dtype information. This is because it infers types based
+    # on one selected item in the list. So e.g. when converting [2., 2j]
+    # to a tensor, it will select float32 as the inferred type and not be able
+    # to convert the list to a float 32 tensor.
+    # Since we have some information about the final dtype we care about, we
+    # supply that information so that convert_to_tensor will do best-effort
+    # conversion to that dtype first.
+    result_t = np_arrays.convert_to_tensor(result_t, dtype_hint=dtype)
     result_t = math_ops.cast(result_t, dtype=dtype)
   elif dtype:
     result_t = math_ops.cast(result_t, dtype)
@@ -370,28 +379,6 @@ def arange(start, stop=None, step=1, dtype=None):
   # is integer type.
   return np_arrays.tensor_to_ndarray(
       math_ops.cast(math_ops.range(start, limit=stop, delta=step), dtype=dtype))
-
-
-@np_utils.np_doc(np.geomspace)
-def geomspace(start, stop, num=50, endpoint=True, dtype=float):  # pylint: disable=missing-docstring
-  if dtype:
-    dtype = np_utils.result_type(dtype)
-  if num < 0:
-    raise ValueError('Number of samples {} must be non-negative.'.format(num))
-  if not num:
-    return empty([0])
-  step = 1.
-  if endpoint:
-    if num > 1:
-      step = math_ops.pow((stop / start), 1 / (num - 1))
-  else:
-    step = math_ops.pow((stop / start), 1 / num)
-  result = math_ops.cast(math_ops.range(num), step.dtype)
-  result = math_ops.pow(step, result)
-  result = math_ops.multiply(result, start)
-  if dtype:
-    result = math_ops.cast(result, dtype=dtype)
-  return np_arrays.tensor_to_ndarray(result)
 
 
 # Building matrices.
@@ -642,7 +629,7 @@ def imag(a):
   return np_utils.tensor_to_ndarray(math_ops.imag(a.data))
 
 
-_TO_INT64 = 0
+_TO_INT_ = 0
 _TO_FLOAT = 1
 
 
@@ -651,7 +638,7 @@ def _reduce(tf_fn,
             axis=None,
             dtype=None,
             keepdims=None,
-            promote_int=_TO_INT64,
+            promote_int=_TO_INT_,
             tf_bool_fn=None,
             preserve_bool=False):
   """A general reduction function.
@@ -664,7 +651,7 @@ def _reduce(tf_fn,
     dtype: (optional) the dtype of the result.
     keepdims: (optional) whether to keep the reduced dimension(s).
     promote_int: how to promote integer and bool inputs. There are three
-      choices. (1) `_TO_INT64` always promotes them to int64 or uint64; (2)
+      choices. (1) `_TO_INT_` always promotes them to np.int_ or np.uint; (2)
       `_TO_FLOAT` always promotes them to a float type (determined by
       dtypes.default_float_type); (3) None: don't promote.
     tf_bool_fn: (optional) the TF reduction function for bool inputs. It will
@@ -689,20 +676,23 @@ def _reduce(tf_fn,
   if dtype is None:
     dtype = a.dtype
     if np.issubdtype(dtype, np.integer) or dtype == np.bool_:
-      if promote_int == _TO_INT64:
-        # If a is an integer/bool type and whose bit width is less than 64,
-        # numpy up-casts it to 64-bit.
+      if promote_int == _TO_INT_:
+        # If a is an integer/bool type and whose bit width is less than np.int_,
+        # numpy up-casts it to np.int_ based on the documentation at
+        # https://numpy.org/doc/1.18/reference/generated/numpy.sum.html
         if dtype == np.bool_:
           is_signed = True
           width = 8  # We can use any number here that is less than 64
         else:
           is_signed = np.issubdtype(dtype, np.signedinteger)
           width = np.iinfo(dtype).bits
-        if width < 64:
+        # Numpy int_ and uint are defined as 'long' and 'unsigned long', so
+        # should have the same bit width.
+        if width < np.iinfo(np.int_).bits:
           if is_signed:
-            dtype = np.int64
+            dtype = np.int_
           else:
-            dtype = np.uint64
+            dtype = np.uint
           a = a.astype(dtype)
       elif promote_int == _TO_FLOAT:
         a = a.astype(np_dtypes.default_float_type())
@@ -770,55 +760,70 @@ def amin(a, axis=None, keepdims=None):
       preserve_bool=True)
 
 
-# TODO(wangpeng): Remove this workaround once b/157232284 is fixed
-def _reduce_variance_complex(input_tensor, axis, keepdims):
-  f = functools.partial(math_ops.reduce_variance, axis=axis, keepdims=keepdims)
-  return f(math_ops.real(input_tensor)) + f(math_ops.imag(input_tensor))
+def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=None):  # pylint: disable=missing-docstring
+  if dtype:
+    working_dtype = np_utils.result_type(a, dtype)
+  else:
+    working_dtype = None
+  if out is not None:
+    raise ValueError('Setting out is not supported.')
+  if ddof != 0:
+    # TF reduce_variance doesn't support ddof, so calculate it using raw ops.
+    def reduce_fn(input_tensor, axis, keepdims):
+      means = math_ops.reduce_mean(input_tensor, axis=axis, keepdims=True)
+      centered = input_tensor - means
+      if input_tensor.dtype in (dtypes.complex64, dtypes.complex128):
+        centered = math_ops.cast(
+            math_ops.real(centered * math_ops.conj(centered)),
+            input_tensor.dtype)
+      else:
+        centered = math_ops.square(centered)
+      squared_deviations = math_ops.reduce_sum(
+          centered, axis=axis, keepdims=keepdims)
 
+      if axis is None:
+        n = array_ops.size(input_tensor)
+      else:
+        if axis < 0:
+          axis += array_ops.rank(input_tensor)
+        n = math_ops.reduce_prod(
+            array_ops.gather(array_ops.shape(input_tensor), axis))
+      n = math_ops.cast(n - ddof, input_tensor.dtype)
 
-# TODO(wangpeng): Remove this workaround once b/157232284 is fixed
-def _reduce_std_complex(input_tensor, axis, keepdims):
-  y = _reduce_variance_complex(
-      input_tensor=input_tensor, axis=axis, keepdims=keepdims)
-  return math_ops.sqrt(y)
+      return math_ops.cast(math_ops.divide(squared_deviations, n), dtype)
+  else:
+    reduce_fn = math_ops.reduce_variance
 
-
-@np_utils.np_doc(np.var)
-def var(a, axis=None, keepdims=None):  # pylint: disable=missing-function-docstring
-
-  def f(input_tensor, axis, keepdims):
-    if input_tensor.dtype in (dtypes.complex64, dtypes.complex128):
-      # A workaround for b/157232284
-      fn = _reduce_variance_complex
-    else:
-      fn = math_ops.reduce_variance
-    return fn(input_tensor=input_tensor, axis=axis, keepdims=keepdims)
-
-  return _reduce(
-      f, a, axis=axis, dtype=None, keepdims=keepdims, promote_int=_TO_FLOAT)
+  result = _reduce(
+      reduce_fn,
+      a,
+      axis=axis,
+      dtype=working_dtype,
+      keepdims=keepdims,
+      promote_int=_TO_FLOAT).data
+  if dtype:
+    result = math_ops.cast(result, dtype)
+  return np_utils.tensor_to_ndarray(result)
 
 
 @np_utils.np_doc(np.std)
 def std(a, axis=None, keepdims=None):  # pylint: disable=missing-function-docstring
-
-  def f(input_tensor, axis, keepdims):
-    if input_tensor.dtype in (dtypes.complex64, dtypes.complex128):
-      # A workaround for b/157232284
-      fn = _reduce_std_complex
-    else:
-      fn = math_ops.reduce_std
-    return fn(input_tensor=input_tensor, axis=axis, keepdims=keepdims)
-
   return _reduce(
-      f, a, axis=axis, dtype=None, keepdims=keepdims, promote_int=_TO_FLOAT)
+      math_ops.reduce_std,
+      a,
+      axis=axis,
+      dtype=None,
+      keepdims=keepdims,
+      promote_int=_TO_FLOAT)
 
 
 @np_utils.np_doc(np.ravel)
 def ravel(a):  # pylint: disable=missing-docstring
   a = asarray(a)
-  if a.ndim == 1:
-    return a
-  return np_utils.tensor_to_ndarray(array_ops.reshape(a.data, [-1]))
+  out = np_utils.cond(
+      math_ops.equal(a.ndim, 1), lambda: a.data,
+      lambda: array_ops.reshape(a.data, [-1]))
+  return np_utils.tensor_to_ndarray(out)
 
 
 setattr(np_arrays.ndarray, 'ravel', ravel)
@@ -847,7 +852,8 @@ def repeat(a, repeats, axis=None):  # pylint: disable=missing-docstring
   a = asarray(a).data
   original_shape = a._shape_as_list()  # pylint: disable=protected-access
   # Best effort recovery of the shape.
-  if original_shape is not None and None not in original_shape:
+  known_shape = original_shape is not None and None not in original_shape
+  if known_shape:
     if not original_shape:
       original_shape = (repeats,)
     else:
@@ -866,7 +872,8 @@ def repeat(a, repeats, axis=None):  # pylint: disable=missing-docstring
 
   repeats = asarray(repeats).data
   result = array_ops.repeat(a, repeats, axis)
-  result.set_shape(original_shape)
+  if known_shape:
+    result.set_shape(original_shape)
 
   return np_utils.tensor_to_ndarray(result)
 
@@ -881,7 +888,7 @@ def around(a, decimals=0):  # pylint: disable=missing-docstring
   else:
     # Use float as the working dtype when a.dtype is exact (e.g. integer),
     # because `decimals` can be negative.
-    float_dtype = dtypes.default_float_type()
+    float_dtype = np_dtypes.default_float_type()
     a = a.astype(float_dtype).data
     factor = math_ops.cast(factor, float_dtype)
   a = math_ops.multiply(a, factor)
@@ -979,13 +986,11 @@ def transpose(a, axes=None):
 
 @np_utils.np_doc(np.swapaxes)
 def swapaxes(a, axis1, axis2):  # pylint: disable=missing-docstring
-  a = asarray(a)
+  a = asarray(a).data
 
   a_rank = array_ops.rank(a)
-  if axis1 < 0:
-    axis1 += a_rank
-  if axis2 < 0:
-    axis2 += a_rank
+  axis1 = array_ops.where_v2(axis1 < 0, axis1 + a_rank, axis1)
+  axis2 = array_ops.where_v2(axis2 < 0, axis2 + a_rank, axis2)
 
   perm = math_ops.range(a_rank)
   perm = array_ops.tensor_scatter_update(perm, [[axis1], [axis2]],
@@ -1109,7 +1114,7 @@ def _setitem(arr, index, value):
 
 
 setattr(np_arrays.ndarray, 'transpose', transpose)
-setattr(np_arrays.ndarray, 'reshape', reshape)
+setattr(np_arrays.ndarray, 'reshape', _reshape_method_wrapper)
 setattr(np_arrays.ndarray, '__setitem__', _setitem)
 
 
@@ -1290,7 +1295,13 @@ def broadcast_to(array, shape):  # pylint: disable=redefined-outer-name
 
 
 @np_utils.np_doc(np.stack)
-def stack(arrays, axis=0):
+def stack(arrays, axis=0):  # pylint: disable=missing-function-docstring
+  if isinstance(arrays, (np_arrays.ndarray, ops.Tensor)):
+    arrays = asarray(arrays)
+    if axis == 0:
+      return arrays
+    else:
+      return swapaxes(arrays, 0, axis)
   arrays = _promote_dtype(*arrays)  # pylint: disable=protected-access
   unwrapped_arrays = [
       a.data if isinstance(a, np_arrays.ndarray) else a for a in arrays
@@ -1453,6 +1464,8 @@ def tri(N, M=None, k=0, dtype=None):  # pylint: disable=invalid-name,missing-doc
 @np_utils.np_doc(np.tril)
 def tril(m, k=0):  # pylint: disable=missing-docstring
   m = asarray(m).data
+  if m.shape.ndims is None:
+    raise ValueError('Argument to tril should have known rank')
   m_shape = m.shape.as_list()
 
   if len(m_shape) < 2:
@@ -1473,6 +1486,8 @@ def tril(m, k=0):  # pylint: disable=missing-docstring
 @np_utils.np_doc(np.triu)
 def triu(m, k=0):  # pylint: disable=missing-docstring
   m = asarray(m).data
+  if m.shape.ndims is None:
+    raise ValueError('Argument to triu should have known rank')
   m_shape = m.shape.as_list()
 
   if len(m_shape) < 2:
@@ -1518,11 +1533,11 @@ def roll(a, shift, axis=None):  # pylint: disable=missing-docstring
   a = asarray(a).data
 
   if axis is not None:
-    return np_utils.tensor_to_ndarray(array_ops.roll(a, shift, axis))
+    return np_utils.tensor_to_ndarray(manip_ops.roll(a, shift, axis))
 
   # If axis is None, the roll happens as a 1-d tensor.
   original_shape = array_ops.shape(a)
-  a = array_ops.roll(array_ops.reshape(a, [-1]), shift, 0)
+  a = manip_ops.roll(array_ops.reshape(a, [-1]), shift, 0)
   return np_utils.tensor_to_ndarray(array_ops.reshape(a, original_shape))
 
 
@@ -1538,7 +1553,7 @@ def rot90(m, k=1, axes=(0, 1)):  # pylint: disable=missing-docstring
     return flip(flip(m, ax1), ax2)
   else:
     perm = math_ops.range(m_rank)
-    perm = array_ops.tensor_scatter_nd_update(perm, [[ax1], [ax2]], [ax2, ax1])
+    perm = array_ops.tensor_scatter_update(perm, [[ax1], [ax2]], [ax2, ax1])
 
     if k == 1:
       return transpose(flip(m, ax2), perm)
@@ -1615,3 +1630,97 @@ def ix_(*args):  # pylint: disable=missing-docstring
           'Only integer and bool dtypes are supported, got {}'.format(dtype))
 
   return output
+
+
+@np_utils.np_doc(np.broadcast_arrays)
+def broadcast_arrays(*args, **kwargs):  # pylint: disable=missing-docstring
+  subok = kwargs.pop('subok', False)
+  if subok:
+    raise ValueError('subok=True is not supported.')
+  if kwargs:
+    raise ValueError('Received unsupported arguments {}'.format(kwargs.keys()))
+
+  args = [asarray(arg).data for arg in args]
+  args = np_utils.tf_broadcast(*args)
+  return [np_utils.tensor_to_ndarray(arg) for arg in args]
+
+
+@np_utils.np_doc_only(np.sign)
+def sign(x, out=None, where=None, **kwargs):  # pylint: disable=missing-docstring,redefined-outer-name
+  if out:
+    raise ValueError('tf.numpy doesnt support setting out.')
+  if where:
+    raise ValueError('tf.numpy doesnt support setting where.')
+  if kwargs:
+    raise ValueError('tf.numpy doesnt support setting {}'.format(kwargs.keys()))
+
+  x = asarray(x)
+  dtype = x.dtype
+  if np.issubdtype(dtype, np.complex):
+    result = math_ops.cast(math_ops.sign(math_ops.real(x.data)), dtype)
+  else:
+    result = math_ops.sign(x.data)
+
+  return np_utils.tensor_to_ndarray(result)
+
+
+# Note that np.take_along_axis may not be present in some supported versions of
+# numpy.
+@np_utils.np_doc(None, np_fun_name='take_along_axis')
+def take_along_axis(arr, indices, axis):  # pylint: disable=missing-docstring
+  arr = asarray(arr)
+  indices = asarray(indices)
+
+  if axis is None:
+    return take_along_axis(arr.ravel(), indices, 0)
+
+  arr = arr.data
+  indices = indices.data
+
+  rank = array_ops.rank(arr)
+  axis = array_ops.where_v2(axis < 0, axis + rank, axis)
+
+  # Broadcast shapes to match, ensure that the axis of interest is not
+  # broadcast.
+  arr_shape_original = array_ops.shape(arr)
+  indices_shape_original = array_ops.shape(indices)
+  arr_shape = array_ops.tensor_scatter_update(
+      arr_shape_original, [[axis]], [1])
+  indices_shape = array_ops.tensor_scatter_update(
+      indices_shape_original, [[axis]], [1])
+  broadcasted_shape = array_ops.broadcast_dynamic_shape(
+      arr_shape, indices_shape)
+  arr_shape = array_ops.tensor_scatter_update(
+      broadcasted_shape, [[axis]], [arr_shape_original[axis]])
+  indices_shape = array_ops.tensor_scatter_update(
+      broadcasted_shape, [[axis]], [indices_shape_original[axis]])
+  arr = array_ops.broadcast_to(arr, arr_shape)
+  indices = array_ops.broadcast_to(indices, indices_shape)
+
+  # Save indices shape so we can restore it later.
+  possible_result_shape = indices.shape
+
+  # Correct indices since gather doesn't correctly handle negative indices.
+  indices = array_ops.where_v2(indices < 0, indices + arr_shape[axis], indices)
+
+  swapaxes_ = lambda t: swapaxes(np_utils.tensor_to_ndarray(t), axis, -1).data
+
+  dont_move_axis_to_end = math_ops.equal(axis, rank - 1)
+  arr = np_utils.cond(
+      dont_move_axis_to_end, lambda: arr, lambda: swapaxes_(arr))
+  indices = np_utils.cond(
+      dont_move_axis_to_end, lambda: indices, lambda: swapaxes_(indices))
+
+  arr_shape = array_ops.shape(arr)
+  arr = array_ops.reshape(arr, [-1, arr_shape[-1]])
+
+  indices_shape = array_ops.shape(indices)
+  indices = array_ops.reshape(indices, [-1, indices_shape[-1]])
+
+  result = array_ops.gather(arr, indices, batch_dims=1)
+  result = array_ops.reshape(result, indices_shape)
+  result = np_utils.cond(
+      dont_move_axis_to_end, lambda: result, lambda: swapaxes_(result))
+  result.set_shape(possible_result_shape)
+
+  return  np_utils.tensor_to_ndarray(result)
