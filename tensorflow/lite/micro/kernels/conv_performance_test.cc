@@ -260,9 +260,9 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
   }
 
   // Start main benchmarking loop
-  for (int i = 0; i < benchmarking_iterations; i++) {
-    auto start = std::chrono::high_resolution_clock::now();
+  auto start = std::chrono::high_resolution_clock::now();
 
+  for (int i = 0; i < benchmarking_iterations; i++) {
     TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
     for (int j = 0; j < number_of_invocations; j++) {
       TfLiteStatus return_val = registration->invoke(&context, &node);
@@ -270,11 +270,10 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
         return return_val;
       }
     }
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    micro_test::reporter->Report("%d Invoke run time =  %d us", number_of_invocations, duration);
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+  micro_test::reporter->Report("%d Avg Invoke run time =  %d us", number_of_invocations, duration/benchmarking_iterations);
   if (registration->free) {
     registration->free(&context, user_data);
   }
