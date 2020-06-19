@@ -144,7 +144,8 @@ $(TFLITE_U_PATH)tensorflow/lite/core/api/op_resolver.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/tensor_utils.cc \
 $(TFLITE_U_PATH)tensorflow/lite/kernels/internal/quantization_util.cc \
 $(TFLITE_U_PATH)tensorflow/lite/kernels/kernel_util.cc \
-$(TFLITE_U_PATH)tensorflow/lite/micro/testing/test_utils.cc
+$(TFLITE_U_PATH)tensorflow/lite/micro/testing/test_utils.cc \
+$(TFLITE_U_PATH)tensorflow/lite/experimental/custom_quantization_util.cc
 
 MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_TEST_SRCS), $(MICROLITE_CC_BASE_SRCS))
 MICROLITE_CC_SRCS := $(filter-out $(MICROLITE_BENCHMARK_SRCS), $(MICROLITE_CC_SRCS))
@@ -214,6 +215,7 @@ tensorflow/lite/schema/schema_generated.h \
 tensorflow/lite/string_type.h \
 tensorflow/lite/string_util.h \
 tensorflow/lite/type_to_tflitetype.h \
+tensorflow/lite/experimental/custom_quantization_util.h \
 tensorflow/lite/version.h
 
 THIRD_PARTY_CC_HDRS := \

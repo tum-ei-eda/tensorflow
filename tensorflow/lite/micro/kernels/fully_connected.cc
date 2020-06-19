@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
+#include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected_packed_weights.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
@@ -97,19 +98,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* filter = GetInput(context, node, kWeightsTensor);
   const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-
-  // @IFX_PATCH@
-  if( auto custom_qinfo = filter->quantization.custom )
-  {
-    TF_LITE_ENSURE_MSG(context, custom_qinfo->size == 6,
-                       "Unrecognized custom quantization info block");
-    // TODO Check magic number
-    // TODO Define TfLite Struct to reinterpret (known aligned!) data
-    TF_LITE_ENSURE_MSG(context, custom_qinfo->data[4] >= 4 && custom_qinfo->data[4] <= 6,
-                       "Currently unsupported packing format" );
-  }
-
-
   TF_LITE_ENSURE_EQ(context, input->type, output->type);
   TF_LITE_ENSURE_MSG(context, input->type == filter->type,
                      "Hybrid models are not supported on TFLite Micro.");
@@ -141,127 +129,6 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 }
 
 
-
-//
-// @IFX_PATCH@PoC
-//  Uint8 Quantized fully connect kernel for < 8-bit packed weights
-// "little-endian" format (first weight in LSB) ordering assumed.
-//
-// TODO Use specializations to handle fast case where dimensions
-// allow efficient loop-unroll etc.
-// accum_container_depth should really be  a params value
-//
-
-template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
-void EvalFullyConnectedUint8PackedWeightsImpl(
-        const FullyConnectedParams& params,
-        const RuntimeShape& input_shape, const uint8* input_data,
-        const RuntimeShape& filter_shape, const CONTAINER_T* filter_data,
-        const RuntimeShape& bias_shape, const int32* bias_data,
-        const RuntimeShape& output_shape, uint8* output_data) {
-  const int32 input_offset = params.input_offset;
-  const int32 filter_offset = params.weights_offset;
-  const int32 output_offset = params.output_offset;
-  const int32 output_multiplier = params.output_multiplier;
-  const int output_shift = params.output_shift;
-  const int32 output_activation_min = params.quantized_activation_min;
-  const int32 output_activation_max = params.quantized_activation_max;
-  TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
-  TFLITE_DCHECK_GE(output_shape.DimensionsCount(), 1);
-  TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
-
-
-#if IFX_DEBUG_LOGGING
-  std::cout << "Packed implementation!: filter_offset = " << std::dec << filter_offset << std::endl;
-#endif
-  // TODO(benoitjacob): This really should be:
-  //     const int batches = ArraySize(output_dims, 1);
-  // but the current --variable_batch hack consists in overwriting the 3rd
-  // dimension with the runtime batch size, as we don't keep track for each
-  // array of which dimension is the batch dimension in it.
-  const int output_dim_count = output_shape.DimensionsCount();
-  const int filter_dim_count = filter_shape.DimensionsCount();
-  const int batches = FlatSizeSkipDim(output_shape, output_dim_count - 1);
-  const unsigned int output_depth = MatchingDim(filter_shape, filter_dim_count - 2,
-                                       output_shape, output_dim_count - 1);
-  const unsigned int accum_depth = filter_shape.Dims(filter_dim_count - 1);
-  const unsigned int accum_container_depth = (accum_depth + (items_per_container-1u))/items_per_container;
-  const int32 mask = (1<<bits_per_item)-1;
-#if IFX_DEBUG_LOGGING
-  std::cout << "Packed implementation!: accum-depth = " << std::dec << accum_depth << std::endl;
-#endif
-  bool once = false;
-  unsigned int final_container_begin = accum_depth-(accum_depth%items_per_container);
-  for (int b = 0; b < batches; ++b) {
-    for (unsigned int out_c = 0; out_c < output_depth; ++out_c) {
-      int32 acc = 0;
-      unsigned int t;
-      const uint8_t *input_vals;
-      CONTAINER_T filter_vals;
-      unsigned int i;
-      unsigned int last_d = 0;
-      unsigned int d = 0;
-      unsigned int container = 0;
-      for (;;) {
-        input_vals = &input_data[b * accum_depth + d];
-        filter_vals = filter_data[out_c * accum_container_depth + container];
-        i = 0;
-        // Exit loop once last complete container processed...
-        // Next container is setup
-        if (d >= final_container_begin)
-          break;
-        // Unrollable loop!!
-        for( unsigned int i = 0; i < items_per_container; ++i) {
-            int32 input_val = input_vals[i] + input_offset;
-            int32 filter_val = (filter_vals & mask) + filter_offset;
-#if IFX_DEBUG_LOGGING
-            if( !once ) {
-                std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
-            }
-#endif
-            filter_vals >>= bits_per_item;
-            acc += filter_val * input_val;
-        }
-        d += items_per_container;
-        ++container;
-      }
-      // Remaining items if accum_depth%items_per_container !=0
-      // TODO template params to handle no bias / weight container type
-      // aligned cases.
-
-      while( d < accum_depth ) {
-          int32 input_val = input_vals[i] + input_offset;
-          int32 filter_val = (filter_vals & mask) + filter_offset;
-#if IFX_DEBUG_LOGGING
-        if( !once ) {
-          std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
-        }
-#endif
-          filter_vals >>= bits_per_item;
-          acc += filter_val * input_val;
-          ++d;
-          ++i;
-      }
-
-#if IFX_DEBUG_LOGGING
-      if( !once ) {
-        std::cout << "RAW ACC " << acc << std::endl;
-      }
-      once = true;
-#endif
-      if (bias_data) {
-        acc += bias_data[out_c];
-      }
-      acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
-      acc += output_offset;
-      acc = std::max(acc, output_activation_min);
-      acc = std::min(acc, output_activation_max);
-      output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
-    }
-
-  }
-}
-
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 inline void EvalFullyConnectedUint8PackedWeights(
         const FullyConnectedParams& params,
@@ -279,7 +146,7 @@ inline void EvalFullyConnectedUint8PackedWeights(
     auto output_data = GetTensorData<uint8>(output);
 
     // here could "Intercept" arguments for offlikne pre-interpretation
-    return EvalFullyConnectedUint8PackedWeightsImpl<CONTAINER_T, bits_per_item, items_per_container>(
+    return reference_integer_ops::FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
             params,
             input_shape, input_data,
             filter_shape, filter_data,
@@ -288,37 +155,38 @@ inline void EvalFullyConnectedUint8PackedWeights(
 }
 
 
-
 TfLiteStatus EvalQuantizedPacked(
         const FullyConnectedParams &params,
         const TfLiteTensor* input,
         const TfLiteTensor* filter, const TfLiteTensor* bias,
         TfLiteTensor* output,
         TfLiteContext* context,
-        const TfLiteUInt8Array &custom) {
+        const TfLiteCustomSub8BitPackingDetails &custom) {
 
-    unsigned int bits_per_item = custom.data[4];
-    unsigned int container_bits = custom.data[5]; // TODO does it even make sense to pass this??
-
-    // TODO Check magic # in custom data vector
+    unsigned int bits_per_item = custom.bits_per_item;
+    unsigned int container_bits = custom.container_bits; 
+    unsigned int packed_minor_dims =  custom.packed_minor_dims;
     switch (bits_per_item) {
 
         case 4: {
-            assert(container_bits == 8);
+            if(container_bits != 8)
+              break;
             EvalFullyConnectedUint8PackedWeights<uint8_t, 4, 8 / 4>(params, input,
                                                                     filter, bias,
                                                                     output);
             return kTfLiteOk;
         }
         case 5: {
-            assert(container_bits == 16);
+            if(container_bits != 16)
+              break;
             EvalFullyConnectedUint8PackedWeights<uint16_t, 5, 16 / 5>(params, input,
                                                                       filter, bias,
                                                                       output);
             return kTfLiteOk;
         }
         case 6: {
-            assert(container_bits == 32);
+            if(container_bits != 32)
+              break;
             EvalFullyConnectedUint8PackedWeights<uint32_t, 6, 32 / 6>(params, input,
                                                                       filter, bias,
                                                                       output);
@@ -330,6 +198,9 @@ TfLiteStatus EvalQuantizedPacked(
             return kTfLiteError;
         }
     }
+    TF_LITE_KERNEL_LOG(context, "Container bitwidth %d not supported for %d bit packed values",
+                       container_bits, bits_per_item);
+    return kTfLiteError;
 }
 
 
@@ -359,12 +230,12 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
       GetTensorShape(output), GetTensorData<output_data_type>(output))
   switch (output->type) {
     case kTfLiteUInt8:
-      if( filter->quantization.custom )  {
+      if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
             return EvalQuantizedPacked(
                     op_params,
                     input, filter, bias, output,
                     context,
-                    *filter->quantization.custom);
+                    *filter->quantization.details.data.custom_sub8bit_packing);
       } else {
         TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);
       }

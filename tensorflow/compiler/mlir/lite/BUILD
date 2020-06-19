@@ -564,10 +564,12 @@ cc_library(
     name = "flatbuffer_export",
     srcs = [
         "flatbuffer_export.cc",
+        "experimental/sub_byte_packing.cc",
     ],
     hdrs = [
         "flatbuffer_export.h",
         "flatbuffer_export_flags.h",
+        "experimental/sub_byte_packing.h",
     ],
     deps = [
         ":convert_type",
@@ -590,6 +592,7 @@ cc_library(
         "//tensorflow/core/platform:status",
         "//tensorflow/lite:schema_fbs_version",
         "//tensorflow/lite:string_util",
+        "//tensorflow/lite:util",
         "//tensorflow/lite/delegates/flex:whitelisted_flex_ops_lib",
         "//tensorflow/lite/kernels/internal:kernel_utils",
         "//tensorflow/lite/schema:schema_fbs",

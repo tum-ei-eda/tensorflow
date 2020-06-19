@@ -311,14 +311,80 @@ typedef enum TfLiteQuantizationType {
   kTfLiteAffineQuantization = 1,
 } TfLiteQuantizationType;
 
+//
 // @IFX+PATCH@
 //
-// tflite::CustomQuantization information
-typedef struct TfLiteCustomQuantization {
-  uint32_t len;
-  const uint8_t   *data;  // 16-byte aligned specified in schema.
-} TfLiteCustomQuantization;
 
+
+// Supported Quantization Detials.  This fuses
+// details with sub-types.  In this case a 
+// CustomQuantization details specifying sub-8  types and sub-types of details
+typedef enum TfLiteQuantizationDetailsType {
+  // CustomQuantization coding details of < 8 bit coded, Uniform Quantized with
+  // values packed.
+  kTfLiteUnknownDetails,
+  kTfLiteSub8BitPackedUniformDetail,
+
+} TfLiteQuantizationDetailsType;
+
+
+
+//
+// Custom Quantization details for sub 8-bit packed weights\
+//
+// TfLiteQuantizationDetails hold only a raw 8-bit data-vector
+// This structure gives an interpretation of these as packing parameters for
+// tensors with sub 8-bit coded quantized values that can be mapped directly to the flatbuffer.
+//
+// Data-items of bits_per_item width are densely lsb-first packed
+// without splitting into container words of container_bits width.
+//
+// container_bits % bits_per_item msb in each container words are padding.
+//
+// Values corresponding to subranges ranging over packed minor dimensions 
+// are padded so that they commence at container word aligned
+// memory locations.
+// 
+// E.g. 
+// For tensor shape [2,4,15]  and packed_minor_dims == 1 
+// values corresponding to ranges[x,y,:] comprised 15 data items 
+// densely packed into sequential container words starting with lsb
+// of the first container word with the last container word potentially not
+// entirely filled.
+//
+// For packed_minor_dims == 2
+// each range [x,:,:] comprises 60 data items 
+// densely packed into sequential container words starting with lsb
+// of the first container word with the last container word potentially not
+// entirely filled.   
+//
+
+typedef struct TfLiteCustomSub8BitPackingDetails
+{
+  uint8_t    bits_per_item;  
+  uint8_t    container_bits;  
+
+  // Minor dimensions for which values are densely packed.
+  // For other dimensions corresponding sub-tensor starts
+  // at addressable container word.
+  uint8_t     packed_minor_dims;
+  uint8_t     _reserved[5];
+} TfLiteCustomSub8BitPackingDetails;
+
+
+
+typedef struct TfLiteQuantizationDetails {
+  
+  TfLiteQuantizationDetailsType type;
+
+  // Alternative details types.... one per TfLiteQuantizationDetailsType 
+  union {
+    // pre: type == kTfLiteSub8BitUPackedUniformDetails
+    const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
+    // For TFlite(u) pointer to
+    // Other alternatives might be added  here...
+  } data;
+} TfLiteQuantizationDetails;
 
 
 // Structure specifying the quantization used by the tensor, if-any.
@@ -330,9 +396,10 @@ typedef struct TfLiteQuantization {
   void* params;
 
   //@IFX_PATCH@
-  // Pointer to custom quantization vector in flat buffer (if defined)
-  // 16-byte alignment defined in flat-buffer.
-  const TfLiteUInt8Array *custom;
+  // Pointer to fruther quantization details  if present (i.e. not QuantizationDetails_NONE)
+  // InterpreterBuilder::ParseQuantization checks for and populates for supported/recognized variants
+
+  TfLiteQuantizationDetails details;
 } TfLiteQuantization;
 
 // Legacy. Will be deprecated in favor of TfLiteAffineQuantization.

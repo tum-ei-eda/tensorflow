@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/lite/micro/memory_helpers.h"
 #include "tensorflow/lite/micro/memory_planner/greedy_memory_planner.h"
 #include "tensorflow/lite/micro/simple_memory_allocator.h"
+#include "tensorflow/lite/experimental/custom_quantization_util.h"
 
 namespace tflite {
 
@@ -371,27 +372,31 @@ TfLiteStatus InitializeRuntimeTensor(
     // this is not copied:
     quantization->quantized_dimension = src_quantization->quantized_dimension();
 
+    result->quantization.type = kTfLiteAffineQuantization;
+    result->quantization.params = quantization;
+
+    // @IFX_PATCH@
+    // add support for custom quantization details.  Specifically
+    // packed sub 8-bit quantized constants...
+
     const tflite::CustomQuantization* custom_quant =
         src_quantization->details_as_CustomQuantization();
 
-    const TfLiteUInt8Array *custom_quant_data;
     if (custom_quant) {
-      custom_quant_data = reinterpret_cast<const TfLiteUInt8Array *>(custom_quant->custom());
-    } else {
-      custom_quant_data = 0;
+      auto status = tflite::custom_quant::ParseCustomQuantizationDetails(
+          custom_quant, result->quantization, error_reporter);
+      if (status != kTfLiteOk) {
+        return status;
+      }
     }
-    
-    result->quantization = {
-            kTfLiteAffineQuantization,
-            quantization,
-            custom_quant_data
-        };
   }
+
   if (flatbuffer_tensor.name() != nullptr) {
     result->name = flatbuffer_tensor.name()->c_str();
   }
   return kTfLiteOk;
 }
+
 }  // namespace internal
 
 TfLiteStatus MicroAllocator::Init() {
