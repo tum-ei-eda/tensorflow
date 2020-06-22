@@ -1,5 +1,5 @@
 /**
-* 4-Bit weight 'hello world' sine model
+* 5-Bit weight 'hello world' sine model
 */
 
 #pragma once
