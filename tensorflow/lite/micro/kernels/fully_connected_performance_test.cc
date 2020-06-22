@@ -18,7 +18,7 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/micro/kernels/all_ops_resolver.h"
+#include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
 #include "tensorflow/lite/micro/testing/test_utils.h"
 
@@ -103,12 +103,12 @@ void TestFullyConnectedQuantized(const int number_of_invocations,
   constexpr int outputs_size = 1;
   constexpr int tensors_size = inputs_size + outputs_size;
   TfLiteTensor tensors[tensors_size] = {
-      CreateQuantizedTensor(input_data, input_dims, "input_tensor", input_min,
+      CreateQuantizedTensor(input_data, input_dims, input_min,
                             input_max),
-      CreateQuantizedTensor(weights_data, weights_dims, "weights_tensor",
+      CreateQuantizedTensor(weights_data, weights_dims, 
                             weights_min, weights_max),
-      CreateQuantized32Tensor(bias_data, bias_dims, "bias_tensor", bias_scale),
-      CreateQuantizedTensor(output_data, output_dims, "output_tensor",
+      CreateQuantized32Tensor(bias_data, bias_dims, bias_scale),
+      CreateQuantizedTensor(output_data, output_dims, 
                             output_min, output_max),
   };
 
@@ -120,9 +120,9 @@ void TestFullyConnectedQuantized(const int number_of_invocations,
   mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
 
-  ::tflite::ops::micro::AllOpsResolver resolver;
+  ::tflite::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_FULLY_CONNECTED, 4);
+      resolver.FindOp(tflite::BuiltinOperator_FULLY_CONNECTED);
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
 
   TfLiteFullyConnectedParams builtin_data = {
