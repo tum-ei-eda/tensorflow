@@ -74,15 +74,15 @@ $(PRJDIR)$(3)/$(1)/%: % third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(3)/cmake/boards/%: tensorflow/lite/micro/examples/$(3)/zephyr_riscv/boards/%
+$(PRJDIR)$(3)/cmake/boards/%: $(EXAMPLES_DIR)/$(3)/zephyr_riscv/boards/%
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(3)/cmake/%: tensorflow/lite/micro/examples/$(3)/zephyr_riscv/%
+$(PRJDIR)$(3)/cmake/%:  $(EXAMPLES_DIR)/$(3)/zephyr_riscv/%
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
-$(PRJDIR)$(3)/$(1)/third_party/%: tensorflow/lite/micro/tools/make/downloads/% third_party_downloads
+$(PRJDIR)$(3)/$(1)/third_party/%: $(MAKEFILE_DIR)/downloads/% third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@cp $$< $$@
 
@@ -96,9 +96,9 @@ $(PRJDIR)$(3)/$(1)/%: $(MAKEFILE_DIR)/templates/%.tpl
 	sed -E 's#\%\{TARGET_TOOLCHAIN_ROOT\}\%#$(9)#g' | \
 	sed -E 's#\%\{TARGET_TOOLCHAIN_PREFIX\}\%#$(10)#g' > $$@
 
-$(PRJDIR)$(3)/$(1)/keil_project.uvprojx: tensorflow/lite/micro/tools/make/templates/keil_project.uvprojx.tpl
+$(PRJDIR)$(3)/$(1)/keil_project.uvprojx: $(MAKEFILE_DIR)/templates/keil_project.uvprojx.tpl
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/generate_keil_project.py \
+	@python $(MAKEFILE_DIR)/generate_keil_project.py \
         --input_template=$$< --output_file=$$@ --executable=$(3) \
         --srcs="$(4)" --hdrs="$(5)" --include_paths="$$(PROJECT_INCLUDES)"
 
@@ -139,7 +139,7 @@ define generate_arc_project
 
 ifeq ($(TARGET_ARCH), arc)
 
-$(PRJDIR)$(3)/$(1)/Makefile: tensorflow/lite/micro/tools/make/templates/arc/arc_app_makefile.tpl
+$(PRJDIR)$(3)/$(1)/Makefile: $(MAKEFILE_DIR)/templates/arc/arc_app_makefile.tpl
 	@mkdir -p $$(dir $$@)
 	@sed -E 's#\%\{SRCS\}\%#$(4)#g' $$< | \
 	sed -E 's#\%\{CC\}\%#$(CC_TOOL)#g' | \
@@ -158,7 +158,7 @@ $(PRJDIR)$(3)/$(1)/Makefile: tensorflow/lite/micro/tools/make/templates/arc/arc_
 	sed -E 's#\%\{APP_DEBUG_CMD\}\%#$(ARC_APP_DEBUG_CMD)#g' | \
 	sed -E 's#\%\{EXTRA_EXECUTE_RULES\}\%#$(ARC_EXTRA_EXECUTE_RULES)#g' > $$@
 
-$(PRJDIR)$(3)/$(1)/%: tensorflow/lite/micro/tools/make/templates/arc/%.tpl
+$(PRJDIR)$(3)/$(1)/%: $(MAKEFILE_DIR)/templates/arc/%.tpl
 	@cp $$< $$@
 
 $(foreach var,$(ARC_TARGET_FILES_DIRS),$(eval $(call path_changing_copy_file,$(PRJDIR)$(3)/$(1),$(var))))
@@ -184,9 +184,9 @@ endef
 # can invoke to create the standalone project.
 define generate_arduino_project
 
-$(PRJDIR)$(2)/arduino/examples/%.c: tensorflow/lite/micro/examples/%.c
+$(PRJDIR)$(2)/arduino/examples/%.c: $(EXAMPLES_DIR)/%.c
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_source \
         --source_path="$$<" \
@@ -194,7 +194,7 @@ $(PRJDIR)$(2)/arduino/examples/%.c: tensorflow/lite/micro/examples/%.c
 
 $(PRJDIR)$(2)/arduino/examples/%.cpp: tensorflow/lite/micro/examples/%.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_source \
         --source_path="$$<" \
@@ -202,7 +202,7 @@ $(PRJDIR)$(2)/arduino/examples/%.cpp: tensorflow/lite/micro/examples/%.cc
 
 $(PRJDIR)$(2)/arduino/examples/%.h: tensorflow/lite/micro/examples/%.h
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_source \
         --source_path="$$<" \
@@ -210,7 +210,7 @@ $(PRJDIR)$(2)/arduino/examples/%.h: tensorflow/lite/micro/examples/%.h
 
 $(PRJDIR)$(2)/arduino/examples/%/main.ino: tensorflow/lite/micro/examples/%/main_functions.cc
 	@mkdir -p $$(dir $$@)
-	@python tensorflow/lite/micro/tools/make/transform_source.py \
+	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
         --is_example_ino \
         --source_path="$$<" \
@@ -257,7 +257,7 @@ $(PRJDIR)$(2)/arduino/src/third_party/flatbuffers/include/flatbuffers/base.h: $(
         --third_party_headers="$(4)" < $$< | \
         sed -E 's/utility\.h/utility/g' > $$@
 
-$(PRJDIR)$(2)/arduino/src/third_party/kissfft/kiss_fft.h: tensorflow/lite/micro/tools/make/downloads/kissfft/kiss_fft.h third_party_downloads
+$(PRJDIR)$(2)/arduino/src/third_party/kissfft/kiss_fft.h: $(MAKEFILE_DIR)/downloads/kissfft/kiss_fft.h third_party_downloads
 	@mkdir -p $$(dir $$@)
 	@python $(MAKEFILE_DIR)/transform_source.py \
         --platform=arduino \
@@ -385,7 +385,7 @@ generate_$(2)_esp_project: \
 $(addprefix $(PRJDIR)$(2)/esp-idf/,\
 $(patsubst tensorflow/%,components/tfmicro/tensorflow/%,\
 $(patsubst third_party/%,components/tfmicro/third_party/%,\
-$(patsubst tensorflow/lite/micro/examples/$(2)/%,main/%,$(3) $(4) $(5) $(6))))) \
+$(patsubst $(EXAMPLES_DIR)/$(2)/%,main/%,$(3) $(4) $(5) $(6))))) \
 $(addprefix $(PRJDIR)$(2)/esp-idf/,$(1))
 
 ALL_PROJECT_TARGETS += generate_$(2)_esp_project

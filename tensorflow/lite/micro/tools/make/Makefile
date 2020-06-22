@@ -125,8 +125,8 @@ MICROLITE_LIB_NAME := libtensorflow-microlite.a
 # These two must be defined before we include the target specific Makefile.inc
 # because we filter out the examples that are not supported for those targets.
 # See targets/xtensa_xpg_makefile.inc for an example.
-MICRO_LITE_EXAMPLE_TESTS := $(shell find tensorflow/lite/micro/examples/ -name Makefile.inc)
-MICRO_LITE_BENCHMARKS := $(wildcard tensorflow/lite/micro/benchmarks/Makefile.inc)
+MICRO_LITE_EXAMPLE_TESTS := $(shell find $(EXAMPLES_DIR) -name Makefile.inc)
+MICRO_LITE_BENCHMARKS := $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/Makefile.inc)
 
 MICROLITE_TEST_SRCS := \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*test.cc) \
@@ -138,14 +138,14 @@ MICROLITE_BENCHMARK_SRCS := \
 $(wildcard tensorflow/lite/micro/benchmarks/*benchmark.cc)
 
 MICROLITE_TEST_HDRS := \
-$(wildcard tensorflow/lite/micro/testing/*.h)
+$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*.h)
 
 MICROLITE_CC_BASE_SRCS := \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*.cc) \
-$(wildcard tensorflow/lite/micro/benchmarks/*model_data.cc) \
+$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/*model_data.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*.cc) \
-$(wildcard tensorflow/lite/micro/testing/*model.cc) \
+$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*model.cc) \
 $(TFLITE_U_PATH)tensorflow/lite/c/common.c \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/error_reporter.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
@@ -316,7 +316,7 @@ include $(MICRO_LITE_EXAMPLE_TESTS)
 include $(MICRO_LITE_BENCHMARKS)
 
 # Create rules for downloading third-party dependencies.
-THIRD_PARTY_TARGETS :=
+THIRD_PARTY_TARGETS +=
 $(foreach DOWNLOAD,$(THIRD_PARTY_DOWNLOADS),$(eval $(call create_download_rule,$(DOWNLOAD))))
 third_party_downloads: $(THIRD_PARTY_TARGETS)
 

@@ -137,7 +137,7 @@ $(BINDIR)%.bin: $(BINDIR)%
 	$(READELF) -a $< > "$*.txt"
 	dd bs=1024 count=$(ROM_SIZE_KB) if=$@ of="$*.rom"
 	dd bs=1024 skip=$(ROM_SIZE_KB) if=$@ of="$*.ram"
-	$(CC_PREFIX)$(TARGET_TOOLCHAIN_PREFIX)size $<
+	$(TARGET_TOOLCHAIN_ROOT)$(TARGET_TOOLCHAIN_PREFIX)size $<
 
   TEST_SCRIPT :=  $(MAKEFILE_DIR)/gen/test_etiss_binary.sh
   TEST_BIN_TARGET_SUFFIX := .bin
