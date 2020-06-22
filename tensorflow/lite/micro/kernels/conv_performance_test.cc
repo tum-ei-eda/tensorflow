@@ -308,13 +308,12 @@ void TestConvQuantizedPerformance(
   constexpr int tensors_size = inputs_size + outputs_size;
   TfLiteTensor tensors[tensors_size] = {
       CreateQuantizedTensor(input_data, input_quantized, input_dims,
-                            input_scale, 128, "input_tensor"),
+                            input_scale, 128),
       CreateQuantizedTensor(filter_data, filter_quantized, filter_dims,
-                            filter_scale, 128, "filter_tensor"),
+                            filter_scale, 128),
       CreateQuantizedBiasTensor(bias_data, bias_quantized, bias_dims,
-                                input_scale, filter_scale, "bias_tensor"),
-      CreateQuantizedTensor(output_data, output_dims, output_scale, 128,
-                            "output_tensor")};
+                                input_scale, filter_scale),
+      CreateQuantizedTensor(output_data, output_dims, output_scale, 128)};
 
   float filter_scales[] = {1, filter_scale};
   int filter_zero_points[] = {1, 128};
@@ -353,18 +352,16 @@ void TestConvQuantizedPerChannelPerformance(
   TfLiteAffineQuantization bias_quant;
   TfLiteTensor input_tensor =
       CreateQuantizedTensor(input_data, input_quantized, input_dims,
-                            input_scale, input_zero_point, "input_tensor");
+                            input_scale, input_zero_point);
   TfLiteTensor filter_tensor = CreateSymmetricPerChannelQuantizedTensor(
       filter_data, filter_data_quantized, filter_dims, filter_scales,
-      filter_zero_points, &filter_quant, 0 /* quantized dimension */,
-      "filter_tensor");
+      filter_zero_points, &filter_quant, 0 /* quantized dimension */);
   TfLiteTensor bias_tensor = CreatePerChannelQuantizedBiasTensor(
       bias_data, bias_data_quantized, bias_dims, input_scale, &filter_scales[1],
-      bias_scales, bias_zero_points, &bias_quant, 0 /* quantized dimension */,
-      "bias_tensor");
+      bias_scales, bias_zero_points, &bias_quant, 0 /* quantized dimension */);
   TfLiteTensor output_tensor =
       CreateQuantizedTensor(output_data, output_dims, output_scale,
-                            output_zero_point, "output_tensor");
+                            output_zero_point);
 
   float input_scales[] = {1, input_scale};
   int input_zero_points[] = {1, input_zero_point};

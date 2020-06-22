@@ -214,6 +214,12 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
     if( micro_test::did_test_fail && ++fails > 5)
       return kTfLiteOk;
   }
+
+  
+  if (registration->free) {
+    registration->free(&context, user_data);
+  }
+
   return kTfLiteOk;
 }
 
@@ -238,16 +244,15 @@ void TestDepthwiseConvQuantizedPerLayer(
   TfLiteTensor tensors[tensors_size] = {
       tflite::testing::CreateQuantizedTensor(input_data, input_quantized,
                                              input_dims, input_scale,
-                                             input_zero_point, "input_tensor"),
+                                             input_zero_point),
       tflite::testing::CreateQuantizedTensor(
           filter_data, filter_quantized, filter_dims, filter_scale,
-          filter_zero_point, "filter_tensor"),
+          filter_zero_point),
       tflite::testing::CreateQuantizedBiasTensor(bias_data, bias_quantized,
                                                  bias_dims, input_scale,
-                                                 filter_scale, "bias_tensor"),
+                                                 filter_scale),
       tflite::testing::CreateQuantizedTensor(output_data, output_dims,
-                                             output_scale, output_zero_point,
-                                             "output_tensor"),
+                                             output_scale, output_zero_point),
   };
 
   // TODO(njeff): Affine Quantization Params should be set on tensor creation.
@@ -294,18 +299,16 @@ void TestDepthwiseConvQuantizedPerChannel(
   TfLiteAffineQuantization bias_quant;
   TfLiteTensor input_tensor =
       CreateQuantizedTensor(input_data, input_quantized, input_dims,
-                            input_scale, input_zero_point, "input_tensor");
+                            input_scale, input_zero_point);
   TfLiteTensor filter_tensor = CreateSymmetricPerChannelQuantizedTensor(
       filter_data, filter_data_quantized, filter_dims, filter_scales,
-      filter_zero_points, &filter_quant, 3 /* quantized dimension */,
-      "filter_tensor");
+      filter_zero_points, &filter_quant, 3 /* quantized dimension */);
   TfLiteTensor bias_tensor = CreatePerChannelQuantizedBiasTensor(
       bias_data, bias_data_quantized, bias_dims, input_scale, &filter_scales[1],
-      bias_scales, bias_zero_points, &bias_quant, 3 /* quantized dimension */,
-      "bias_tensor");
+      bias_scales, bias_zero_points, &bias_quant, 3 /* quantized dimension */);
   TfLiteTensor output_tensor =
       CreateQuantizedTensor(output_data, output_dims, output_scale,
-                            input_zero_point, "output_tensor");
+                            input_zero_point);
 
   // TODO(njeff): Affine Quantization Params should be set on tensor creation.
   float input_scales[] = {1, input_scale};
