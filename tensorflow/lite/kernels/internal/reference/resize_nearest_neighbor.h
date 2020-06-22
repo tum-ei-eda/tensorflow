@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "tensorflow/lite/kernels/internal/cppmath.h"
 
+#include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 
 namespace tflite {
