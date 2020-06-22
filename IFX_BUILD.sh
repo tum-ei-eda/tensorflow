@@ -15,7 +15,7 @@ while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
+        echo "`basename $0`: [--no_xlator] [--no-config] [--no-build] [--no-tflite] " 1>&2
 	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
 	echo "  [--verbose]" 1>&2
         exit 1
@@ -204,7 +204,6 @@ then
       rm -f ${TFLITE_MICRO_ROOT}/bin/*
       echo Installing to ${TFLITE_MICRO_ROOT}/bin
       cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
-        bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
     fi
 fi

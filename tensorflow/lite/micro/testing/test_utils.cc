@@ -201,7 +201,7 @@ TfLiteTensor CreateQuantizedTensor(const uint8_t* data, TfLiteIntArray* dims,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = false;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -225,7 +225,7 @@ TfLiteTensor CreateQuantizedTensor(const int8_t* data, TfLiteIntArray* dims,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -249,7 +249,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, uint8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -267,7 +267,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -285,7 +285,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int16_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -305,7 +305,7 @@ TfLiteTensor CreateQuantized32Tensor(const int32_t* data, TfLiteIntArray* dims,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
-  result.quantization.custom = nullptr;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 

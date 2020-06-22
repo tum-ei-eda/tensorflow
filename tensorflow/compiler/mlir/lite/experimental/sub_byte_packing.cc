@@ -279,6 +279,11 @@ flatbuffers::Offset<void> SubBytePacking::CustomDetails(
   if (bits_per_item_ == 0) return 0;
 
   tflite::CustomQuantizationT qdetails;
+  TfLiteCustomSub8BitPackingDetails details_struct;
+  details_struct.bits_per_item = bits_per_item_;
+  details_struct.container_bits = container_bits_;
+  details_struct.packed_minor_dims = packed_minor_dims_;
+
   // Push back a "magic number" as this is for custom extensions and
   // we like to be able to spot if we run into someone else's
 
@@ -289,11 +294,12 @@ flatbuffers::Offset<void> SubBytePacking::CustomDetails(
     qdetails.custom.push_back(static_cast<uint8_t>(magic_bytes & 0xffu));
     magic_bytes >>= 8u;
   }
-  qdetails.custom.push_back(bits_per_item_);
-  qdetails.custom.push_back(container_bits_);
-  qdetails.custom.push_back(packed_minor_dims_);
-  // 32-bit word align
-  qdetails.custom.push_back(0u);
+  
+  const uint8_t *details_bytes = reinterpret_cast<uint8_t *>(&details_struct);
+  for (unsigned int i = 0; i < sizeof(TfLiteCustomSub8BitPackingDetails); ++i) {
+    // Flatbuffers are little-endian...
+    qdetails.custom.push_back(details_bytes[i]);
+  }
   return tflite::CustomQuantization::Pack(_fbb, &qdetails).Union();
 }
 

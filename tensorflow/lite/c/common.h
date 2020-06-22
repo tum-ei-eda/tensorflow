@@ -322,6 +322,8 @@ typedef enum TfLiteQuantizationType {
 typedef enum TfLiteQuantizationDetailsType {
   // CustomQuantization coding details of < 8 bit coded, Uniform Quantized with
   // values packed.
+
+  kTfLiteNoDetails,
   kTfLiteUnknownDetails,
   kTfLiteSub8BitPackedUniformDetail,
 

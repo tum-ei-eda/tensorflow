@@ -42,10 +42,19 @@ ParseSub8BitPackedQuantizationDetails(const void *details,
     auto custom_quant = static_cast<const tflite::CustomQuantization *>(details);
     // Recogniseable size...
     const flatbuffers::Vector<uint8_t> *data_bytes = custom_quant->custom();
-    if (!data_bytes || data_bytes->Length() != sizeof(TfLiteCustomSub8BitPackingDetails)+4) {
+    if (!data_bytes ) {
             TF_LITE_REPORT_ERROR(
             error_reporter,
-            "Custom quantization details are null or unrecognized length");
+            "Custom quantization details are null");
+            return kTfLiteError;
+    }
+
+    if (data_bytes->Length() != sizeof(TfLiteCustomSub8BitPackingDetails)+4) {
+            TF_LITE_REPORT_ERROR(
+            error_reporter,
+            "Custom quantization details unexpcted length %d (expected) %d", 
+            data_bytes->Length(),
+            sizeof(TfLiteCustomSub8BitPackingDetails)+4);
             return kTfLiteError;
     }
     
@@ -66,6 +75,7 @@ ParseSub8BitPackedQuantizationDetails(const void *details,
     quantization.details.type = kTfLiteSub8BitPackedUniformDetail;
     quantization.details.data.custom_sub8bit_packing = 
         reinterpret_cast<const TfLiteCustomSub8BitPackingDetails *>(data_bytes->Data()+4);
+    return kTfLiteOk;
 }
 
 
@@ -73,9 +83,11 @@ TfLiteStatus ParseCustomQuantizationDetails(const void *details,
                                             TfLiteQuantization &quantization,
                                             tflite::ErrorReporter *error_reporter)
 {
-    quantization.details.type = kTfLiteUnknownDetails;
-    if (!details)
+
+    if (!details) {
+        quantization.details.type = kTfLiteNoDetails;
         return kTfLiteOk;
+    }
 
     // Very probably we have a tensor holding supported packed uniform quantized data.
     return ParseSub8BitPackedQuantizationDetails(details, quantization, error_reporter);
