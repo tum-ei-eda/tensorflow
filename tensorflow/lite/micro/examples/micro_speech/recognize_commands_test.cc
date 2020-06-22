@@ -81,7 +81,7 @@ TF_LITE_MICRO_TEST(RecognizeCommandsTestBasic) {
   std::initializer_list<int8_t> result_data = {127, -128, -128, -128};
   auto result_dims = {2, 1, 4};
   TfLiteTensor results = tflite::testing::CreateQuantizedTensor(
-      result_data, tflite::testing::IntArrayFromInts(result_dims),
+      result_data, tflite::testing::IntArrayFromInitializer(result_dims),
       -128.0f, 127.0f);
 
   const char* found_command;
