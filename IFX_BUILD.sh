@@ -205,7 +205,6 @@ then
       rm -f ${TFLITE_MICRO_ROOT}/bin/*
       echo Installing to ${TFLITE_MICRO_ROOT}/bin
       cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
-        bazel-bin/tensorflow/lite/toco/toco${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
     fi
 fi
