@@ -153,7 +153,6 @@ then
     export TF_NEED_GDR=0
     export TF_NEED_S3=0
     export TF_NEED_OPENCL_SYCL=0
-    export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_COMPUTECPP=0
     export GCC_HOST_COMPILER_PATH=$(which gcc)
     export CC_OPT_FLAGS="-march=${TARGET_ARCH} -Wno-sign-compare"
@@ -163,6 +162,8 @@ then
     export TF_DOWNLOAD_CLANG=0
   fi
 #  export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'import site; print(site.getsitepackages()[0])')"
+
+  export TF_SET_ANDROID_WORKSPACE=0
   export TF_NEED_ROCM=0
   export TF_NEED_CUDA=0
   export TF_OVERRIDE_EIGEN_STRONG_INLINE=1
