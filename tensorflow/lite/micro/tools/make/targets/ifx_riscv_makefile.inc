@@ -26,6 +26,8 @@ endif
     -mabi=$(TARGET_ABI) \
     -DTF_LITE_MCU_DEBUG_LOG \
     -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
+    -DTF_LITE_USE_GLOBAL_MAX \
+    -DTF_LITE_USE_GLOBAL_MIN \
     -fno-exceptions \
     -fno-unwind-tables \
     -ffunction-sections \
