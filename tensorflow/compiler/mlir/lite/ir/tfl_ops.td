@@ -3247,10 +3247,11 @@ in the unique output `y`. In other words:
   let hasOptions = 1;
 }
 
+// @IFX_PATCH@
 //===----------------------------------------------------------------------===//
 // Quantization ops.
 //===----------------------------------------------------------------------===//
-def TFL_DequantizeOp: TFL_Op<"dequantize", [NoQuantizableResult]> {
+def TFL_DequantizeOp: TFL_Op<"dequantize", [NoSideEffect, NoQuantizableResult]> {
   let summary = "Dequantize operator";
 
   let description = [{
@@ -3347,9 +3348,9 @@ def TFL_SparseQConstOp : Op<TFL_Dialect, "pseudo_sparse_qconst", [
     }]>
   ];
 }
-
+// @IFX_PATCH@// @IFX_PATCH@
 def TFL_QuantizeOp: TFL_Op<"quantize", [
-    FirstAttrDerivedResultType, NoQuantizableResult]> {
+    NoSideEffect, FirstAttrDerivedResultType, NoQuantizableResult]> {
   let summary = "Quantize operator";
 
   let description = [{

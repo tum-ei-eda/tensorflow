@@ -6,4 +6,10 @@ ifeq ($(TARGET), linux)
     CXXFLAGS += $(PLATFORM_FLAGS)
     CCFLAGS += $(PLATFORM_FLAGS)
   endif
+  ifeq ($(TARGET_ARCH), i386)
+      PLATFORM_FLAGS = \
+      -m32 -DTF_LITE_DISABLE_X86_NEON
+    CXXFLAGS += $(PLATFORM_FLAGS)
+    CCFLAGS += $(PLATFORM_FLAGS)
+  endif
 endif

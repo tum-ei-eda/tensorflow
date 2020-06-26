@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/lite/micro/memory_helpers.h"
 #include "tensorflow/lite/micro/memory_planner/greedy_memory_planner.h"
 #include "tensorflow/lite/micro/simple_memory_allocator.h"
+#include "tensorflow/lite/experimental/custom_quantization_util.h"
 
 namespace tflite {
 
@@ -317,7 +318,6 @@ TfLiteStatus InitializeRuntimeTensor(
 
   // Copy the quantization information from the serialized data.
   const auto* src_quantization = flatbuffer_tensor.quantization();
-  result->params.bits_per_item = 0;
   if (src_quantization && src_quantization->scale() &&
       (src_quantization->scale()->size() > 0) &&
       src_quantization->zero_point() &&
@@ -330,23 +330,6 @@ TfLiteStatus InitializeRuntimeTensor(
     // is a 32-bit integer.
     result->params.zero_point =
         static_cast<int32_t>(src_quantization->zero_point()->Get(0));
-
-
-    // @IFX_PATCH@ GROSS PoC hack  abuse min/max to carry packing information
-    result->params.bits_per_item = 0;
-    if( src_quantization->min() && src_quantization->min()->size()> 0 &&
-        src_quantization->max() && src_quantization->max()->size() == 1 &&
-        src_quantization->min()->Get(0) == 4 && src_quantization->max()->Get(0) == 8) {
-      float hack_bpi = src_quantization->min()->Get(0);
-        if(hack_bpi < 0.0 || hack_bpi > 8.0) {      
-          TF_LITE_REPORT_ERROR(error_reporter,
-                            "Out-of-range bits_per_item\n");
-          return kTfLiteError;
-        }
-        if (hack_bpi != 0.0) {
-          result->params.bits_per_item = static_cast<uint8_t>(hack_bpi);
-        } 
-    }
 
     // Populate per-channel quantization params.
     int channels = src_quantization->scale()->size();
@@ -388,13 +371,32 @@ TfLiteStatus InitializeRuntimeTensor(
     // TODO(rocky): Need to add a micro_allocator test case that fails when
     // this is not copied:
     quantization->quantized_dimension = src_quantization->quantized_dimension();
-    result->quantization = {kTfLiteAffineQuantization, quantization};
+
+    result->quantization.type = kTfLiteAffineQuantization;
+    result->quantization.params = quantization;
+
+    // @IFX_PATCH@
+    // add support for custom quantization details.  Specifically
+    // packed sub 8-bit quantized constants...
+
+    const tflite::CustomQuantization* custom_quant =
+        src_quantization->details_as_CustomQuantization();
+
+    if (custom_quant) {
+      auto status = tflite::custom_quant::ParseCustomQuantizationDetails(
+          custom_quant, result->quantization, error_reporter);
+      if (status != kTfLiteOk) {
+        return status;
+      }
+    }
   }
+
   if (flatbuffer_tensor.name() != nullptr) {
     result->name = flatbuffer_tensor.name()->c_str();
   }
   return kTfLiteOk;
 }
+
 }  // namespace internal
 
 TfLiteStatus MicroAllocator::Init() {

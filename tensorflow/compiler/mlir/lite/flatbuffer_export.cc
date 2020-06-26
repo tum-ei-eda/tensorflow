@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+
 #include "tensorflow/compiler/mlir/lite/flatbuffer_export.h"
 
 #include <stddef.h>
@@ -42,20 +43,20 @@ limitations under the License.
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
-#include "mlir/Dialect/Quant/QuantTypes.h"  // from @llvm-project
+#include "mlir/Dialect/Quant/QuantTypes.h"    // from @llvm-project
 #include "mlir/Dialect/StandardOps/IR/Ops.h"  // from @llvm-project
-#include "mlir/IR/Attributes.h"  // from @llvm-project
-#include "mlir/IR/Builders.h"  // from @llvm-project
-#include "mlir/IR/Function.h"  // from @llvm-project
-#include "mlir/IR/Location.h"  // from @llvm-project
-#include "mlir/IR/MLIRContext.h"  // from @llvm-project
-#include "mlir/IR/Module.h"  // from @llvm-project
-#include "mlir/IR/Operation.h"  // from @llvm-project
-#include "mlir/IR/StandardTypes.h"  // from @llvm-project
-#include "mlir/IR/Types.h"  // from @llvm-project
-#include "mlir/IR/Value.h"  // from @llvm-project
-#include "mlir/Support/LogicalResult.h"  // from @llvm-project
-#include "mlir/Translation.h"  // from @llvm-project
+#include "mlir/IR/Attributes.h"               // from @llvm-project
+#include "mlir/IR/Builders.h"                 // from @llvm-project
+#include "mlir/IR/Function.h"                 // from @llvm-project
+#include "mlir/IR/Location.h"                 // from @llvm-project
+#include "mlir/IR/MLIRContext.h"              // from @llvm-project
+#include "mlir/IR/Module.h"                   // from @llvm-project
+#include "mlir/IR/Operation.h"                // from @llvm-project
+#include "mlir/IR/StandardTypes.h"            // from @llvm-project
+#include "mlir/IR/Types.h"                    // from @llvm-project
+#include "mlir/IR/Value.h"                    // from @llvm-project
+#include "mlir/Support/LogicalResult.h"       // from @llvm-project
+#include "mlir/Translation.h"                 // from @llvm-project
 #include "tensorflow/compiler/mlir/lite/flatbuffer_operator.h"
 #include "tensorflow/compiler/mlir/lite/ir/tfl_ops.h"
 #include "tensorflow/compiler/mlir/lite/utils/convert_type.h"
@@ -73,11 +74,16 @@ limitations under the License.
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/lite/delegates/flex/whitelisted_flex_ops.h"
 #include "tensorflow/lite/kernels/internal/kernel_utils.h"
+#include "tensorflow/lite/experimental/custom_quantization_util.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/string_util.h"
 #include "tensorflow/lite/tools/versioning/op_version.h"
 #include "tensorflow/lite/tools/versioning/runtime_version.h"
 #include "tensorflow/lite/version.h"
+
+// @IFXC_PATCH@
+
+#include "tensorflow/compiler/mlir/lite/experimental/sub_byte_packing.h"
 
 using llvm::dyn_cast;
 using llvm::formatv;
@@ -324,97 +330,12 @@ static Optional<TfLitePoolParams> GetTflitePoolParams(Operation* inst,
   return llvm::None;
 }
 
-namespace {
-
-
-
-// @IFX_PATCH@
-// Packing layout of elements of quantized type value into words (mostly intended for sub-byte bitwidth
-// quantized w)
-// PoC only: 2x 4-bit values per byte for qconst_op only.
-// Full implementation will need to permit specification of op contexts in which packed layouts
-// are supported.
-//
-class SubBytePacking
-{
-public:
-  SubBytePacking(Value value) :
-    container_bits(0u), bits_per_item(0u)
-  {
-
-    auto defing_op = value.getDefiningOp();
-    if (!defing_op) return;
-    auto qcst_op = dyn_cast<tfl::QConstOp>(defing_op);
-    
-    bits_per_item = 0u;
-    // Must be a quantized constant value only used by supported
-    // TFL operation
-    if (!qcst_op) return;
-
-    for (auto user_i : value.getUsers()) { 
-      Operation *op = user_i;
-      if (!op )
-        return;
-      if (!isa<tfl::FullyConnectedOp>(op)) {
-        return;
-      }
-    } 
- 
-    // Of ocur has to be quantized and for now we handle only 8 bit
-    // uniform quantization.    
-    auto etype = qcst_op.qtype().getElementType();
-    if (!etype) return;
-    auto uqtype = etype.dyn_cast<mlir::quant::UniformQuantizedType>();
-    if (!uqtype) return;
-    if (uqtype.getStorageTypeIntegralWidth() != 8 ) return;
-
-    // PoC only: 4 bits packed in UINT8 for now
-    auto value_attr = qcst_op.value();
-    if( value_attr.getNumElements() % 2 != 0) {
-      return;
-    }
-    
-    // Reconstruct required bit-width... difference will be 2^N-1 or 2^N - 2
-    // So look for first most-significant set bit and use that to derive bitwidth
-    auto range = uqtype.getStorageTypeMax()-uqtype.getStorageTypeMin();
-    unsigned int bit = uqtype.getStorageTypeIntegralWidth();
-    for(;;)
-    {
-      // Looks like "zero bit" width... should probably never reach here
-      // but who knows. TF is a big place...  
-      if (bit == 0)
-        return;
-      --bit;
-      if ( ((range >> bit) & static_cast<int64_t>(1)) != 0 ) {
-        break;
-      }
-    }
-
-    // PoC only just 4 bits for now
-    unsigned int num_bits = bit+1u;
-    if (num_bits != 4) {
-      return;
-    }
-    qcst_op.emitWarning("Packing weights!!");
-    bits_per_item = num_bits;
-    container_bits = 8u;
-  }
-
-
-  unsigned int container_bits;
-  unsigned int bits_per_item;
-
-  operator bool () const { 
-    return bits_per_item != 0;
-  }
-};
-
 // Translates an MLIR module in TFLite dialect to TFLite FlatBuffer.
 class Translator {
  public:
-  // Translates the given MLIR module into TFLite FlatBuffer format and returns
-  // the serialized output. Returns llvm::None on unsupported, invalid inputs or
-  // internal error.
+  // Translates the given MLIR module into TFLite FlatBuffer format and
+  // returns the serialized output. Returns llvm::None on unsupported, invalid
+  // inputs or internal error.
   static Optional<std::string> Translate(
       ModuleOp module, bool emit_builtin_tflite_ops, bool emit_select_tf_ops,
       bool emit_custom_ops, OpOrArgNameMapper* op_or_arg_name_mapper);
@@ -446,9 +367,10 @@ class Translator {
   Optional<std::string> TranslateInternal();
 
   // Returns TFLite buffer populated with constant value if the operation is
-  // TFLite constant operation. Otherwise, returns an empty buffer. Emits error
-  // and returns llvm::None on failure.
-  Optional<BufferOffset<tflite::Buffer>> BuildBuffer(Operation* inst, const SubBytePacking &packing);
+  // TFLite constant operation. Otherwise, returns an empty buffer. Emits
+  // error and returns llvm::None on failure.
+  Optional<BufferOffset<tflite::Buffer>> BuildBuffer(
+      Operation* inst, const SubBytePacking& packing);
 
   // Build TFLite tensor from the given type. This function is for tfl.lstm
   // intermediates, which should have UniformQuantizedType.
@@ -457,13 +379,12 @@ class Translator {
 
   // Builds TFLite tensor from the given value. `buffer_idx` is index of the
   // corresponding buffer. Emits error and returns llvm::None on failure.
-  Optional<BufferOffset<tflite::Tensor>> BuildTensor(Value value,
-                                                     const std::string& name,
-                                                     unsigned buffer_idx,
-                                                     const SubBytePacking &packable_bitwidth);
+  Optional<BufferOffset<tflite::Tensor>> BuildTensor(
+      Value value, const std::string& name, unsigned buffer_idx,
+      SubBytePacking& packing);
 
-  // TODO(b/137395003): Legalize control flow ops to TFLite dialect, and remove
-  // these 2 functions here.
+  // TODO(b/137395003): Legalize control flow ops to TFLite dialect, and
+  // remove these 2 functions here.
   BufferOffset<tflite::Operator> BuildIfOperator(
       mlir::TF::IfOp op, const std::vector<int32_t>& operands,
       const std::vector<int32_t>& results);
@@ -503,8 +424,8 @@ class Translator {
       const ::tensorflow::NodeDef& node_def, const mlir::Location& loc);
 
   // Returns opcode index for op identified by the op_name, if already
-  // available. Otherwise, creates a new OperatorCode using the given `builtin`
-  // operator and associates it with `op_name`.
+  // available. Otherwise, creates a new OperatorCode using the given
+  // `builtin` operator and associates it with `op_name`.
   uint32_t GetOpcodeIndex(const std::string& op_name,
                           tflite::BuiltinOperator builtin);
 
@@ -529,8 +450,8 @@ class Translator {
   Optional<VectorBufferOffset<BufferOffset<tflite::Metadata>>>
   CreateMetadataVector();
 
-  // Uses the tf.entry_function attribute (if set) to initialize the op to name
-  // mapping.
+  // Uses the tf.entry_function attribute (if set) to initialize the op to
+  // name mapping.
   void InitializeNamesFromAttribute(FuncOp fn, bool* has_input_attr);
 
   // Determines if the specified operation op's operand at operand_index
@@ -552,12 +473,13 @@ class Translator {
 
   std::vector<BufferOffset<tflite::Buffer>> buffers_;
 
-  // Maps op name to index of the corresponding OperatorCode in opcodes_ vector.
+  // Maps op name to index of the corresponding OperatorCode in opcodes_
+  // vector.
   absl::flat_hash_map<std::string, uint32_t> opcode_index_map_;
   std::vector<BufferOffset<tflite::OperatorCode>> opcodes_;
 
-  // Maps function name to index of the corresponding subgraph in the FlatBuffer
-  // model.
+  // Maps function name to index of the corresponding subgraph in the
+  // FlatBuffer model.
   absl::flat_hash_map<std::string, int> subgraph_index_map_;
   absl::flat_hash_set<OpType> enabled_op_types_;
 
@@ -575,14 +497,12 @@ std::string Translator::UniqueName(mlir::Value val) {
   return std::string(name_mapper_.GetUniqueName(val));
 }
 
-
-
 Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
-    Operation* inst, const SubBytePacking &packing) {
+    Operation* inst, const SubBytePacking& packing) {
   ElementsAttr attr;
   if (auto cst = dyn_cast<mlir::ConstantOp>(inst)) {
-    // ConstantOp have ElementAttr at this point due to validation of the TFLite
-    // module.
+    // ConstantOp have ElementAttr at this point due to validation of the
+    // TFLite module.
     attr = cst.getValue().cast<ElementsAttr>();
   } else if (auto cst = dyn_cast<mlir::TF::ConstOp>(inst)) {
     attr = cst.value();
@@ -612,7 +532,7 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
   if (tensor.dtype() == tensorflow::DT_STRING) {
     ::tflite::DynamicBuffer dynamic_buffer;
     auto flat = tensor.flat<::tensorflow::tstring>();
-    for (int i = 0; i < flat.size(); ++i) {  
+    for (int i = 0; i < flat.size(); ++i) {
       const auto& str = flat(i);
       dynamic_buffer.AddString(str.c_str(), str.length());
     }
@@ -626,36 +546,45 @@ Optional<BufferOffset<tflite::Buffer>> Translator::BuildBuffer(
 
   absl::string_view tensor_data = tensor.tensor_data();
   // @IFX_PATCH@  PoC packed quantized data.. for now hard-wired 4-bit weights
+
+#if 1
+  return packing.CreateQuantizedValuesBuffer(builder_, inst, tensor_data);
+#else
+
   flatbuffers::Offset<flatbuffers::Vector<uint8_t>> buffer_data;
-  if (packing && packing.bits_per_item == 4) {
-    auto vals = attr.getValues<uint8_t>();
+
+  if (packing.bits_per_item == 4) {
+#ifdef IFX_PATCH_LOGGING
+    inst->emitRemark("Actually Packing weights!!");
+#endif
     auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
     std::vector<uint8_t> packed_data;
     uint8_t mask = 0xf;
-    for( size_t i = 0; i < tensor_data.size(); i+=2)
-    {
-        packed_data.push_back((raw_tensor_data[i] & mask) | ((raw_tensor_data[i+1] & mask)<<4));
+    for (size_t i = 0; i < tensor_data.size(); i += 2) {
+      packed_data.push_back((raw_tensor_data[i] & mask) |
+                            ((raw_tensor_data[i + 1] & mask) << 4));
     }
 #if IFX_PATCH_LOGGING
     std::ostringstream msg;
     msg << "Packing ";
-    for( size_t i = 0; i < tensor_data.size(); i+=2)
-    {
-        msg <<  " " << (uint32_t)raw_tensor_data[i] << " " << (uint32_t)raw_tensor_data[i+1];
+    for (size_t i = 0; i < tensor_data.size(); i += 2) {
+      msg << " " << (uint32_t)raw_tensor_data[i] << " "
+          << (uint32_t)raw_tensor_data[i + 1];
     }
     msg << " as ";
-    for( auto v :  packed_data)
-    {
-      msg  << " " << std::hex << (uint32_t)v;
+    for (auto v : packed_data) {
+      msg << " " << std::hex << (uint32_t)v;
     }
     inst->emitRemark(msg.str());
 #endif
     buffer_data = builder_.CreateVector(packed_data);
   } else {
     buffer_data = builder_.CreateVector(
-      reinterpret_cast<const uint8_t*>(tensor_data.data()), tensor_data.size());
+        reinterpret_cast<const uint8_t*>(tensor_data.data()),
+        tensor_data.size());
   }
   return tflite::CreateBuffer(builder_, buffer_data);
+#endif
 }
 
 Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensorFromType(
@@ -687,7 +616,8 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensorFromType(
 }
 
 Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
-    Value value, const std::string& name, unsigned buffer_idx, const SubBytePacking &packing) {
+    Value value, const std::string& name, unsigned buffer_idx,
+    SubBytePacking& packing) {
   auto type = value.getType().cast<TensorType>();
 
   // TFLite requires tensor shape only for the inputs and constants.
@@ -735,6 +665,8 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
     shape_signature = std::vector<int32_t>(shape_ref.begin(), shape_ref.end());
   }
 
+  packing.SetPackingRunLength(shape);
+
   BufferOffset<tflite::SparsityParameters> s_params = 0;
   if (auto* inst = value.getDefiningOp()) {
     if (auto cst = dyn_cast<tfl::SparseConstOp>(inst)) {
@@ -748,20 +680,25 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
   tflite::TensorType tflite_element_type =
       GetTFLiteType(type.getElementType()).ValueOrDie();
 
-    // @IFX_PATCH@ PoC flag packing by abusing min and max parameters (for now)
-    // previously min max always 0 as unused.
+  // @IFX_PATCH@ PoC flag packing using CustiomDetails
   BufferOffset<tflite::QuantizationParameters> q_params;
   if (auto qtype = element_type.dyn_cast<mlir::quant::UniformQuantizedType>()) {
-    // @IFX_PATCH@  PoC hack.  Horribly abuse min/max to hold packing parameters !!!!
+    auto details = packing.CustomDetails(builder_);
+    if (!details.IsNull()) {
+      mlir::emitRemark(value.getLoc(), "CustomDetails are specified");
+    } else {
+      mlir::emitRemark(value.getLoc(), "none");
+    }
     q_params = tflite::CreateQuantizationParameters(
         // TODO(fengliuai): min and max values are not stored in the
-        // quantized type, so both are set to 0. The model couldn't be imported
-        // to TensorFlow because of this.
-        builder_, 
-        /*min=*/builder_.CreateVector<float>({static_cast<float>(packing.bits_per_item)}), 
-        /*max=*/builder_.CreateVector<float>({static_cast<float>(packing.container_bits)}),
+        // quantized type, so both are set to 0. The model couldn't be
+        // imported to TensorFlow because of this.
+        builder_,
+        /*min=*/0, /*max=*/0,
         builder_.CreateVector<float>({static_cast<float>(qtype.getScale())}),
-        builder_.CreateVector<int64_t>({qtype.getZeroPoint()}));
+        builder_.CreateVector<int64_t>({qtype.getZeroPoint()}),
+        /*details_type=*/packing.QuantizationDetailsType(),
+        /*details=*/details);
   } else if (auto qtype =
                  element_type
                      .dyn_cast<mlir::quant::UniformQuantizedPerAxisType>()) {
@@ -799,7 +736,7 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
         /*is_variable=*/is_variable, s_params,
         /*shape_signature=*/builder_.CreateVector(shape_signature));
   }
-}
+}  // namespace
 
 BufferOffset<tflite::Operator> Translator::BuildIfOperator(
     mlir::TF::IfOp op, const std::vector<int32_t>& operands,
@@ -1229,8 +1166,6 @@ bool Translator::IsStatefulOperand(mlir::Operation* op, int operand_index) {
   return absl::c_find(operand_indices, operand_index) != operand_indices.end();
 }
 
-
-
 Optional<BufferOffset<tflite::SubGraph>> Translator::BuildSubGraph(
     const std::string& name, Region* region) {
   bool has_input_attr = false;
@@ -1566,7 +1501,6 @@ BufferOffset<tflite::SparsityParameters> Translator::BuildSparsityParameters(
       builder_.CreateVector(block_map), builder_.CreateVector(fb_dim_metadata));
 }
 
-}  // namespace
 
 // Translates the given MLIR module in the TFLite dialect to TFLite FlatBuffer
 // format. Returns false on success.

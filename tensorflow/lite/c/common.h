@@ -120,6 +120,49 @@ TfLiteIntArray* TfLiteIntArrayCopy(const TfLiteIntArray* src);
 void TfLiteIntArrayFree(TfLiteIntArray* a);
 #endif  // TF_LITE_STATIC_MEMORY
 
+// @IFX_PATCH@
+// Fixed size list of integers. Used for dimensions and inputs/outputs tensor
+// indices
+typedef struct TfLiteUInt8Array {
+  int size;
+// gcc 6.1+ have a bug where flexible members aren't properly handled
+// https://github.com/google/re2/commit/b94b7cd42e9f02673cd748c1ac1d16db4052514c
+#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ == 6 && \
+    __GNUC_MINOR__ >= 1
+  uint8_t data[0];
+#else
+  uint8_t data[];
+#endif
+} TfLiteUInt8Array;
+
+
+
+// Given the size (number of elements) in a TfLiteIntArray, calculate its size
+// in bytes.
+int TfLiteUInt8ArrayGetSizeInBytes(int size);
+
+#ifndef TF_LITE_STATIC_MEMORY
+// Create a array of a given `size` (uninitialized entries).
+// This returns a pointer, that you must free using TfLiteIntArrayFree().
+TfLiteUInt8Array* TfLiteUInt8ArrayCreate(int size);
+#endif // TF_LITE_STATIC_MEMORY
+
+// Check if two intarrays are equal. Returns 1 if they are equal, 0 otherwise.
+int TfLiteUInt8ArrayEqual(const TfLiteUInt8Array* a, const TfLiteUInt8Array* b);
+
+// Check if an intarray equals an array. Returns 1 if equals, 0 otherwise.
+int TfLiteUInt8ArrayEqualsArray(const TfLiteUInt8Array* a, int b_size,
+                                const uint8_t b_data[]);
+
+#ifndef TF_LITE_STATIC_MEMORY
+// Create a copy of an array passed as `src`.
+// You are expected to free memory with TfLiteIntArrayFree
+TfLiteUInt8Array* TfLiteUInt8ArrayCopy(const TfLiteUInt8Array* src);
+
+// Free memory of array `a`.
+void TfLiteUInt8ArrayFree(TfLiteUInt8Array* a);
+#endif // TF_LITE_STATIC_MEMORY
+
 // Fixed size list of floats. Used for per-channel quantization.
 typedef struct TfLiteFloatArray {
   int size;
@@ -268,6 +311,84 @@ typedef enum TfLiteQuantizationType {
   kTfLiteAffineQuantization = 1,
 } TfLiteQuantizationType;
 
+//
+// @IFX+PATCH@
+//
+
+
+// Supported Quantization Detials.  This fuses
+// details with sub-types.  In this case a 
+// CustomQuantization details specifying sub-8  types and sub-types of details
+typedef enum TfLiteQuantizationDetailsType {
+  // CustomQuantization coding details of < 8 bit coded, Uniform Quantized with
+  // values packed.
+
+  kTfLiteNoDetails,
+  kTfLiteUnknownDetails,
+  kTfLiteSub8BitPackedUniformDetail,
+
+} TfLiteQuantizationDetailsType;
+
+
+
+//
+// Custom Quantization details for sub 8-bit packed weights\
+//
+// TfLiteQuantizationDetails hold only a raw 8-bit data-vector
+// This structure gives an interpretation of these as packing parameters for
+// tensors with sub 8-bit coded quantized values that can be mapped directly to the flatbuffer.
+//
+// Data-items of bits_per_item width are densely lsb-first packed
+// without splitting into container words of container_bits width.
+//
+// container_bits % bits_per_item msb in each container words are padding.
+//
+// Values corresponding to subranges ranging over packed minor dimensions 
+// are padded so that they commence at container word aligned
+// memory locations.
+// 
+// E.g. 
+// For tensor shape [2,4,15]  and packed_minor_dims == 1 
+// values corresponding to ranges[x,y,:] comprised 15 data items 
+// densely packed into sequential container words starting with lsb
+// of the first container word with the last container word potentially not
+// entirely filled.
+//
+// For packed_minor_dims == 2
+// each range [x,:,:] comprises 60 data items 
+// densely packed into sequential container words starting with lsb
+// of the first container word with the last container word potentially not
+// entirely filled.   
+//
+
+typedef struct TfLiteCustomSub8BitPackingDetails
+{
+  uint8_t    bits_per_item;  
+  uint8_t    container_bits;  
+
+  // Minor dimensions for which values are densely packed.
+  // For other dimensions corresponding sub-tensor starts
+  // at addressable container word.
+  uint8_t     packed_minor_dims;
+  uint8_t     _reserved[5];
+} TfLiteCustomSub8BitPackingDetails;
+
+
+
+typedef struct TfLiteQuantizationDetails {
+  
+  TfLiteQuantizationDetailsType type;
+
+  // Alternative details types.... one per TfLiteQuantizationDetailsType 
+  union {
+    // pre: type == kTfLiteSub8BitUPackedUniformDetails
+    const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
+    // For TFlite(u) pointer to
+    // Other alternatives might be added  here...
+  } data;
+} TfLiteQuantizationDetails;
+
+
 // Structure specifying the quantization used by the tensor, if-any.
 typedef struct TfLiteQuantization {
   // The type of quantization held by params.
@@ -275,6 +396,12 @@ typedef struct TfLiteQuantization {
   // Holds a reference to one of the quantization param structures specified
   // below.
   void* params;
+
+  //@IFX_PATCH@
+  // Pointer to fruther quantization details  if present (i.e. not QuantizationDetails_NONE)
+  // InterpreterBuilder::ParseQuantization checks for and populates for supported/recognized variants
+
+  TfLiteQuantizationDetails details;
 } TfLiteQuantization;
 
 // Legacy. Will be deprecated in favor of TfLiteAffineQuantization.
@@ -286,8 +413,6 @@ typedef struct TfLiteQuantization {
 typedef struct TfLiteQuantizationParams {
   float scale;
   int32_t zero_point;
-  // @IFX_PATCH@  PoC hack Add flag for marking packing
-  uint32_t bits_per_item;
 } TfLiteQuantizationParams;
 
 // Parameters for asymmetric quantization across a dimension (i.e per output
@@ -303,6 +428,7 @@ typedef struct TfLiteAffineQuantization {
   int32_t quantized_dimension;
 
 } TfLiteAffineQuantization;
+
 
 /* A union of pointers that points to memory for a given tensor. */
 typedef union TfLitePtrUnion {

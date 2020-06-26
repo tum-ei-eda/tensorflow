@@ -144,6 +144,17 @@ inline uint8_t F2QB(const float value, const float min, const float max) {
   return result;
 }
 
+// Converts a quantized value to coded float
+float Q2F(int32_t code, float scale, float zero_point);
+
+// Converts a quantized value to coded float for quantization
+// params of specified tensor
+float Q2F(int32_t code, const TfLiteTensor *tensor);
+
+// Converts a float value into an unsigned eight-bit quantized value
+// for quantizations params of specified tensor 
+uint8_t F2Q(float value, const TfLiteTensor *tensor);
+
 // Converts a float value into an unsigned eight-bit quantized value.
 uint8_t F2Q(float value, float min, float max);
 

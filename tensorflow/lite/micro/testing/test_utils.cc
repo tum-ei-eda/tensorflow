@@ -89,6 +89,33 @@ void* GetScratchBuffer(TfLiteContext* context, int buffer_index) {
 
 }  // namespace
 
+
+
+// Converts a quantized value to coded float
+float Q2F(int32_t code, float scale, float zero_point) {
+  return (code - zero_point) * scale;
+}
+
+// Converts a quantized value to coded float for quantization
+// params of specified tensor
+float Q2F(int32_t code, const TfLiteTensor *tensor)
+{
+    return (code - (int32_t)tensor->params.zero_point) * tensor->params.scale;
+}
+
+uint8_t F2Q(float value, const TfLiteTensor *tensor)
+{
+  int32_t result = tensor->params.zero_point +
+                   (value / tensor->params.scale) + 0.5f;
+  if (result < std::numeric_limits<uint8_t>::min()) {
+    result = std::numeric_limits<uint8_t>::min();
+  }
+  if (result > std::numeric_limits<uint8_t>::max()) {
+    result = std::numeric_limits<uint8_t>::max();
+  }
+  return result;
+} 
+
 uint8_t F2Q(float value, float min, float max) {
   int32_t result = ZeroPointFromMinMax<uint8_t>(min, max) +
                    (value / ScaleFromMinMax<uint8_t>(min, max)) + 0.5f;
@@ -168,13 +195,13 @@ TfLiteTensor CreateQuantizedTensor(const uint8_t* data, TfLiteIntArray* dims,
   result.data.uint8 = const_cast<uint8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<uint8_t>(min, max),
-                   ZeroPointFromMinMax<uint8_t>(min, max),
-                   0};
+                   ZeroPointFromMinMax<uint8_t>(min, max)};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(uint8_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = false;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -192,13 +219,13 @@ TfLiteTensor CreateQuantizedTensor(const int8_t* data, TfLiteIntArray* dims,
   result.data.int8 = const_cast<int8_t*>(data);
   result.dims = dims;
   result.params = {ScaleFromMinMax<int8_t>(min, max),
-                   ZeroPointFromMinMax<int8_t>(min, max),
-                   0};
+                   ZeroPointFromMinMax<int8_t>(min, max)};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -222,6 +249,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, uint8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -239,6 +267,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int8_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -256,6 +285,7 @@ TfLiteTensor CreateQuantizedTensor(float* data, int16_t* quantized_data,
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 
@@ -269,12 +299,13 @@ TfLiteTensor CreateQuantized32Tensor(const int32_t* data, TfLiteIntArray* dims,
   // Quantized int32 tensors always have a zero point of 0, since the range of
   // int32 values is large, and because zero point costs extra cycles during
   // processing.
-  result.params = {scale, 0, 0};
+  result.params = {scale, 0};
   result.allocation_type = kTfLiteMemNone;
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   result.allocation = nullptr;
   result.name = name;
   result.is_variable = is_variable;
+  result.quantization.details.type = kTfLiteNoDetails;
   return result;
 }
 

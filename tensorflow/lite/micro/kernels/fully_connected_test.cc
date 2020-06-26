@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
@@ -28,33 +29,60 @@ namespace tflite {
 namespace testing {
 namespace {
 
-MockAllocator *mock_allocator;
-TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
-{
-	return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
+MockAllocator* mock_allocator;
+TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes,
+                                      void** ptr) {
+  return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
 }
 
+template <typename CONTAINER_T>
+static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
+    const uint8_t* data, size_t elts, size_t minor_dim_size,
+    TfLiteCustomSub8BitPackingDetails* format) {
+  unsigned int container_bits = format->container_bits;
+  size_t bits_per_item = format->bits_per_item;
+  assert(container_bits <= 32u);
+  CONTAINER_T mask = (static_cast<CONTAINER_T>(1) << bits_per_item) -
+                     static_cast<CONTAINER_T>(1);
+  uint32_t container_buf = 0;
+  // Lazy way of getting sufficient CONTAINER_T aligned storage...
+  std::vector<CONTAINER_T> packed_data(elts / (container_bits / 8));
 
-static std::vector<uint8_t> Pack_2x4bit(const uint8_t* data, size_t elts) {
-  std::vector<uint8_t> packed;
-  assert(elts > 0);
-  assert(elts % 2 == 0);
-
-  // Pack in-place to simplify allocation...
-  for (size_t i = 0; i < elts; i += 2) {
-    TF_LITE_MICRO_EXPECT(data[i] < 16u);
-    TF_LITE_MICRO_EXPECT(data[i + 1] < 16u);
-    uint8_t pvals = data[i] | (data[i + 1] << 4);
-    packed.push_back(pvals);
+  uint8_t* packed_data_byte = reinterpret_cast<uint8_t*>(packed_data.data());
+  CONTAINER_T bits_in_container = 0;
+  for (size_t i = 0; i < elts; ++i) {
+    // Little-endian packing...
+    container_buf |= (static_cast<CONTAINER_T>(data[i]) & mask) << bits_in_container;
+    bits_in_container += bits_per_item;
+    // Flush container when insufficient space for another item
+    // Start of each minor dimension to ensure CONTAINER_T aligned...
+    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+    // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
+    if (bits_in_container + bits_per_item > container_bits ||
+        (i % minor_dim_size == (minor_dim_size - 1))) {
+      // Flatbuffers are stored little-endian
+      for (size_t i = 0; i < container_bits; i += 8) {
+        uint8_t byte = (container_buf & 0xff);
+        *packed_data_byte = byte;
+        ++packed_data_byte;
+        container_buf >>= 8;
+      }
+      bits_in_container = 0;
+      container_buf = 0;
+    }
   }
-  return packed;
+
+  assert(bits_in_container == 0);
+  return packed_data;
 }
 
-static void SetPackingParams(TfLiteTensor &tensor, float min, float max,
-                             uint32_t bits_per_item) {
-    tensor.params.scale = ScaleFromMinMaxPacked(min, max, bits_per_item);
-    tensor.params.zero_point = ZeroPointFromMinMaxPacked(min, max, bits_per_item);
-    tensor.params.bits_per_item = bits_per_item;
+static void SetPackingParams(TfLiteTensor& tensor, float min, float max,
+                             TfLiteCustomSub8BitPackingDetails* format) {
+  tensor.params.scale = ScaleFromMinMaxPacked(min, max, format->bits_per_item);
+  tensor.params.zero_point =
+      ZeroPointFromMinMaxPacked(min, max, format->bits_per_item);
+  tensor.quantization.details.type = kTfLiteSub8BitPackedUniformDetail;
+  tensor.quantization.details.data.custom_sub8bit_packing = format;
 }
 
 TfLiteStatus TestFullyConnectedFloat(
@@ -84,7 +112,8 @@ TfLiteStatus TestFullyConnectedFloat(
   const size_t buffer_arena_size = 1024;
   const size_t bytes_alignment = 4;
   uint8_t buffer_arena[buffer_arena_size];
-  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
+  mock_allocator =
+      new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
@@ -136,14 +165,12 @@ TfLiteStatus TestFullyConnectedFloat(
   return kTfLiteOk;
 }
 
-
-
 template <typename T>
 TfLiteStatus TestFullyConnectedQuantized(
     const int* input_dims_data, const T* input_data, const float input_min,
     const float input_max, const int* weights_dims_data, const T* weights_data,
-    const float weights_min, const float weights_max, uint32_t weights_bits_per_item,
-    const int* bias_dims_data,
+    const float weights_min, const float weights_max,
+    TfLiteCustomSub8BitPackingDetails* packing, const int* bias_dims_data,
     const int32_t* bias_data, const float bias_scale,
     const T* expected_output_data, const int* output_dims_data,
     const float output_min, const float output_max,
@@ -167,19 +194,17 @@ TfLiteStatus TestFullyConnectedQuantized(
                             output_min, output_max),
   };
 
-  if (weights_bits_per_item != 0)
-  {
-      TF_LITE_MICRO_EXPECT_EQ(weights_bits_per_item, 4);
-      SetPackingParams(tensors[1], weights_min, weights_max, weights_bits_per_item);
+  if (packing) {
+    SetPackingParams(tensors[1], weights_min, weights_max, packing);
   }
-
 
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
   const size_t buffer_arena_size = 1024;
   const size_t bytes_alignment = 4;
   uint8_t buffer_arena[buffer_arena_size];
-  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
+  mock_allocator =
+      new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
   context.AllocatePersistentBuffer = AllocatePersistentBuffer;
 
   ::tflite::ops::micro::AllOpsResolver resolver;
@@ -384,56 +409,70 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedUInt8) {
   uint8_t output_data[output_dims_count];
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
-		  input_dims_data, input_data, input_min, input_max, weights_dims_data,
-		  weights_data, weights_min, weights_max, 0/*=bits_per_item*/, 
-		  bias_dims_data, bias_data,
-		  bias_scale, expected_output_data, output_dims_data, output_min,
-	      output_max, kTfLiteActNone, output_data),
-	  kTfLiteOk);
+          input_dims_data, input_data, input_min, input_max, weights_dims_data,
+          weights_data, weights_min, weights_max, 0 /*=packing*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
+      kTfLiteOk);
 }
 
-
-
-TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8) {
+// IFX_PATCH
+// TODO eliminate code-duplication, sane names for arguments patterns for
+// testing utils.  Move some functinoality to commom lite?
+//
+TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_4) {
   using tflite::testing::F2Q;
   using tflite::testing::F2Q32;
   using tflite::testing::F2QB;
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
 
   const float input_sf = 2.0;
   const float weights_sf = 32.0;
   const float input_min = -128.0f / input_sf;
   const float input_max = 127.0f / input_sf;
-  const float weights_min = -8.0f/weights_sf;
-  const float weights_max = 7.0f/weights_sf;
-  const float bias_scale = 1.0f/(input_sf*weights_sf);
-  const float output_min = -128.0f/32.0;
-  const float output_max = 127.0f/32.0;
+  const float weights_min = -8.0f / weights_sf;
+  const float weights_max = 7.0f / weights_sf;
+  const float bias_scale = 1.0f / (input_sf * weights_sf);
+  const float output_min = -128.0f / 32.0;
+  const float output_max = 127.0f / 32.0;
 
-  const int input_dims_data[] = {1, 1, 8};
+  const size_t num_weights = 8;
+  const int input_dims_data[] = {1, 1, num_weights};
   const uint8_t input_data[] = {
-      F2Q(1, input_min, input_max), 
-      F2Q(-2, input_min, input_max),  
-      F2Q(3, input_min, input_max),  
-      F2Q(-4, input_min, input_max), 
-      F2Q(5, input_min, input_max), 
-      F2Q(-6, input_min, input_max),  
-      F2Q(7, input_min, input_max),  
-      F2Q(-8, input_min, input_max),  
+      F2Q(1 / input_sf, input_min, input_max),
+      F2Q(-2 / input_sf, input_min, input_max),
+      F2Q(3 / input_sf, input_min, input_max),
+      F2Q(-4 / input_sf, input_min, input_max),
+      F2Q(5 / input_sf, input_min, input_max),
+      F2Q(-6 / input_sf, input_min, input_max),
+      F2Q(7 / input_sf, input_min, input_max),
+      F2Q(-8 / input_sf, input_min, input_max),
 
   };
-  const int weights_dims_data[] = {2, 1, 8};
+
+  const int input_zero_point =
+      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
+  const int weights_dims_data[] = {2, 1, num_weights};
   const uint8_t weights_data[] = {
-      F2QB<4>(1/32.0, weights_min, weights_max), 
-      F2QB<4>(2/32.0, weights_min, weights_max), 
-      F2QB<4>(3/32.0, weights_min, weights_max),
-      F2QB<4>(-4/32.0, weights_min, weights_max), 
-      F2QB<4>(5/32.0, weights_min, weights_max), 
-      F2QB<4>(6/32.0, weights_min, weights_max), 
-      F2QB<4>(7/32.0, weights_min, weights_max), 
-      F2QB<4>(7/32.0, weights_min, weights_max), 
+      F2QB<4>(1 / weights_sf, weights_min, weights_max),
+      F2QB<4>(2 / weights_sf, weights_min, weights_max),
+      F2QB<4>(3 / weights_sf, weights_min, weights_max),
+      F2QB<4>(-4 / weights_sf, weights_min, weights_max),
+      F2QB<4>(5 / weights_sf, weights_min, weights_max),
+      F2QB<4>(6 / weights_sf, weights_min, weights_max),
+      F2QB<4>(7 / weights_sf, weights_min, weights_max),
+      F2QB<4>(7 / weights_sf, weights_min, weights_max),
   };
+  const int weight_zero_point =
+      ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
 
-  auto packed_weights = tflite::testing::Pack_2x4bit(weights_data, 1u*8u);
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1};
+
+  auto packed_weights =
+      tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+          weights_data, 1u * num_weights, num_weights, &packing);
   const int bias_dims_data[] = {1, 3};
   const int32_t bias_data[] = {
       F2Q32(0, bias_scale),
@@ -441,9 +480,100 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8) {
       F2Q32(0, bias_scale),
   };
   const uint8_t expected_output_data[] = {
-      F2Q((1*1+-2*2+3*3+-4*-4+5*5+-6*6+7*7+-8*7)/32.0, output_min, output_max), 
+      F2Q((1 * 1 + -2 * 2 + 3 * 3 + -4 * -4 + 5 * 5 + -6 * 6 + 7 * 7 + -8 * 7) 
+             / (input_sf * weights_sf),
+          output_min, output_max),
 
   };
+  const int output_dims_data[] = {2, 1, 1};
+
+  const int output_dims_count = 6;
+  uint8_t output_data[output_dims_count];
+
+  TF_LITE_MICRO_EXPECT_EQ(
+      tflite::testing::TestFullyConnectedQuantized<uint8_t>(
+          input_dims_data, input_data, input_min, input_max, weights_dims_data,
+          packed_weights.data(), weights_min, weights_max, &packing,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
+      kTfLiteOk);
+}
+
+TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_5) {
+  using tflite::testing::F2Q;
+  using tflite::testing::F2Q32;
+  using tflite::testing::F2QB;
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_sf = 2.0;
+  const float weights_sf = 32.0;
+  const float input_min = -128.0f / input_sf;
+  const float input_max = 127.0f / input_sf;
+  const float weights_min = -16.0f / weights_sf;
+  const float weights_max = 15.0f / weights_sf;
+  const float bias_scale = 1.0f / (input_sf * weights_sf);
+  const float output_min = -128.0f / 32.0;
+  const float output_max = 127.0f / 32.0;
+
+  const size_t num_weights = 8;
+  const int input_dims_data[] = {1, 1, num_weights};
+  const uint8_t input_data[] = {
+      F2Q(1 / input_sf, input_min, input_max),
+      F2Q(-2 / input_sf, input_min, input_max),
+      F2Q(3 / input_sf, input_min, input_max),
+      F2Q(-4 / input_sf, input_min, input_max),
+      F2Q(5 / input_sf, input_min, input_max),
+      F2Q(-6 / input_sf, input_min, input_max),
+      F2Q(7 / input_sf, input_min, input_max),
+      F2Q(-8 / input_sf, input_min, input_max),
+
+  };
+
+  const int input_zero_point =
+      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
+  const int weights_dims_data[] = {2, 1, num_weights};
+  const uint8_t weights_data[] = {
+      F2QB<5>(1 / weights_sf, weights_min, weights_max),
+      F2QB<5>(2 / weights_sf, weights_min, weights_max),
+      F2QB<5>(3 / weights_sf, weights_min, weights_max),
+      F2QB<5>(-4 / weights_sf, weights_min, weights_max),
+      F2QB<5>(5 / weights_sf, weights_min, weights_max),
+      F2QB<5>(6 / weights_sf, weights_min, weights_max),
+      F2QB<5>(7 / weights_sf, weights_min, weights_max),
+      F2QB<5>(7 / weights_sf, weights_min, weights_max),
+  };
+  const int weight_zero_point =
+      ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 1};
+
+  auto packed_weights =
+      tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+          weights_data, 1u * num_weights, num_weights, &packing);
+  const int bias_dims_data[] = {1, 3};
+  const int32_t bias_data[] = {
+      F2Q32(0, bias_scale),
+      F2Q32(0, bias_scale),
+      F2Q32(0, bias_scale),
+  };
+  const uint8_t expected_output_data[] = {
+      F2Q((1 * 1 + -2 * 2 + 3 * 3 + -4 * -4 + 5 * 5 + -6 * 6 + 7 * 7 + -8 * 7) /
+              (input_sf * weights_sf),
+          output_min, output_max),
+
+  };
+
+#if 0
+  std::cout << "EXPECTED RAW PRODUCTS ";
+  for (size_t i = 0; i < num_weights; ++i) {
+    std::cout << (int32_t)(input_data[i] - input_zero_point) << "*"
+              << (int32_t)(weights_data[i] - weight_zero_point) << ", ";
+  }
+  std::cout << std::endl;
+  std::cout << "EXPECTED RAW ACCUM " << (int32_t)expected_output_data[0]
+            << std::endl;
+#endif
   const int output_dims_data[] = {2, 1, 1};
 
   const int output_dims_count = 6;
@@ -451,13 +581,101 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          packed_weights.data(), weights_min, weights_max, 4/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          reinterpret_cast<const uint8_t*>(packed_weights.data()), weights_min,
+          weights_max, &packing, bias_dims_data, bias_data, bias_scale,
+          expected_output_data, output_dims_data, output_min, output_max,
+          kTfLiteActNone, output_data),
       kTfLiteOk);
 }
 
+
+TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_6) {
+  using tflite::testing::F2Q;
+  using tflite::testing::F2Q32;
+  using tflite::testing::F2QB;
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_sf = 2.0;
+  const float weights_sf = 32.0;
+  const float input_min = -128.0f / input_sf;
+  const float input_max = 127.0f / input_sf;
+  const float weights_min = -32.0f / weights_sf;
+  const float weights_max = 31.0f / weights_sf;
+  const float bias_scale = 1.0f / (input_sf * weights_sf);
+  const float output_min = -128.0f / 32.0;
+  const float output_max = 127.0f / 32.0;
+
+  const size_t num_weights = 8;
+  const int input_dims_data[] = {1, 1, num_weights};
+  const uint8_t input_data[] = {
+      F2Q(1 / input_sf, input_min, input_max),
+      F2Q(-2 / input_sf, input_min, input_max),
+      F2Q(3 / input_sf, input_min, input_max),
+      F2Q(-4 / input_sf, input_min, input_max),
+      F2Q(5 / input_sf, input_min, input_max),
+      F2Q(-6 / input_sf, input_min, input_max),
+      F2Q(7 / input_sf, input_min, input_max),
+      F2Q(-8 / input_sf, input_min, input_max),
+
+  };
+
+  const int input_zero_point =
+      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
+  const int weights_dims_data[] = {2, 1, num_weights};
+  const uint8_t weights_data[] = {
+      F2QB<6>(1 / weights_sf, weights_min, weights_max),
+      F2QB<6>(2 / weights_sf, weights_min, weights_max),
+      F2QB<6>(3 / weights_sf, weights_min, weights_max),
+      F2QB<6>(-4 / weights_sf, weights_min, weights_max),
+      F2QB<6>(5 / weights_sf, weights_min, weights_max),
+      F2QB<6>(6 / weights_sf, weights_min, weights_max),
+      F2QB<6>(7 / weights_sf, weights_min, weights_max),
+      F2QB<6>(7 / weights_sf, weights_min, weights_max),
+  };
+  const int weight_zero_point =
+      ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 1};
+
+  auto packed_weights =
+      tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+          weights_data, 1u * num_weights, num_weights, &packing);
+  const int bias_dims_data[] = {1, 3};
+  const int32_t bias_data[] = {
+      F2Q32(0, bias_scale),
+      F2Q32(0, bias_scale),
+      F2Q32(0, bias_scale),
+  };
+  const uint8_t expected_output_data[] = {
+      F2Q((1 * 1 + -2 * 2 + 3 * 3 + -4 * -4 + 5 * 5 + -6 * 6 + 7 * 7 + -8 * 7) /
+              (input_sf * weights_sf),
+          output_min, output_max),
+
+  };
+
+#if 0
+  std::cout << "EXPECTED RAW PRODUCTS ";
+  for (size_t i = 0; i < num_weights; ++i) {
+    std::cout << (int32_t)(input_data[i] - input_zero_point) << "*"
+              << (int32_t)(weights_data[i] - weight_zero_point) << ", ";
+  }
+  std::cout << std::endl;
+  std::cout << "EXPECTED RAW ACCUM " << (int32_t)expected_output_data[0]
+            << std::endl;
+#endif
+  const int output_dims_data[] = {2, 1, 1};
+
+  const int output_dims_count = 6;
+  uint8_t output_data[output_dims_count];
+  TF_LITE_MICRO_EXPECT_EQ(
+      tflite::testing::TestFullyConnectedQuantized<uint8_t>(
+          input_dims_data, input_data, input_min, input_max, weights_dims_data,
+          reinterpret_cast<const uint8_t*>(packed_weights.data()), weights_min,
+          weights_max, &packing, bias_dims_data, bias_data, bias_scale,
+          expected_output_data, output_dims_data, output_min, output_max,
+          kTfLiteActNone, output_data),
+      kTfLiteOk);
+}
 
 // TODO(b/138811455): Fix code duplication in micro tests
 TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8) {
@@ -521,10 +739,10 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<int8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -589,10 +807,10 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedUInt8Relu) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActRelu, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActRelu,
+          output_data),
       kTfLiteOk);
 }
 
@@ -657,10 +875,10 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8Relu) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<int8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActRelu, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActRelu,
+          output_data),
       kTfLiteOk);
 }
 
@@ -725,10 +943,10 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedUInt8OutputMultiplierGreaterThan1) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -793,10 +1011,10 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8OutputMultiplierGreaterThan1) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<int8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -890,10 +1108,10 @@ TF_LITE_MICRO_TEST(SimpleTest4DInputQuantizedUInt8) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -958,10 +1176,10 @@ TF_LITE_MICRO_TEST(SimpleTest4DInputQuantizedInt8) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<int8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -1027,10 +1245,10 @@ TF_LITE_MICRO_TEST(
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<uint8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 
@@ -1095,10 +1313,10 @@ TF_LITE_MICRO_TEST(SimpleTest4DInputQuantizedInt8OutputMultiplierGreaterThan1) {
   TF_LITE_MICRO_EXPECT_EQ(
       tflite::testing::TestFullyConnectedQuantized<int8_t>(
           input_dims_data, input_data, input_min, input_max, weights_dims_data,
-          weights_data, weights_min, weights_max, 0/*=bits_per_item*/,
-          bias_dims_data, bias_data,
-          bias_scale, expected_output_data, output_dims_data, output_min,
-          output_max, kTfLiteActNone, output_data),
+          weights_data, weights_min, weights_max, 0 /*=bits_per_item*/,
+          bias_dims_data, bias_data, bias_scale, expected_output_data,
+          output_dims_data, output_min, output_max, kTfLiteActNone,
+          output_data),
       kTfLiteOk);
 }
 

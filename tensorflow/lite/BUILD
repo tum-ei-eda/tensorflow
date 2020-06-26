@@ -494,8 +494,11 @@ cc_test(
 
 cc_library(
     name = "util",
-    srcs = ["util.cc"],
-    hdrs = ["util.h"],
+    srcs = ["util.cc", "experimental/custom_quantization_util.cc"],
+    hdrs = ["util.h",
+            "experimental/custom_quantization_util.h",
+            "//tensorflow/lite/core/api:error_reporter.h",
+    ],
     copts = TFLITE_DEFAULT_COPTS + tflite_copts(),
     deps = [
         ":kernel_api",
