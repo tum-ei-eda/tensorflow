@@ -189,7 +189,7 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
   }
 
   // Start main benchmarking loop
-  const int benchmarking_iterations = 5;
+  const int benchmarking_iterations = 1;
   auto start = std::chrono::high_resolution_clock::now();
 
   for (int i = 0; i < benchmarking_iterations; i++) {

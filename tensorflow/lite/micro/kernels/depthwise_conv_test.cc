@@ -331,7 +331,7 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedWithPadding) {
                                 5, 2, 5, 3, 6, 3, 6, 3, 6};
   const int bias_elements = 2;
   const int bias_shape[] = {4, 1, 1, 1, 2};
-  const int output_elements = 16;
+  const int output_elements = 18;
   const float bias_values[] = {1, 2};
   const float golden[] = {17, 36, 25, 53, 17, 36,
                           29, 66, 43, 98, 29, 66,
@@ -478,12 +478,22 @@ TF_LITE_MICRO_TEST(SimpleTestOptimizedFilterWidth) {
   uint8_t golden_quantized[output_dims_count];
   uint8_t output_data[output_dims_count];
 
+  TfLiteDepthwiseConvParams params = {
+      kTfLitePaddingValid,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      1,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
   tflite::testing::TestDepthwiseConvQuantizedPerLayer(
       input_shape, input_values, input_quantized, input_scale, input_zero_point,
       filter_shape, filter_values, filter_quantized, filter_scale,
       filter_zero_point, bias_shape, bias_values, bias_quantized, goldens,
       golden_quantized, output_shape, output_data, output_scale,
-      output_zero_point, tflite::testing::common_depthwise_conv_params);
+      output_zero_point, params);
 }
 
 TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannel) {
@@ -534,7 +544,7 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannelWithPadding) {
                                 5, 2, 5, 3, 6, 3, 6, 3, 6};
   const int bias_elements = 2;
   const int bias_shape[] = {4, 1, 1, 1, 2};
-  const int output_elements = 16;
+  const int output_elements = 18;
   const float bias_values[] = {1, 2};
   const float golden[] = {17, 36, 25, 53, 17, 36,
                           29, 66, 43, 98, 29, 66,
@@ -606,11 +616,21 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannelDepthMultiplier1) {
   int zero_points[bias_elements + 1];
   float scales[bias_elements + 1];
 
+  static TfLiteDepthwiseConvParams depthwise_conv_params = {
+      kTfLitePaddingValid,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      1,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
   tflite::testing::TestDepthwiseConvQuantizedPerChannel(
       input_shape, input_values, input_quantized, input_scale, input_zero_point,
       filter_shape, filter_values, filter_quantized, bias_shape, bias_values,
       bias_quantized, output_shape, golden, golden_quantized, output_data,
-      output_scale, output_zero_point, tflite::testing::common_depthwise_conv_params);
+      output_scale, output_zero_point, depthwise_conv_params);
 }
 
 TF_LITE_MICRO_TEST(TestQuantizedPerChannelDepthMultiplier1Relu6) {
@@ -649,7 +669,7 @@ TF_LITE_MICRO_TEST(TestQuantizedPerChannelDepthMultiplier1Relu6) {
       kTfLitePaddingValid,  /* Padding */
       1,                    /* Stride Width */
       1,                    /* Stride Height */
-      2,                    /* Depth Multiplier */
+      1,                    /* Depth Multiplier */
       kTfLiteActRelu6,       /* Activation */
       1,                    /* Dilation Width */
       1                     /* Dilation Height */

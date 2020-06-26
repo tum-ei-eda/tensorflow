@@ -68,7 +68,7 @@ static const float output_scale = 1.0f;
 static int zero_points[kBiasElements + 1];
 static float scales[kBiasElements + 1];
 
-static const int benchmarking_iterations = 5;
+static const int benchmarking_iterations = 1;
 
 
 static TfLiteConvParams common_conv_params = {
