@@ -32,6 +32,9 @@ do
     "--no-install")
         NOINSTALL=1
         ;;
+    "--with-pip")
+	WITH_PIP=1
+	;;
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
@@ -182,7 +185,10 @@ else
 fi
 
 BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate )
-
+if [ -n "$WITH_PIP" ]
+then
+    BAZEL_TARGETS=( "${BAZEL_TARGETS[@]}" //tensorflow/tools/pip_package:build_pip_package )
+fi
 if [ -z "$NOBUILD" ]
 then
     # Some useful recipes from the past... comment out in case needed
@@ -207,6 +213,13 @@ then
       cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
     fi
+fi
+
+if [ -n "$WITH_PIP" ]
+then
+    ./bazel-bin/tensorflow/tools/pip_package/build_pip_package --nightly_flag /tmp/tensorflow_pk
+    mv /tmp/tensorflow_pk/tf*.whl .
+    rm -rf /tmp/tensorflow_pk
 fi
 
 if [ -z "$NOTFLITE" ] 
