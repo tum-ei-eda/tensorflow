@@ -35,6 +35,12 @@ do
     "--with-pip")
 	WITH_PIP=1
 	;;
+    "--opt")
+        BAZEL_CXX_BUILD_SETTINGS=(
+	  --config opt 
+        )
+        ;;
+
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
