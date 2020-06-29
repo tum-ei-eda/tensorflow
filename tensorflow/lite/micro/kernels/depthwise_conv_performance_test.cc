@@ -19,7 +19,7 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/micro/kernels/all_ops_resolver.h"
+#include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_utils.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
 #include "tensorflow/lite/micro/testing/test_utils.h"
@@ -38,7 +38,7 @@ constexpr int kMaxBiasChannels = 64;
 // DepthwiseConv.
 constexpr int kOutputTensorIndex = 3;
 
-static const int number_of_invocations = 100;
+static const int number_of_invocations = 10;
 
 static const int batches = 4;
 static const int input_size = 32;
@@ -156,9 +156,9 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
 
-  ::tflite::ops::micro::AllOpsResolver resolver;
+  ::tflite::AllOpsResolver resolver;
   const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_DEPTHWISE_CONV_2D, 1);
+      resolver.FindOp(tflite::BuiltinOperator_DEPTHWISE_CONV_2D);
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
 
   const char* init_data = reinterpret_cast<const char*>(&builtin_data);
@@ -192,29 +192,35 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
   const int benchmarking_iterations = 1;
   auto start = std::chrono::high_resolution_clock::now();
 
-  for (int i = 0; i < benchmarking_iterations; i++) {
-    TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
-    for (int j = 0; j < number_of_invocations; j++) {
-      TfLiteStatus return_val = registration->invoke(&context, &node);
-      if (return_val != kTfLiteOk) {
-        return return_val;
-      }
+  for (int j = 0; j < number_of_invocations; j++) {
+    TfLiteStatus return_val = registration->invoke(&context, &node);
+    if (return_val != kTfLiteOk) {
+      return return_val;
     }
   }
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  micro_test::reporter->Report("%d Avg Invoke run time =  %d us", number_of_invocations, duration/benchmarking_iterations);
+  micro_test::reporter->Report(" Avg Invoke run time %d invocations =  %d us", number_of_invocations, duration);
 
   if (registration->free) {
     registration->free(&context, user_data);
   }
 
   const T* output_data = tflite::GetTensorData<T>(&tensors[kOutputTensorIndex]);
+  int fails = 0;
   for (int i = 0; i < output_length; ++i) {
     TF_LITE_MICRO_EXPECT_NEAR(expected_output_data[i], output_data[i],
                               tolerance);
+    if( micro_test::did_test_fail && ++fails > 5)
+      return kTfLiteOk;
   }
+
+  
+  if (registration->free) {
+    registration->free(&context, user_data);
+  }
+
   return kTfLiteOk;
 }
 
@@ -239,16 +245,15 @@ void TestDepthwiseConvQuantizedPerLayer(
   TfLiteTensor tensors[tensors_size] = {
       tflite::testing::CreateQuantizedTensor(input_data, input_quantized,
                                              input_dims, input_scale,
-                                             input_zero_point, "input_tensor"),
+                                             input_zero_point),
       tflite::testing::CreateQuantizedTensor(
           filter_data, filter_quantized, filter_dims, filter_scale,
-          filter_zero_point, "filter_tensor"),
+          filter_zero_point),
       tflite::testing::CreateQuantizedBiasTensor(bias_data, bias_quantized,
                                                  bias_dims, input_scale,
-                                                 filter_scale, "bias_tensor"),
+                                                 filter_scale),
       tflite::testing::CreateQuantizedTensor(output_data, output_dims,
-                                             output_scale, output_zero_point,
-                                             "output_tensor"),
+                                             output_scale, output_zero_point),
   };
 
   // TODO(njeff): Affine Quantization Params should be set on tensor creation.
@@ -295,18 +300,16 @@ void TestDepthwiseConvQuantizedPerChannel(
   TfLiteAffineQuantization bias_quant;
   TfLiteTensor input_tensor =
       CreateQuantizedTensor(input_data, input_quantized, input_dims,
-                            input_scale, input_zero_point, "input_tensor");
+                            input_scale, input_zero_point);
   TfLiteTensor filter_tensor = CreateSymmetricPerChannelQuantizedTensor(
       filter_data, filter_data_quantized, filter_dims, filter_scales,
-      filter_zero_points, &filter_quant, 3 /* quantized dimension */,
-      "filter_tensor");
+      filter_zero_points, &filter_quant, 3 /* quantized dimension */);
   TfLiteTensor bias_tensor = CreatePerChannelQuantizedBiasTensor(
       bias_data, bias_data_quantized, bias_dims, input_scale, &filter_scales[1],
-      bias_scales, bias_zero_points, &bias_quant, 3 /* quantized dimension */,
-      "bias_tensor");
+      bias_scales, bias_zero_points, &bias_quant, 3 /* quantized dimension */);
   TfLiteTensor output_tensor =
       CreateQuantizedTensor(output_data, output_dims, output_scale,
-                            input_zero_point, "output_tensor");
+                            input_zero_point);
 
   // TODO(njeff): Affine Quantization Params should be set on tensor creation.
   float input_scales[] = {1, input_scale};

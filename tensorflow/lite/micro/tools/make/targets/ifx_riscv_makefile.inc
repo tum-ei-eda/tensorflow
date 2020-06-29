@@ -26,6 +26,8 @@ endif
     -mabi=$(TARGET_ABI) \
     -DTF_LITE_MCU_DEBUG_LOG \
     -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
+    -DTF_LITE_USE_GLOBAL_MAX \
+    -DTF_LITE_USE_GLOBAL_MIN \
     -fno-exceptions \
     -fno-unwind-tables \
     -ffunction-sections \
@@ -137,7 +139,7 @@ $(BINDIR)%.bin: $(BINDIR)%
 	$(READELF) -a $< > "$*.txt"
 	dd bs=1024 count=$(ROM_SIZE_KB) if=$@ of="$*.rom"
 	dd bs=1024 skip=$(ROM_SIZE_KB) if=$@ of="$*.ram"
-	$(CC_PREFIX)$(TARGET_TOOLCHAIN_PREFIX)size $<
+	$(TARGET_TOOLCHAIN_ROOT)$(TARGET_TOOLCHAIN_PREFIX)size $<
 
   TEST_SCRIPT :=  $(MAKEFILE_DIR)/gen/test_etiss_binary.sh
   TEST_BIN_TARGET_SUFFIX := .bin

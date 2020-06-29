@@ -82,17 +82,15 @@ class PrepareTFPass : public PassWrapper<PrepareTFPass, FunctionPass> {
   bool unfold_batch_matmul_;
 };
 
-
 template <class TFFakeQuantOp>
 struct FetchConstantMinMaxInputs {
-
   using AttrType = DenseFPElementsAttr;
-  bool operator () (TFFakeQuantOp tf_op, AttrType &min_value, AttrType &max_value) const {
+  bool operator()(TFFakeQuantOp tf_op, AttrType &min_value,
+                  AttrType &max_value) const {
     Value min = tf_op.min(), max = tf_op.max();
-    ;
-    // TODO This is likely redundant (Identity elimination rule are in
-    // prepare_patterns.td.  If not, its certainly, incomplete as neither
-    // IdentityN ops Nor chains of Identiy* (not sooo rare) are handled
+
+    // TODO: incomplete  neither IdentityN ops
+    // nor chains of Identity* (not rare) are handled
     if (auto id1 = dyn_cast_or_null<TF::IdentityOp>(min.getDefiningOp()))
       min = id1.input();
     if (auto id2 = dyn_cast_or_null<TF::IdentityOp>(max.getDefiningOp()))
@@ -103,22 +101,20 @@ struct FetchConstantMinMaxInputs {
     if (!matchPattern(max, m_Constant(&max_value))) {
       return false;
     }
-    return true; // Succesfully matched and fetched.
+    return true;  // Succesfully matched and fetched.
   }
 };
 
-
 template <class TFFakeQuantOp>
 struct FetchMinMaxAttrs {
-
   using AttrType = FloatAttr;
-  bool operator () (TFFakeQuantOp tf_op, AttrType &min_value, AttrType &max_value) const {
+  bool operator()(TFFakeQuantOp tf_op, AttrType &min_value,
+                  AttrType &max_value) const {
     min_value = tf_op.minAttr();
     max_value = tf_op.maxAttr();
     return true;  // Succesfully matched and fetched.
   }
 };
-
 
 // TODO(fengliuai): move this rule to PreparePatterns.td
 // TODO(fengliuai): reuse the quantization/tensorflow/tf_to_quant pass.
@@ -161,23 +157,25 @@ struct FetchMinMaxAttrs {
 //             tf.FakeQuant*
 //
 // tf.identity / tf.IdentityN between the tf.FakeQuant* ops
-// need no special treatment are already eliminated before the rewrites / check is applied.
+// need no special treatment are already eliminated before the rewrites / check
+// is applied.
 //
 
 template <typename TFFakeQuantOp, bool PerAxis, class FetchMinMax>
 struct InsertTFLQuantOpsAfterTFFakeQuantOp
     : public OpRewritePattern<TFFakeQuantOp> {
-  using BaseType = InsertTFLQuantOpsAfterTFFakeQuantOp<TFFakeQuantOp, PerAxis, FetchMinMax>;
+  using BaseType =
+      InsertTFLQuantOpsAfterTFFakeQuantOp<TFFakeQuantOp, PerAxis, FetchMinMax>;
 
-  explicit InsertTFLQuantOpsAfterTFFakeQuantOp<TFFakeQuantOp, PerAxis, FetchMinMax>(
-      MLIRContext *ctx)
+  explicit InsertTFLQuantOpsAfterTFFakeQuantOp<TFFakeQuantOp, PerAxis,
+                                               FetchMinMax>(MLIRContext *ctx)
       : OpRewritePattern<TFFakeQuantOp>(ctx) {}
 
   FetchMinMax fetchMinMax;
 
   using FetchAttrType = typename FetchMinMax::AttrType;
   LogicalResult matchAndRewrite(TFFakeQuantOp tf_op,
-                                     PatternRewriter &rewriter) const override {
+                                PatternRewriter &rewriter) const override {
     // We don't want to insert quantize/dequantize if the quantize op exists.
     auto res = tf_op.outputs();
     if (!res.hasOneUse() || isa<QuantizeOp>(*res.user_begin())) {
@@ -211,7 +209,7 @@ struct InsertTFLQuantOpsAfterTFFakeQuantOp
     if (!qtype) {
       return failure();
     }
-    
+
     // Finally, use the quantization parameter to create the quantize and
     // dequantize ops, and insert them between the tf.FakeQuantWithMinMaxVarsOp
     // and its users.
@@ -230,25 +228,19 @@ struct InsertTFLQuantOpsAfterTFFakeQuantOp
 //
 // Three instances of the rule to cover the three different types of
 // TF::FakeQuant operators
-// 
-using PreparePerTensorFakeQuant =
-    InsertTFLQuantOpsAfterTFFakeQuantOp<TF::FakeQuantWithMinMaxVarsOp, 
-                                        false,
-                                        FetchConstantMinMaxInputs<TF::FakeQuantWithMinMaxVarsOp>
-                                       >;
+//
+using PreparePerTensorFakeQuant = InsertTFLQuantOpsAfterTFFakeQuantOp<
+    TF::FakeQuantWithMinMaxVarsOp, /*PerAxis=*/false,
+    FetchConstantMinMaxInputs<TF::FakeQuantWithMinMaxVarsOp>>;
 
-using PreparePerChannelFakeQuant =
-    InsertTFLQuantOpsAfterTFFakeQuantOp<TF::FakeQuantWithMinMaxVarsPerChannelOp,
-                                        true,
-                                        FetchConstantMinMaxInputs<TF::FakeQuantWithMinMaxVarsPerChannelOp>
-                                       >;
+using PreparePerChannelFakeQuant = InsertTFLQuantOpsAfterTFFakeQuantOp<
+    TF::FakeQuantWithMinMaxVarsPerChannelOp, /*PerAxis=*/true,
+    FetchConstantMinMaxInputs<TF::FakeQuantWithMinMaxVarsPerChannelOp>>;
 
 using PreparePerTensorFakeQuantWithMinMaxArgs =
-    InsertTFLQuantOpsAfterTFFakeQuantOp<TF::FakeQuantWithMinMaxArgsOp,
-                                        false,
-                                        FetchMinMaxAttrs<TF::FakeQuantWithMinMaxArgsOp>
-                                       >;
-
+    InsertTFLQuantOpsAfterTFFakeQuantOp<
+        TF::FakeQuantWithMinMaxArgsOp, /*PerAxis=*/false,
+        FetchMinMaxAttrs<TF::FakeQuantWithMinMaxArgsOp>>;
 
 // Templated class for declaring a converter from some TensorFlow convolution
 // op into its counterpart in TensorFlow Lite.
@@ -717,11 +709,8 @@ void PrepareTFPass::runOnFunction() {
   // parameters from the TF Quant ops, thus this pattern should run with the
   // first `applyPatternsGreedily` method, which would otherwise removes the
   // TF FakeQuant ops by the constant folding.
-  //patterns.insert<PreparePerTensorFakeQuant, PreparePerChannelFakeQuant, 
-  //                PreparePerTensorFakeQuantWithMinMaxArgs>(ctx);
-
-  patterns.insert<PreparePerTensorFakeQuant, PreparePerChannelFakeQuant, PreparePerTensorFakeQuantWithMinMaxArgs>(ctx);
-
+  patterns.insert<PreparePerTensorFakeQuant, PreparePerChannelFakeQuant,
+                  PreparePerTensorFakeQuantWithMinMaxArgs>(ctx);
 
   // This pattern will try to identify and optimize for dilated convolution.
   // e.g. Patterns like "SpaceToBatchND -> Conv2D -> BatchToSpaceND" will be
