@@ -22,8 +22,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.zip.ZipException;
 import org.checkerframework.checker.nullness.qual.Nullable;
-import org.tensorflow.lite.DataType;
-import org.tensorflow.lite.Tensor.QuantizationParams;
 import org.tensorflow.lite.schema.Tensor;
 import org.tensorflow.lite.support.metadata.schema.ModelMetadata;
 import org.tensorflow.lite.support.metadata.schema.TensorMetadata;
@@ -57,7 +55,7 @@ public class MetadataExtractor {
   // TODO(b/156539454): remove the hardcode versioning number and populate the version through
   // genrule.
   /** The version of the metadata parser that this {@link MetadataExtractor} library depends on. */
-  public static final String METADATA_PARSER_VERSION = "1.0.0";
+  public static final String METADATA_PARSER_VERSION = "1.0.1";
 
   /** The helper class to load metadata from TFLite model FlatBuffer. */
   private final ModelInfo modelInfo;
@@ -109,6 +107,48 @@ public class MetadataExtractor {
     }
 
     zipFile = createZipFile(buffer);
+  }
+
+  /**
+   * Quantization parameters that corresponds to the table, {@code QuantizationParameters}, in the
+   * <a
+   * href="https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema.fbs">TFLite
+   * Model schema file.</a>
+   *
+   * <p>Since per-channel quantization does not apply to input and output tensors, {@code scale} and
+   * {@code zero_point} are both single values instead of arrays.
+   *
+   * <p>For tensor that are not quantized, the values of scale and zero_point are both 0.
+   *
+   * <p>Given a quantized value q, the corresponding float value f should be: <br>
+   * f = scale * (q - zero_point) <br>
+   */
+  public static class QuantizationParams {
+    /** The scale value used in quantization. */
+    private final float scale;
+    /** The zero point value used in quantization. */
+    private final int zeroPoint;
+
+    /**
+     * Creates a {@link QuantizationParams} with {@code scale} and {@code zero_point}.
+     *
+     * @param scale The scale value used in quantization.
+     * @param zeroPoint The zero point value used in quantization.
+     */
+    public QuantizationParams(final float scale, final int zeroPoint) {
+      this.scale = scale;
+      this.zeroPoint = zeroPoint;
+    }
+
+    /** Returns the scale value. */
+    public float getScale() {
+      return scale;
+    }
+
+    /** Returns the zero point value. */
+    public int getZeroPoint() {
+      return zeroPoint;
+    }
   }
 
   /** Returns {@code true} if the model has metadata. Otherwise, returns {@code false}. */
@@ -166,11 +206,11 @@ public class MetadataExtractor {
   }
 
   /**
-   * Gets the {@link DataType} of the input tensor with {@code inputIndex}.
+   * Gets the {@link TensorType} of the input tensor with {@code inputIndex}.
    *
    * @param inputIndex the index of the desired input tensor
    */
-  public DataType getInputTensorType(int inputIndex) {
+  public byte getInputTensorType(int inputIndex) {
     return modelInfo.getInputTensorType(inputIndex);
   }
 
@@ -221,11 +261,11 @@ public class MetadataExtractor {
   }
 
   /**
-   * Gets the {@link DataType} of the output tensor with {@code outputIndex}.
+   * Gets the {@link TensorType} of the output tensor with {@code outputIndex}.
    *
    * @param outputIndex the index of the desired output tensor
    */
-  public DataType getOutputTensorType(int outputIndex) {
+  public byte getOutputTensorType(int outputIndex) {
     return modelInfo.getOutputTensorType(outputIndex);
   }
 

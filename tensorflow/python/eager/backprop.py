@@ -14,6 +14,9 @@
 # ==============================================================================
 """Code for backpropagation using the tape utilities."""
 
+# TODO(b/159343581): Properly support CompositeTensor in all functions in this
+# file.
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -241,6 +244,11 @@ def implicit_val_and_grad(f):
                        "function was being computed.")
 
     sources = [v.handle for v in variables]
+    for s in sources:
+      if getattr(s, "is_packed", False):
+        raise ValueError(
+            "GradientTape.gradient is not supported on packed EagerTensors yet."
+        )
     grad = imperative_grad.imperative_grad(this_tape, nest.flatten(end_node),
                                            sources)
     return end_node, list(zip(grad, variables))
@@ -548,6 +556,10 @@ def make_vjp(f, params=None, persistent=True):
       ]
       args = _ensure_unique_tensor_objects(parameter_positions, args)
       for i in parameter_positions:
+        if getattr(args[i], "is_packed", False):
+          raise ValueError(
+              "GradientTape.gradient is not supported on packed EagerTensors"
+              "yet.")
         sources.append(args[i])
         tape.watch(this_tape, args[i])
       result = f(*args)
@@ -873,7 +885,7 @@ class GradientTape(object):
     Raises:
       ValueError: if it encounters something that is not a tensor.
     """
-    for t in nest.flatten(tensor):
+    for t in nest.flatten(tensor, expand_composites=True):
       if not (_pywrap_utils.IsTensor(t) or _pywrap_utils.IsVariable(t)):
         raise ValueError("Passed in object of type {}, not tf.Tensor".format(
             type(t)))
@@ -1012,7 +1024,7 @@ class GradientTape(object):
             "derivatives.", 1)
 
     flat_targets = []
-    for t in nest.flatten(target):
+    for t in nest.flatten(target, expand_composites=True):
       if not backprop_util.IsTrainable(t):
         logging.vlog(
             logging.WARN, "The dtype of the target tensor must be "
@@ -1023,7 +1035,7 @@ class GradientTape(object):
           t = ops.convert_to_tensor(t)
       flat_targets.append(t)
 
-    flat_sources = nest.flatten(sources)
+    flat_sources = nest.flatten(sources, expand_composites=True)
     flat_sources_raw = flat_sources
     flat_sources = [_handle_or_self(x) for x in flat_sources]
     for t in flat_sources_raw:
@@ -1032,10 +1044,15 @@ class GradientTape(object):
             logging.WARN, "The dtype of the source tensor must be "
             "floating (e.g. tf.float32) when calling GradientTape.gradient, "
             "got %r", t.dtype)
+      if getattr(t, "is_packed", False):
+        raise ValueError(
+            "GradientTape.gradient is not supported on packed EagerTensors yet."
+        )
 
     if output_gradients is not None:
       output_gradients = [None if x is None else ops.convert_to_tensor(x)
-                          for x in nest.flatten(output_gradients)]
+                          for x in nest.flatten(
+                              output_gradients, expand_composites=True)]
 
     flat_grad = imperative_grad.imperative_grad(
         self._tape,
@@ -1050,7 +1067,7 @@ class GradientTape(object):
       self._watched_variables = self._tape.watched_variables()
       self._tape = None
 
-    grad = nest.pack_sequence_as(sources, flat_grad)
+    grad = nest.pack_sequence_as(sources, flat_grad, expand_composites=True)
     return grad
 
   def jacobian(self,

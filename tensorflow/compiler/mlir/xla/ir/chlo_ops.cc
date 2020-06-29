@@ -49,7 +49,7 @@ static Type GetBroadcastType(Type x, Type y, Type element_type,
 
   if (shape_x.size() == shape_y.size()) {
     llvm::SmallVector<int64_t, 4> out_shape(shape_x.size());
-    for (int i = 0; i < shape_x.size(); i++) {
+    for (int i = 0, e = shape_x.size(); i < e; i++) {
       auto x_val = shape_x[i];
       auto y_val = shape_y[i];
       if (x_val == -1 || y_val == -1) {
@@ -184,6 +184,16 @@ LogicalResult BroadcastComplexOp::reifyReturnTypeShapes(
 //===----------------------------------------------------------------------===//
 // BroadcastCompareOp (has custom type inference due to different result type).
 //===----------------------------------------------------------------------===//
+
+void BroadcastCompareOp::build(OpBuilder& builder, OperationState& result,
+                               Value lhs, Value rhs,
+                               DenseIntElementsAttr broadcast_dimensions,
+                               StringAttr comparison_direction) {
+  auto new_type = GetBroadcastType(lhs.getType(), rhs.getType(),
+                                   builder.getI1Type(), broadcast_dimensions);
+  build(builder, result, new_type, lhs, rhs, broadcast_dimensions,
+        comparison_direction);
+}
 
 LogicalResult BroadcastCompareOp::inferReturnTypeComponents(
     MLIRContext* context, Optional<Location> location, ValueRange operands,

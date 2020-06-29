@@ -15,7 +15,7 @@ while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_xlator] [--no-config] [--no-build] [--no-tflite] " 1>&2
+        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
 	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
 	echo "  [--verbose]" 1>&2
         exit 1
@@ -32,6 +32,9 @@ do
     "--no-install")
         NOINSTALL=1
         ;;
+    "--with-pip")
+	WITH_PIP=1
+	;;
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
@@ -153,7 +156,6 @@ then
     export TF_NEED_GDR=0
     export TF_NEED_S3=0
     export TF_NEED_OPENCL_SYCL=0
-    export TF_SET_ANDROID_WORKSPACE=0
     export TF_NEED_COMPUTECPP=0
     export GCC_HOST_COMPILER_PATH=$(which gcc)
     export CC_OPT_FLAGS="-march=${TARGET_ARCH} -Wno-sign-compare"
@@ -163,6 +165,8 @@ then
     export TF_DOWNLOAD_CLANG=0
   fi
 #  export PYTHON_LIB_PATH="$($PYTHON_BIN_PATH -c 'import site; print(site.getsitepackages()[0])')"
+
+  export TF_SET_ANDROID_WORKSPACE=0
   export TF_NEED_ROCM=0
   export TF_NEED_CUDA=0
   export TF_OVERRIDE_EIGEN_STRONG_INLINE=1
@@ -181,7 +185,10 @@ else
 fi
 
 BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate )
-
+if [ -n "$WITH_PIP" ]
+then
+    BAZEL_TARGETS=( "${BAZEL_TARGETS[@]}" //tensorflow/tools/pip_package:build_pip_package )
+fi
 if [ -z "$NOBUILD" ]
 then
     # Some useful recipes from the past... comment out in case needed
@@ -208,25 +215,33 @@ then
     fi
 fi
 
+if [ -n "$WITH_PIP" ]
+then
+    ./bazel-bin/tensorflow/tools/pip_package/build_pip_package --nightly_flag /tmp/tensorflow_pk
+    mv /tmp/tensorflow_pk/tf*.whl .
+    rm -rf /tmp/tensorflow_pk
+fi
+
 if [ -z "$NOTFLITE" ] 
 then
-    make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug clean
-    make BUILD_TYPE=debug clean
-    make -j 4 microlite
-    make -j 4 test_executables
+	make mrproper clean_downloads
+    make BUILD_TYPE=debug third_party_downloads
     echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
     echo make -j 4 BUILD_TYPE=debug test_executables
-    make -j 4 BUILD_TYPE=debug microlite
+    make -j 4 BUILD_TYPE=debug test_executables
 
-    # Actual payload - installed confiured copy of tflite(u) library and makefiles
-    make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
-    # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
-    echo 'TAGS ?= portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
+
+    if [ -z "$NOINSTALL" ]
+    then
+        # Actual payload - installed confiured copy of tflite(u) library and makefiles
+        make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
+        # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
+        echo 'TAGS ?= portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
+    fi
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery
-    make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} clean
-    make -j 4 BUILD_TYPE=debug clean
+    make mrproper
 fi
