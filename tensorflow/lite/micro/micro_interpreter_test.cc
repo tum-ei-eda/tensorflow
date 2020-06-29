@@ -25,6 +25,9 @@ limitations under the License.
 #include "tensorflow/lite/micro/test_helpers.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
 
+const bool kIs64BitSystem = sizeof(void*) == 8;
+
+
 namespace tflite {
 namespace {
 
@@ -283,8 +286,11 @@ TF_LITE_MICRO_TEST(TestIncompleteInitializationAllocationsWithSmallArena) {
   TF_LITE_MICRO_EXPECT_NE(nullptr, model);
 
   tflite::testing::MockOpResolver mock_resolver;
-  // 1kb is too small for the ComplexMockModel:
-  constexpr size_t allocator_buffer_size = 1048;
+  // Size chosen too small for the ComplexMockModel:
+  // 2020-06-29 size must sufficiently small that no
+  // allocation takes place but that issue with segfault for extremely small
+  // buffers is not triggered.
+  constexpr size_t allocator_buffer_size = kIs64BitSystem ? 1048 : 648;
   uint8_t allocator_buffer[allocator_buffer_size];
 
   tflite::RecordingMicroAllocator* allocator =
@@ -299,7 +305,7 @@ TF_LITE_MICRO_TEST(TestIncompleteInitializationAllocationsWithSmallArena) {
   TF_LITE_MICRO_EXPECT_EQ(interpreter.Invoke(), kTfLiteError);
 
   // Ensure allocations are zero (ignore tail since some internal structs are
-  // initialized with this space):
+  // initialized with this space) as allocation
   TF_LITE_MICRO_EXPECT_EQ(
       0, allocator->GetSimpleMemoryAllocator()->GetHeadUsedBytes());
   TF_LITE_MICRO_EXPECT_EQ(

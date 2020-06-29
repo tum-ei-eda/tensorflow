@@ -39,13 +39,12 @@ uint8_t keyword_model_tensor_arena[kKeywordModelTensorArenaSize];
 constexpr int kKeywordModelTensorCount = 54;
 constexpr int kKeywordModelNodeAndRegistrationCount = 15;
 
-// NOTE: These values are measured on x86-64:
-// TODO(b/158651472): Consider auditing these values on non-64 bit systems.
-constexpr int kKeywordModelTotalSize = 21040;
-constexpr int kKeywordModelHeadSize = 672;
-constexpr int kKeywordModelTailSize = 20368;
+// NOTE: These values are measured on x86-64 and x86
+constexpr int kKeywordModelTotalSize = kIs64BitSystem ? 21040 : 16912;
+constexpr int kKeywordModelHeadSize = kIs64BitSystem ? 672 : 672;
+constexpr int kKeywordModelTailSize = kIs64BitSystem ? 20368 : 16240;
 constexpr int kKeywordModelTfLiteTensorVariableBufferDataSize = 10240;
-constexpr int kKeywordModelTfLiteTensorQuantizationDataSize = 1728;
+constexpr int kKeywordModelTfLiteTensorQuantizationDataSize = kIs64BitSystem ? 1728 : 1080;
 constexpr int kKeywordModelOpRuntimeDataSize = 148;
 
 constexpr int kTestConvModelArenaSize = 12 * 1024;
@@ -54,12 +53,11 @@ uint8_t test_conv_tensor_arena[kTestConvModelArenaSize];
 constexpr int kTestConvModelTensorCount = 15;
 constexpr int kTestConvModelNodeAndRegistrationCount = 7;
 
-// NOTE: These values are measured on x86-64:
-// TODO(b/158651472): Consider auditing these values on non-64 bit systems.
-constexpr int kTestConvModelTotalSize = 11680;
-constexpr int kTestConvModelHeadSize = 7744;
-constexpr int kTestConvModelTailSize = 3936;
-constexpr int kTestConvModelTfLiteTensorQuantizationDataSize = 768;
+// NOTE: These values are measured on x86-64 and x86
+constexpr int kTestConvModelTotalSize = kIs64BitSystem ? 11680 : 10400;
+constexpr int kTestConvModelHeadSize = kIs64BitSystem ? 7744 : 7744;
+constexpr int kTestConvModelTailSize = kIs64BitSystem ? 3936 : 2656;
+constexpr int kTestConvModelTfLiteTensorQuantizationDataSize =  kIs64BitSystem ? 768 : 608;
 constexpr int kTestConvModelOpRuntimeDataSize = 136;
 
 struct ModelAllocationThresholds {
@@ -147,7 +145,6 @@ void ValidateModelAllocationThresholds(
                            sizeof(tflite::NodeAndRegistration) *
                                thresholds.node_and_registration_count +
                            thresholds.op_runtime_data_size;
-
   TF_LITE_MICRO_EXPECT_LE(thresholds.tail_alloc_size - tail_est_length,
                           kAllocationTailMiscCeiling);
 }
