@@ -127,6 +127,7 @@ $(wildcard tensorflow/lite/c/*.cc) \
 $(wildcard tensorflow/lite/core/*.cc) \
 $(wildcard tensorflow/lite/core/api/*.cc) \
 $(wildcard tensorflow/lite/experimental/resource/*.cc) \
+$(wildcard tensorflow/lite/experimental/*.cc) \
 $(wildcard tensorflow/lite/tools/make/downloads/ruy/ruy/*.cc)
 ifneq ($(BUILD_TYPE),micro)
 CORE_CC_ALL_SRCS += \
