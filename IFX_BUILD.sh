@@ -226,16 +226,14 @@ fi
 
 if [ -z "$NOTFLITE" ] 
 then
-    make TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug clean
-    make BUILD_TYPE=debug clean
-    make -j 4 microlite
-    make -j 4 test_executables
+	make mrproper clean_downloads
+    make BUILD_TYPE=debug third_party_downloads
     echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
     echo make -j 4 BUILD_TYPE=debug test_executables
-    make -j 4 BUILD_TYPE=debug microlite
-    
+    make -j 4 BUILD_TYPE=debug test_executables
+
 
     if [ -z "$NOINSTALL" ]
     then
@@ -248,6 +246,5 @@ then
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery
-    make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} clean
-    make -j 4 BUILD_TYPE=debug clean
+    make mrproper
 fi
