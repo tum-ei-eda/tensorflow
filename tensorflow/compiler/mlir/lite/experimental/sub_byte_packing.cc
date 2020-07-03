@@ -121,9 +121,6 @@ SubBytePacking::SubBytePacking(Value value)
   if (!defing_op) return;
   auto qcst_op = dyn_cast<tfl::QConstOp>(defing_op);
 
-  bits_per_item_ = 0u;
-
-  container_bits_ = 0u;
 
   // TODO We should be emitting warnings if sub-bytpe bitwidtchs
   // for values that are no simply constants or are inputs to unsupported
@@ -242,10 +239,15 @@ SubBytePacking::SubBytePacking(Value value)
 
 
 void SubBytePacking::SetPackingRunLength(const std::vector<int32_t>& shape) {
+
+  // Non-packable...
+  if (!Packable()) return;
+
   // Record size of minor dimensions so we can
   // align on container boundary for major dimension
   // (N.b. this has to be taken into accout in operator
   // implementations)
+
   if (shape.empty()) {
     container_bits_ = 0;
     src_const_op->emitWarning(
@@ -276,7 +278,7 @@ tflite::QuantizationDetails SubBytePacking::QuantizationDetailsType() const {
 
 flatbuffers::Offset<void> SubBytePacking::CustomDetails(
     flatbuffers::FlatBufferBuilder& _fbb) const {
-  if (bits_per_item_ == 0) return 0;
+  if (!Packable()) return 0;
 
   tflite::CustomQuantizationT qdetails;
   TfLiteCustomSub8BitPackingDetails details_struct;
@@ -379,44 +381,51 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
     const absl::string_view tensor_data) const {
   auto raw_tensor_data = reinterpret_cast<const uint8_t*>(tensor_data.data());
 
-  switch (container_bits_) {
-    case 8: {
-#ifdef IFX_PATCH_LOGGING
-      inst->emitRemark("Actually Packing 8-bit container with " +
-                       Twine(bits_per_item_) + " bit weights!!");
-#endif
-      return CreatePackedValueBuffer<uint8_t, 8>(builder, inst, raw_tensor_data,
-                                                 tensor_data.size());
-    }
+  if (Packable()) {
+    switch (container_bits_) {
+      case 8: {
+  #ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 8-bit container with " +
+                        Twine(bits_per_item_) + " bit weights!!");
+  #endif
+        return CreatePackedValueBuffer<uint8_t, 8>(builder, inst, raw_tensor_data,
+                                                  tensor_data.size());
+      }
 
-    case 16: {
-#ifdef IFX_PATCH_LOGGING
-      inst->emitRemark("Actually Packing 16-bit container with " +
-                       Twine(bits_per_item_) + " bit weights!!");
-#endif
-      return CreatePackedValueBuffer<int16_t, 16>(
-          builder, inst, raw_tensor_data, tensor_data.size());
-    }
+      case 16: {
+  #ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 16-bit container with " +
+                        Twine(bits_per_item_) + " bit weights!!");
+  #endif
+        return CreatePackedValueBuffer<int16_t, 16>(
+            builder, inst, raw_tensor_data, tensor_data.size());
+      }
 
-    case 32: {
-#ifdef IFX_PATCH_LOGGING
-      inst->emitRemark("Actually Packing 32-bit container with " +
-                       Twine(bits_per_item_) + " bit weights!!");
-#endif
-      return CreatePackedValueBuffer<uint32_t, 32>(
-          builder, inst, raw_tensor_data, tensor_data.size());
-    }
+      case 32: {
+  #ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Actually Packing 32-bit container with " +
+                        Twine(bits_per_item_) + " bit weights!!");
+  #endif
+        return CreatePackedValueBuffer<uint32_t, 32>(
+            builder, inst, raw_tensor_data, tensor_data.size());
+      }
 
-    // No supported packed container format could be identified
-    // Use generic built-in standard 8-bit format....
-    default: {
-#ifdef IFX_PATCH_LOGGING
-      inst->emitRemark("Leaving " + Twine(bits_per_item_) +
-                       " bit weights as 8 bit!!");
-#endif
-      auto buffer_data =
-          builder.CreateVector(raw_tensor_data, tensor_data.size());
-      return tflite::CreateBuffer(builder, buffer_data);
+
+      default: {
+      // No supported packed container format could be identified
+      // Fall through to use generic 8-bit unpacked format.
+  #ifdef IFX_PATCH_LOGGING
+        inst->emitRemark("Leaving " + Twine(bits_per_item_) +
+                        " bit weights as 8 bit!!");
+  #endif
+        break;
+      }
     }
   }
-}
+
+  // Reach here if not Packable or unsupported format... leave as normal 8-bit
+  // coded values.
+  auto buffer_data =
+        builder.CreateVector(raw_tensor_data, tensor_data.size());
+  return tflite::CreateBuffer(builder, buffer_data);
+  } 

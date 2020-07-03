@@ -57,7 +57,8 @@ void run_model( const uint8_t *model_fb, float refdata[][3] ) {
                          model->version(), TFLITE_SCHEMA_VERSION);
   }
 
-  // This pulls in all the operation implementations we need
+
+// This pulls in all the operation implementations we need
   tflite::AllOpsResolver resolver;
 
 // Create an area of memory to use for input, output, and intermediate arrays.

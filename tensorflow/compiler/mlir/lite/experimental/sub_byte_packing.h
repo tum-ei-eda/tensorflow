@@ -36,7 +36,7 @@ class SubBytePacking {
   //
   // Create buffer holding coding <= 8-bit uniform quantized
   // tensor value.  For sub-8-bit values packed formats are
-  // used where supported.
+  // used where supported (i.e. if Packable() )
   //
   flatbuffers::Offset<tflite::Buffer> CreateQuantizedValuesBuffer(
       flatbuffers::FlatBufferBuilder& builder, mlir::Operation* inst,
@@ -48,7 +48,8 @@ class SubBytePacking {
 
   //
   // Shape is not available when packing object needs to be
-  // constructed so need member to setup when it is availalbe.
+  // constructed so need member to setup when it is available.
+  // No-op if not Packable
   void SetPackingRunLength(const std::vector<int32_t>& shape);
 
   // Sub-byte packing info is packed as CustomQuantization
@@ -57,7 +58,11 @@ class SubBytePacking {
   //
   flatbuffers::Offset<void> CustomDetails(
     flatbuffers::FlatBufferBuilder& _fbb) const;
-    
+
+ // 
+ inline bool Packable() const { return bits_per_item_ != 0; }
+
+
  protected:
   // Create buffer holding  data coding sub-8-bit uniform quantized
   // tensor values packed into `container_bits` container values.
@@ -72,7 +77,8 @@ class SubBytePacking {
   // Implicitly: currently packed from lsb upwards
   unsigned int container_bits_;
 
-  // Size of individual packed data items
+  // Size of individual packed data items 
+  // (0 if not packing possible/needed)
   unsigned int bits_per_item_;
 
   // Minor dimensions for which values are densely packed.

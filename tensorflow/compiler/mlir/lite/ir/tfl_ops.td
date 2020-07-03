@@ -3569,11 +3569,12 @@ def TFL_SparseQConstOp : Op<TFL_Dialect, "pseudo_sparse_qconst", [
     }]>
   ];
 }
-// @IFX_PATCH@// @IFX_PATCH@
+// @IFX_PATCH@
 def TFL_QuantizeOp: TFL_Op<"quantize", [
     FirstAttrDerivedResultType,
     SameOperandsAndResultShape,
-    NoQuantizableResult]> {
+    NoQuantizableResult,
+    NoSideEffect]> {
   let summary = "Quantize operator";
 
   let description = [{

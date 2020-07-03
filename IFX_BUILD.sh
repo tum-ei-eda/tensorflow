@@ -15,7 +15,7 @@ while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_xlator] [--no-config] [--no-build] [--no-tflite] " 1>&2
+        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
 	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
 	echo "  [--verbose]" 1>&2
         exit 1
@@ -33,8 +33,14 @@ do
         NOINSTALL=1
         ;;
     "--with-pip")
-		WITH_PIP=1
-		;;
+	WITH_PIP=1
+	;;
+    "--opt")
+        BAZEL_CXX_BUILD_SETTINGS=(
+	  --config opt 
+        )
+        ;;
+
     "--fast")
 	BAZEL_CXX_BUILD_SETTINGS=(
                   --copt=-O1 --cxxopt=-O1 --strip=never
@@ -242,7 +248,6 @@ then
         # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
         echo 'TAGS ?= portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
     fi
-
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
     # poison VS-code bazel target discovery
