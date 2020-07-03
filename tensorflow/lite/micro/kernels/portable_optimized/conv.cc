@@ -197,8 +197,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     // Precompute the sum of filters
     const int32_t input_offset = -input->params.zero_point;
     if (filters->type == kTfLiteUInt8) {
-      PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
-        filter_shape, input_offset, filter_offset);
+      if (filters->quantization.details.type != kTfLiteSub8BitPackedUniformDetail) {
+        PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
+          filter_shape, input_offset, filter_offset);
+      }
     }
     else {
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
@@ -605,56 +607,58 @@ TfLiteStatus EvalConvQuantizedPacked(
         TfLiteContext* context,
         const TfLiteCustomSub8BitPackingDetails &custom) {
 
-    unsigned int bits_per_item = custom.bits_per_item;
-    unsigned int container_bits = custom.container_bits;
-    unsigned int packed_minor_dims =  custom.packed_minor_dims;
-    switch (bits_per_item) {
+  TF_LITE_KERNEL_LOG(context, "Using packed implementation of convolutional layer with %d bit.", custom.bits_per_item);
 
-        case 4: {
-            if(container_bits != 8)
-              break;
-            reference_integer_ops::ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
-                params,
-                GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output)
-                );
-            return kTfLiteOk;
-        }
-        case 5: {
-            if(container_bits != 16)
-              break;
-            reference_integer_ops::ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
-                params,
-                GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<uint16_t>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output)
-                );
-            return kTfLiteOk;
-        }
-        case 6: {
-            if(container_bits != 32)
-              break;
-            reference_integer_ops::ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
-                            params,
-                            GetTensorShape(input), GetTensorData<uint8_t>(input),
-                            GetTensorShape(filter), GetTensorData<uint32_t>(filter),
-                            GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                            GetTensorShape(output), GetTensorData<uint8_t>(output)
-                            );
-            return kTfLiteOk;
-        }
-        default: {
-            TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
-                               bits_per_item);
-            return kTfLiteError;
-        }
-    }
-    TF_LITE_KERNEL_LOG(context, "Container bitwidth %d not supported for %d bit packed values",
-                       container_bits, bits_per_item);
-    return kTfLiteError;
+  unsigned int bits_per_item = custom.bits_per_item;
+  unsigned int container_bits = custom.container_bits;
+  unsigned int packed_minor_dims =  custom.packed_minor_dims;
+  switch (bits_per_item) {
+
+      case 4: {
+          if(container_bits != 8)
+            break;
+          reference_integer_ops::ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
+              params,
+              GetTensorShape(input), GetTensorData<uint8_t>(input),
+              GetTensorShape(filter), GetTensorData<uint8_t>(filter),
+              GetTensorShape(bias), GetTensorData<int32_t>(bias),
+              GetTensorShape(output), GetTensorData<uint8_t>(output)
+              );
+          return kTfLiteOk;
+      }
+      case 5: {
+          if(container_bits != 16)
+            break;
+          reference_integer_ops::ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
+              params,
+              GetTensorShape(input), GetTensorData<uint8_t>(input),
+              GetTensorShape(filter), GetTensorData<uint16_t>(filter),
+              GetTensorShape(bias), GetTensorData<int32_t>(bias),
+              GetTensorShape(output), GetTensorData<uint8_t>(output)
+              );
+          return kTfLiteOk;
+      }
+      case 6: {
+          if(container_bits != 32)
+            break;
+          reference_integer_ops::ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
+                          params,
+                          GetTensorShape(input), GetTensorData<uint8_t>(input),
+                          GetTensorShape(filter), GetTensorData<uint32_t>(filter),
+                          GetTensorShape(bias), GetTensorData<int32_t>(bias),
+                          GetTensorShape(output), GetTensorData<uint8_t>(output)
+                          );
+          return kTfLiteOk;
+      }
+      default: {
+          TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
+                             bits_per_item);
+          return kTfLiteError;
+      }
+  }
+  TF_LITE_KERNEL_LOG(context, "Container bitwidth %d not supported for %d bit packed values",
+                     container_bits, bits_per_item);
+  return kTfLiteError;
 }
 
 

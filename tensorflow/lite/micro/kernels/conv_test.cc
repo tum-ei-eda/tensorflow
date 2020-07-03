@@ -20,6 +20,8 @@ limitations under the License.
 #include "tensorflow/lite/micro/testing/micro_test.h"
 #include "tensorflow/lite/micro/testing/test_utils.h"
 
+#include <iostream>
+
 namespace tflite {
 namespace testing {
 namespace {
@@ -38,6 +40,7 @@ static const float kBiasData[] = {1, 2, 3};
 static const int kOutputElements = 12;
 static const int kOutputShape[] = {4, 2, 1, 2, 3};
 static const float kGoldenData[] = {18, 2, 5, 18, 2, 5, 17, 4, 3, 37, 4, 3};
+
 
 static TfLiteConvParams common_conv_params = {
     kTfLitePaddingValid,  // padding
