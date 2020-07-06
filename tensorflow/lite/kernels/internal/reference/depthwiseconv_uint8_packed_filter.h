@@ -74,71 +74,66 @@ struct DepthwiseConvPackedFilter {
     // TODO allocate external / from heap for large dimensioned kernels?
 
     int32 accbuf[output_depth];
-    int32 *acc_p;
+    const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
-    const unsigned int output_container_depth = (output_depth + (items_per_container-1u))/items_per_container;
+    const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
     const int32 mask = (1<<bits_per_item)-1;
 
-
     for (int b = 0; b < batches; ++b) {
+      const uint32_t input_offset0 = in_dims[1] * b;
       for (int out_y = 0; out_y < output_height; ++out_y) {
         for (int out_x = 0; out_x < output_width; ++out_x) {
           const int in_x_origin = (out_x * stride_width) - pad_width;
           const int in_y_origin = (out_y * stride_height) - pad_height;
 
-          // Iterations over kernel dimensions nest in
-          // struct MAJOR -> MINOR order so we can simply step through the
-          // filter containers sequentially provided we take allow for
-          // the last container for each sequence of minor (channel) axis values
-          // not be completely full.
-          const CONTAINER_T *filter_channel_vals_p = filter_data;
-          CONTAINER_T filter_vals = 0;
+          for (int i = 0; i < output_depth; ++i) {
+            accbuf[i] = 0;
+          }
+
           for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
+            const int in_y = in_y_origin + dilation_height_factor * filter_y;
+            const uint32_t input_offset1 = in_dims[2] * (input_offset0 + in_y);
+
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
-   
               const int in_x = in_x_origin + dilation_width_factor * filter_x;
-              const int in_y = in_y_origin + dilation_height_factor * filter_y;
+              const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
+
               // If the location is outside the bounds of the input image,
               // use zero as a default value.
               if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
                   (in_y < input_height)) {
 
-                const CONTAINER_T *filter_vals_container_p = filter_channel_vals_p;
-                for (int ic = 0; ic < input_depth; ++ic) {
-                  int32 input_val =
-                      input_data[Offset(input_shape, b, in_y, in_x, ic)];
-                  for (int m = 0; m < depth_multiplier; m++) {
-                    const int oc = m + ic * depth_multiplier;
-                    if (oc % items_per_container == 0) {
-                      filter_vals = *filter_vals_container_p;
-                      ++filter_vals_container_p;
+                const int container_offset = (filter_y * filter_width + filter_x) * num_packed_containers;
+                int input_channel = 0;
+                for (int channel_container = 0; channel_container < num_packed_containers; ++channel_container) {
+                  CONTAINER_T filter_vals = filter_data[container_offset + channel_container];
+                  int number_elements_in_container = std::min(output_depth - channel_container * items_per_container, items_per_container);
+                  for (int element = 0; element < number_elements_in_container; element++) {
+                    const unsigned int output_channel = channel_container*items_per_container + element;
+                    int32 input_val = input_data[input_offset2 + input_channel];
+                    int32 filter_val = filter_vals & mask;
+                    filter_vals >>= bits_per_item;
+                    accbuf[output_channel] += (filter_val + filter_offset) * (input_val + input_offset);
+                    if (output_channel+1 % depth_multiplier == 0) {
+                      input_channel ++;
                     }
-                    // Assertion to cross-check addresses?
-                    //int32 filter_val = filter_data[Offset(
-                    //    filter_shape, 0, filter_y, filter_x, oc)];
-                    int32 filter_val = (filter_vals & mask);
-                    filter_val >>= bits_per_item;
-                    accbuf[oc] += (filter_val + filter_offset) *
-                           (input_val + input_offset);
                   }
                 }
               }
-              filter_channel_vals_p += output_container_depth;
-
-              for (unsigned int oc =0; oc < output_depth; ++oc) {
-                int32 acc = accbuf[oc];
-                if (bias_data) {
-                  acc += bias_data[oc];
-                }
-                acc = DepthwiseConvRound<output_rounding>(acc, output_multiplier,
-                                                          output_shift);
-                acc += output_offset;
-                acc = std::max(acc, output_activation_min);
-                acc = std::min(acc, output_activation_max);
-                output_data[Offset(output_shape, b, out_y, out_x, oc)] =
-                    static_cast<uint8>(acc);
-              }
             }
+          }
+          for (unsigned int oc =0; oc < output_depth; ++oc) {
+            int32 acc = accbuf[oc];
+            if (bias_data) {
+              acc += bias_data[oc];
+            }
+            acc = DepthwiseConvRound<output_rounding>(acc, output_multiplier,
+                                                      output_shift);
+            acc += output_offset;
+            acc = std::max(acc, output_activation_min);
+            acc = std::min(acc, output_activation_max);
+            output_data[Offset(output_shape, b, out_y, out_x, oc)] =
+                static_cast<uint8>(acc);
           }
         }
       }

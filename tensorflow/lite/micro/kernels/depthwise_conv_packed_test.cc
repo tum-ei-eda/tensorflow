@@ -20,6 +20,8 @@ limitations under the License.
 #include "tensorflow/lite/micro/testing/micro_test.h"
 #include "tensorflow/lite/micro/testing/test_utils.h"
 
+#include <iostream>
+
 namespace tflite {
 namespace testing {
 namespace {
@@ -30,14 +32,14 @@ static const int kInputShape[] = {4, 2, 2, 4, 4};
 static const float kInputData[] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
                                    2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
                                    1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4,
-                                   1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4,};
+                                   1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
 static const int kFilterElements = 32;
 static const int kFilterShape[] = {4, 1, 2, 2, 8};
 static const float kFilterData[] = {
     1, 1, 1, 1, 2, 2, 2, 2,
     3, 3, 3, 3, 4, 4, 4, 4,
     -1, -1, -1, -1, 1, 1, 1, 1,
-    -1, -1, -1, -1, 1, 1, 1, 1,};
+    -1, -1, -1, -1, 1, 1, 1, 1};
 static const int kBiasElements = 8;
 static const int kBiasShape[] = {1, 8};
 static const float kBiasData[] = {1, 1, 1, 2, 2, 2, 3, 3};
@@ -185,6 +187,12 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
 
   const T* output_data = tflite::GetTensorData<T>(&tensors[kOutputTensorIndex]);
   for (int i = 0; i < output_length; ++i) {
+    auto vx = expected_output_data[i];
+    auto vy = output_data[i];
+    auto delta = ((vx) > (vy)) ? ((vx) - (vy)) : ((vy) - (vx));
+    if (delta > tolerance) {
+      std::cout << i << ",";
+    }
     TF_LITE_MICRO_EXPECT_NEAR(expected_output_data[i], output_data[i],
                               tolerance);
   }
@@ -277,7 +285,7 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
           ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1 /* Packed dimension needs to be 1 */};
 
   uint8_t input_quantized[tflite::testing::kInputElements];
   uint8_t filter_quantized[tflite::testing::kFilterElements];
@@ -290,7 +298,7 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
 
   auto packed_weights =
           tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
-              filter_quantized, 1u * tflite::testing::kFilterElements, 4, &packing);
+              filter_quantized, 1u * tflite::testing::kFilterElements, 8, &packing);
 
   tflite::testing::TestDepthwiseConvQuantizedPerLayer(
       tflite::testing::kInputShape, tflite::testing::kInputData, input_quantized, input_scale, input_zero_point,
