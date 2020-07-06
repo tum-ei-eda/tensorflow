@@ -308,4 +308,90 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
       output_zero_point, tflite::testing::common_depthwise_conv_params, &packing, weights_min, weights_max);
 }
 
+TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights5Bit) {
+
+  using tflite::testing::F2Q;
+  using tflite::testing::F2Q32;
+  using tflite::testing::F2QB;
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -7.5f;
+  float weights_max = 8.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max,5);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 1 /* Packed dimension needs to be 1 */};
+
+  uint8_t input_quantized[tflite::testing::kInputElements];
+  uint8_t filter_quantized[tflite::testing::kFilterElements];
+  int32_t bias_quantized[tflite::testing::kBiasElements];
+  uint8_t golden_quantized[tflite::testing::kOutputElements];
+  uint8_t output_data[tflite::testing::kOutputElements];
+
+  tflite::AsymmetricQuantize(tflite::testing::kFilterData, filter_quantized,
+                               tflite::testing::kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+              filter_quantized, 1u * tflite::testing::kFilterElements, 8, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      tflite::testing::kInputShape, tflite::testing::kInputData, input_quantized, input_scale, input_zero_point,
+      tflite::testing::kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, tflite::testing::kBiasShape, tflite::testing::kBiasData, bias_quantized, tflite::testing::kGoldenData,
+      golden_quantized, tflite::testing::kOutputShape, output_data, output_scale,
+      output_zero_point, tflite::testing::common_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights6Bit) {
+
+  using tflite::testing::F2Q;
+  using tflite::testing::F2Q32;
+  using tflite::testing::F2QB;
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -15.5f;
+  float weights_max = 16.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 1 /* Packed dimension needs to be 1 */};
+
+  uint8_t input_quantized[tflite::testing::kInputElements];
+  uint8_t filter_quantized[tflite::testing::kFilterElements];
+  int32_t bias_quantized[tflite::testing::kBiasElements];
+  uint8_t golden_quantized[tflite::testing::kOutputElements];
+  uint8_t output_data[tflite::testing::kOutputElements];
+
+  tflite::AsymmetricQuantize(tflite::testing::kFilterData, filter_quantized,
+                               tflite::testing::kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+              filter_quantized, 1u * tflite::testing::kFilterElements, 8, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      tflite::testing::kInputShape, tflite::testing::kInputData, input_quantized, input_scale, input_zero_point,
+      tflite::testing::kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, tflite::testing::kBiasShape, tflite::testing::kBiasData, bias_quantized, tflite::testing::kGoldenData,
+      golden_quantized, tflite::testing::kOutputShape, output_data, output_scale,
+      output_zero_point, tflite::testing::common_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
 TF_LITE_MICRO_TESTS_END

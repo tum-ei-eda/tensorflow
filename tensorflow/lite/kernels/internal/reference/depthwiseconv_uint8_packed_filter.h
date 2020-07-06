@@ -114,7 +114,7 @@ struct DepthwiseConvPackedFilter {
                     int32 filter_val = filter_vals & mask;
                     filter_vals >>= bits_per_item;
                     accbuf[output_channel] += (filter_val + filter_offset) * (input_val + input_offset);
-                    if (output_channel+1 % depth_multiplier == 0) {
+                    if ((output_channel+1) % depth_multiplier == 0) {
                       input_channel ++;
                     }
                   }
