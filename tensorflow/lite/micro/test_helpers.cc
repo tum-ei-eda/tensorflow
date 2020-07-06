@@ -924,6 +924,72 @@ TfLiteTensor CreateQuantizedTensor(const int16_t* data, TfLiteIntArray* dims,
   return result;
 }
 
+
+static void AsymmetricQuantizePacked(const float* input, uint8_t* output,
+                              int num_elements, int packed_dims_elts,
+                              float scale, int zero_point,
+                            TfLiteCustomSub8BitPackingDetails* format) {
+
+  unsigned int container_bits = format->container_bits;
+  size_t bits_per_item = format->bits_per_item;
+
+  assert(container_bits <= 32u);
+  uint32_t mask = (static_cast<uint32_t>(1) << bits_per_item) -
+                     static_cast<uint32_t>(1);
+  uint32_t container_buf = 0;
+
+  uint8_t* packed_data_byte = output;
+  size_t bits_in_container = 0;
+  for (int i = 0; i < num_elements; ++i) {
+    // Little-endian packing...
+    uint32_t data = FloatToAsymmetricQuantizedUInt8(input[i], scale, zero_point);
+    container_buf |= (data & mask) << bits_in_container;
+    bits_in_container += bits_per_item;
+    // Flush container when insufficient space for another item
+    // Start of each minor dimension to ensure CONTAINER_T aligned...
+    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+    // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
+    if (bits_in_container + bits_per_item > container_bits ||
+        (i % packed_dims_elts == (packed_dims_elts - 1))) {
+      // Flatbuffers are stored little-endian
+      for (size_t i = 0; i < container_bits; i += 8) {
+        uint8_t byte = (container_buf & 0xff);
+        *packed_data_byte = byte;
+        ++packed_data_byte;
+        container_buf >>= 8;
+      }
+      bits_in_container = 0;
+      container_buf = 0;
+    }
+  }
+
+  // Properly wrapped flished...
+  assert(bits_in_container == 0);
+}
+
+
+TfLiteTensor CreateQuantizedTensor(const float* input, uint8_t* quantized,
+                                   TfLiteIntArray* dims, 
+                                   TfLiteCustomSub8BitPackingDetails* packing,
+                                   float scale,
+                                   int zero_point, 
+                                   bool is_variable) {
+  int input_size = ElementCount(*dims);
+
+  if (packing) {
+    int packed_dims_elts = 1;
+    int first_packed_dim = dims->size - packing->packed_minor_dims;
+    for ( int dim = first_packed_dim; dim < dims->size; ++dim) {
+      packed_dims_elts *= dims->data[dim];
+    }
+    AsymmetricQuantizePacked(input, quantized, input_size, packed_dims_elts, scale, zero_point, packing);
+  } else {
+    tflite::AsymmetricQuantize(input, quantized, input_size, scale, zero_point);
+  }
+  
+  return CreateQuantizedTensor(quantized, dims, scale, zero_point, is_variable);
+}
+
 TfLiteTensor CreateQuantizedBiasTensor(const float* data, int32_t* quantized,
                                        TfLiteIntArray* dims, float input_scale,
                                        float weights_scale, bool is_variable) {
@@ -1000,6 +1066,9 @@ TfLiteTensor CreateSymmetricPerChannelQuantizedTensor(
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   return result;
 }
+
+
+
 
 }  // namespace testing
 }  // namespace tflite

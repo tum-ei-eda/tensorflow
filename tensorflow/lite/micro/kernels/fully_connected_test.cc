@@ -76,6 +76,8 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
   return packed_data;
 }
 
+
+
 static void SetPackingParams(TfLiteTensor& tensor, float min, float max,
                              TfLiteCustomSub8BitPackingDetails* format) {
   tensor.params.scale = ScaleFromMinMaxPacked(min, max, format->bits_per_item);

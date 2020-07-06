@@ -203,11 +203,6 @@ TfLiteStatus PrepareImpl(TfLiteContext* context, TfLiteNode* node) {
     TF_LITE_ENSURE_EQ(context, output->params.zero_point, 0);
   }
 
-  //
-  // If we have packed quantized filter weights (currently coded as a 
-  // custom quantizatino) check it is supported.
-  //
-
   // If we have to perform on-the-fly quantization (with quantized weights and
   // float inputs) first we need to quantize the inputs. Allocate a temporary
   // buffer to store the intermediate quantized values.

@@ -153,10 +153,19 @@ TfLiteTensor CreateQuantizedTensor(const int16_t* data, TfLiteIntArray* dims,
                                    float scale, int zero_point,
                                    bool is_variable = false);
 
+
+TfLiteTensor CreateQuantizedTensor(const float* input, uint8_t* quantized,
+                                   TfLiteIntArray* dims, 
+                                   TfLiteCustomSub8BitPackingDetails* packing,
+                                   float scale,
+                                   int zero_point, 
+                                   bool is_variable = false);
+
 template <typename T>
 TfLiteTensor CreateQuantizedTensor(const float* input, T* quantized,
                                    TfLiteIntArray* dims, float scale,
-                                   int zero_point, bool is_variable = false) {
+                                   int zero_point, 
+                                   bool is_variable = false) {
   int input_size = ElementCount(*dims);
   tflite::AsymmetricQuantize(input, quantized, input_size, scale, zero_point);
   return CreateQuantizedTensor(quantized, dims, scale, zero_point, is_variable);

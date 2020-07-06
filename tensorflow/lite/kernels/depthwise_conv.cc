@@ -31,6 +31,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_float.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
+#include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8_packed_filter.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
@@ -80,13 +81,19 @@ struct OpData {
   int32_t input_quantized_index;
   int32_t scaling_factors_index;
   int32_t input_offset_index;
+
+  // Some geometry/type specific variants need additional scatch space.
+  void *variants_data;
 };
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   // This is a builtin op, so we don't use the contents in 'buffer', if any.
   // Instead, we allocate a new object to carry information from Prepare() to
   // Eval().
-  return new OpData;
+  auto op_data = new OpData;
+  op_data->variants_data = nullptr;
+  return op_data;
+
 }
 
 void Free(TfLiteContext* context, void* buffer) {
@@ -345,7 +352,15 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.quantized_activation_max = data->output_activation_max;
   TF_LITE_ENSURE_STATUS(ComputeDepthMultiplier(context, input, filter,
                                                &op_params.depth_multiplier));
-  if (kernel_type == kReference) {
+  
+  // @IFX_PATCH@
+  if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+    reference_ops::DepthwiseConvPackedFilter( op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
+        GetTensorShape(filter), GetTensorData<void>(filter),
+        GetTensorShape(bias), GetTensorData<int32_t>(bias),
+        GetTensorShape(output), GetTensorData<uint8_t>(output),
+        *filter->quantization.details.data.custom_sub8bit_packing);
+  } else if (kernel_type == kReference) {
     reference_ops::DepthwiseConv(
         op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
         GetTensorShape(filter), GetTensorData<uint8_t>(filter),
