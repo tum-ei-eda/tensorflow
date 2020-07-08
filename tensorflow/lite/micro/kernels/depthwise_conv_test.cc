@@ -281,8 +281,8 @@ void TestDepthwiseConvQuantizedPerChannel(
 }  // namespace testing
 }  // namespace tflite
 
-TF_LITE_MICRO_TESTS_BEGIN
 
+TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(SimpleTest) {
   const int input_elements = 12;
@@ -1107,7 +1107,7 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPacked6Bit) {
   const float input_scale = 0.5f;
   const int input_zero_point = 128;
   const float filter_scale = 0.5f;
-  const int filter_zero_point = 128;
+  const int filter_zero_point = 32;
   const float output_scale = 1.0f;
   const int output_zero_point = 128;
 

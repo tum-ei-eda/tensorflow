@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # Copyright 2018 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,12 +30,18 @@ ERROR_MSG="$1: FAIL - '$2' not found in logs."
 print_error_and_exit() {
   echo ${ERROR_MSG}
   cat ${MICRO_LOG_FILENAME}
-  exit 1
+  if [ -n "$TFLITE_RUN_ALL" ]
+  then
+      echo CONTINUING...
+      exit 0
+  else
+      exit 1
+  fi
 }
 
 # This traps the signal from the test binary ($1) and checks if there was a
 # segfault and adds that to the error log (which would otherwise be missing).
-trap 'if [[ $? -eq 139 ]]; then echo "Segmentation fault" >> ${MICRO_LOG_FILENAME}; print_error_and_exit; fi' CHLD
+trap 'echo foo ; if [[ $? -eq 139 ]]; then echo "Segmentation fault" >> ${MICRO_LOG_FILENAME}; print_error_and_exit; fi' CHLD
 
 # This trap statement prevents the bash script from segfaulting with a cryptic
 # message like:

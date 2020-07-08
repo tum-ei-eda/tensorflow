@@ -93,6 +93,7 @@ struct DepthwiseConvPackedFilter {
           // not be completely full.
           const CONTAINER_T *filter_channel_vals_p = filter_data;
           CONTAINER_T filter_vals = 0;
+          std::fill(accbuf, accbuf+output_depth, 0);
           for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
    
@@ -113,37 +114,36 @@ struct DepthwiseConvPackedFilter {
                       filter_vals = *filter_vals_container_p;
                       ++filter_vals_container_p;
                     }
-                    // Assertion to cross-check addresses?
-                    //int32 filter_val = filter_data[Offset(
-                    //    filter_shape, 0, filter_y, filter_x, oc)];
                     int32 filter_val = (filter_vals & mask);
-                    filter_val >>= bits_per_item;
+                    filter_vals >>= bits_per_item;
                     accbuf[oc] += (filter_val + filter_offset) *
                            (input_val + input_offset);
                   }
                 }
               }
               filter_channel_vals_p += output_container_depth;
-
-              for (unsigned int oc =0; oc < output_depth; ++oc) {
-                int32 acc = accbuf[oc];
-                if (bias_data) {
-                  acc += bias_data[oc];
-                }
-                acc = DepthwiseConvRound<output_rounding>(acc, output_multiplier,
-                                                          output_shift);
-                acc += output_offset;
-                acc = std::max(acc, output_activation_min);
-                acc = std::min(acc, output_activation_max);
-                output_data[Offset(output_shape, b, out_y, out_x, oc)] =
-                    static_cast<uint8>(acc);
-              }
             }
           }
+
+          for (unsigned int oc =0; oc < output_depth; ++oc) {
+            int32 acc = accbuf[oc];
+            if (bias_data) {
+              acc += bias_data[oc];
+            }
+            acc = DepthwiseConvRound<output_rounding>(acc, output_multiplier,
+                                                      output_shift);
+            acc += output_offset;
+            acc = std::max(acc, output_activation_min);
+            acc = std::min(acc, output_activation_max);
+            output_data[Offset(output_shape, b, out_y, out_x, oc)] =
+                static_cast<uint8>(acc);
+          }
+
         }
       }
     }
   }
+
 };
 
 }  // namespace depthwise_conv
