@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
+
 namespace tflite {
 namespace ops {
 namespace micro {
@@ -255,6 +256,7 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
         GetTensorShape(output), GetTensorData<uint8_t>(output));
   }
 }
+
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   TFLITE_DCHECK(node->user_data != nullptr);
