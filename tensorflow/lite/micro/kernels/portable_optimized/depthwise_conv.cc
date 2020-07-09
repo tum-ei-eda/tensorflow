@@ -155,36 +155,35 @@ inline void PrecomputeSumOfPackedFiltersFactor(const int32* bias, const TfLiteTe
     sum_of_filters_factor[out_channel] = filter_size * filter_offset;
   }
 
-    int32_t sum_of_filter_factor = filter_size * filter_offset;
-
-    for (int filter_coord = 0; filter_coord < filter_size ; ++filter_coord ) {
-      for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
-        if( bits_in_container < packing_details.bits_per_item ) {
-          container = 0;
-          switch( packing_details.container_bits ) {
-            case 32u:
-              container = *reinterpret_cast<const uint32_t *>(filter_byte_p);
-              filter_byte_p += 4;
-              break;
-            case 16u:
-              container = *reinterpret_cast<const uint16_t *>(filter_byte_p);
-              filter_byte_p += 2;
-              break;
-            case 8u:
-              container = *filter_byte_p;
-              filter_byte_p += 1;
-              break;
-            default:
-              TFLITE_ASSERT_FALSE;
-          }
-          bits_in_container = packing_details.container_bits;
+  for (int filter_coord = 0; filter_coord < filter_size ; ++filter_coord ) {
+    for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
+      if( bits_in_container < packing_details.bits_per_item ) {
+        container = 0;
+        switch( packing_details.container_bits ) {
+          case 32u:
+            container = *reinterpret_cast<const uint32_t *>(filter_byte_p);
+            filter_byte_p += 4;
+            break;
+          case 16u:
+            container = *reinterpret_cast<const uint16_t *>(filter_byte_p);
+            filter_byte_p += 2;
+            break;
+          case 8u:
+            container = *filter_byte_p;
+            filter_byte_p += 1;
+            break;
+          default:
+            TFLITE_ASSERT_FALSE;
         }
-        uint32_t filter_val = (container & mask);
-        sum_of_filters_factor[out_channel] += filter_val;
-        container >>= packing_details.bits_per_item;
+        bits_in_container = packing_details.container_bits;
       }
-      bits_in_container = 0;
+      uint32_t filter_val = (container & mask);
+      sum_of_filters_factor[out_channel] += filter_val;
+      container >>= packing_details.bits_per_item;
+      bits_in_container -= packing_details.bits_per_item;
     }
+    bits_in_container = 0;
+  }
 
 
   for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
