@@ -187,12 +187,6 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
 
   const T* output_data = tflite::GetTensorData<T>(&tensors[kOutputTensorIndex]);
   for (int i = 0; i < output_length; ++i) {
-    auto vx = expected_output_data[i];
-    auto vy = output_data[i];
-    auto delta = ((vx) > (vy)) ? ((vx) - (vy)) : ((vy) - (vx));
-    if (delta > tolerance) {
-      std::cout << i << ",";
-    }
     TF_LITE_MICRO_EXPECT_NEAR(expected_output_data[i], output_data[i],
                               tolerance);
   }
@@ -266,10 +260,6 @@ TF_LITE_MICRO_TESTS_BEGIN
 
 
 TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
-
-  using tflite::testing::F2Q;
-  using tflite::testing::F2Q32;
-  using tflite::testing::F2QB;
   using tflite::testing::ZeroPointFromMinMax;
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
@@ -309,10 +299,6 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
 }
 
 TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights5Bit) {
-
-  using tflite::testing::F2Q;
-  using tflite::testing::F2Q32;
-  using tflite::testing::F2QB;
   using tflite::testing::ZeroPointFromMinMax;
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
@@ -352,10 +338,6 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights5Bit) {
 }
 
 TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights6Bit) {
-
-  using tflite::testing::F2Q;
-  using tflite::testing::F2Q32;
-  using tflite::testing::F2QB;
   using tflite::testing::ZeroPointFromMinMax;
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
@@ -393,5 +375,405 @@ TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights6Bit) {
       golden_quantized, tflite::testing::kOutputShape, output_data, output_scale,
       output_zero_point, tflite::testing::common_depthwise_conv_params, &packing, weights_min, weights_max);
 }
+
+TF_LITE_MICRO_TEST(DepthwiseConv4BitWithPadding) {
+  const int input_elements = 9;
+  const int input_shape[] = {4, 1, 3, 3, 1};
+  const float input_values[] = {1, 1, 1, 2, 2, 2, 3, 3, 3};
+  const int filter_elements = 18;
+  const int filter_shape[] = {4, 1, 3, 3, 2};
+  const float filter_values[] = {1, 4, 1, 4, 1, 4, 2, 5, 2,
+                                5, 2, 5, 3, 6, 3, 6, 3, 6};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {17, 36, 25, 53, 17, 36,
+                          29, 66, 43, 98, 29, 66,
+                          17, 48, 25, 71, 17, 48};
+
+  const int output_shape[] = {4, 1, 3, 3, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams padding_depthwise_conv_params = {
+      kTfLitePaddingSame,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -1.5f;
+  float weights_max = 6.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, padding_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConv5BitWithPadding) {
+  const int input_elements = 9;
+  const int input_shape[] = {4, 1, 3, 3, 1};
+  const float input_values[] = {1, 1, 1, 2, 2, 2, 3, 3, 3};
+  const int filter_elements = 18;
+  const int filter_shape[] = {4, 1, 3, 3, 2};
+  const float filter_values[] = {1, 4, 1, 4, 1, 4, 2, 5, 2,
+                                5, 2, 5, 3, 6, 3, 6, 3, 6};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {17, 36, 25, 53, 17, 36,
+                          29, 66, 43, 98, 29, 66,
+                          17, 48, 25, 71, 17, 48};
+
+  const int output_shape[] = {4, 1, 3, 3, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams padding_depthwise_conv_params = {
+      kTfLitePaddingSame,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -1.75f;
+  float weights_max = 6.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, padding_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConv6BitWithPadding) {
+  const int input_elements = 9;
+  const int input_shape[] = {4, 1, 3, 3, 1};
+  const float input_values[] = {1, 1, 1, 2, 2, 2, 3, 3, 3};
+  const int filter_elements = 18;
+  const int filter_shape[] = {4, 1, 3, 3, 2};
+  const float filter_values[] = {1, 4, 1, 4, 1, 4, 2, 5, 2,
+                                5, 2, 5, 3, 6, 3, 6, 3, 6};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {17, 36, 25, 53, 17, 36,
+                          29, 66, 43, 98, 29, 66,
+                          17, 48, 25, 71, 17, 48};
+
+  const int output_shape[] = {4, 1, 3, 3, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams padding_depthwise_conv_params = {
+      kTfLitePaddingSame,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -1.875f;
+  float weights_max = 6.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, padding_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConv4BitWithStride2) {
+  const int input_elements = 16;
+  const int input_shape[] = {4, 1, 4, 4, 1};
+  const float input_values[] = {1, 1, 1, 1,
+                                2, 2, 2, 2,
+                                3, 3, 3, 3,
+                                4, 4, 4, 4};
+  const int filter_elements = 8;
+  const int filter_shape[] = {4, 1, 2, 2, 2};
+  const float filter_values[] = {1, 4, 1, 4,
+                                 -3, 2, -3, 3};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {-9, 20, -9, 20, -17, 46, -17, 46};
+
+  const int output_shape[] = {4, 1, 2, 2, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams stride_depthwise_conv_params = {
+      kTfLitePaddingValid,  /* Padding */
+      2,                    /* Stride Width */
+      2,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, stride_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConv4BitWithStride2Relu) {
+  const int input_elements = 16;
+  const int input_shape[] = {4, 1, 4, 4, 1};
+  const float input_values[] = {1, 1, 1, 1,
+                                2, 2, 2, 2,
+                                3, 3, 3, 3,
+                                4, 4, 4, 4};
+  const int filter_elements = 8;
+  const int filter_shape[] = {4, 1, 2, 2, 2};
+  const float filter_values[] = {1, 4, 1, 4,
+                                 -3, 2, -3, 3};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {0, 20, 0, 20, 0, 46, 0, 46};
+
+  const int output_shape[] = {4, 1, 2, 2, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams stride_depthwise_conv_params = {
+      kTfLitePaddingValid,  /* Padding */
+      2,                    /* Stride Width */
+      2,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActRelu,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, stride_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConv4BitWithDilation2) {
+  const int input_elements = 16;
+  const int input_shape[] = {4, 1, 4, 4, 1};
+  const float input_values[] = {1, 1, 1, 1,
+                                2, 2, 2, 2,
+                                3, 3, 3, 3,
+                                4, 4, 4, 4};
+  const int filter_elements = 8;
+  const int filter_shape[] = {4, 1, 2, 2, 2};
+  const float filter_values[] = {1, 4, 1, 4,
+                                 -3, 2, -3, 3};
+  const int bias_elements = 2;
+  const int bias_shape[] = {4, 1, 1, 1, 2};
+  const int output_elements = 18;
+  const float bias_values[] = {1, 2};
+  const float golden[] = {-15, 25, -15, 25, -19, 38, -19, 38};
+
+  const int output_shape[] = {4, 1, 2, 2, 2};
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams dilation_depthwise_conv_params = {
+      kTfLitePaddingValid,  /* Padding */
+      1,                    /* Stride Width */
+      1,                    /* Stride Height */
+      2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      2,                    /* Dilation Width*/
+      2                     /* Dilation Height */
+  };
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  const int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1 /* Packed dimension needs to be 1 */};
+
+  tflite::AsymmetricQuantize(filter_values, filter_quantized,
+                             filter_elements, filter_scale, filter_zero_point);
+
+  auto packed_weights =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * filter_elements, 2, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, reinterpret_cast<const uint8_t*>(packed_weights.data()), filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, dilation_depthwise_conv_params, &packing, weights_min, weights_max);
+}
+
 
 TF_LITE_MICRO_TESTS_END

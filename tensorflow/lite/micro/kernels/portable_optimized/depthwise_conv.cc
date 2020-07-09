@@ -593,7 +593,6 @@ struct DepthwiseConvPacked {
               if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
                   (in_y < input_height)) {
 
-                    
                 unsigned int input_channel = 0;
                 unsigned int output_channel = 0;
                 // Full containers ...
@@ -629,6 +628,12 @@ struct DepthwiseConvPacked {
                       ++input_p;
                     }
                   }
+                }
+              } else {
+                // In case of padding, we need to increment the container count for next iteration
+                filter_vals_container_p += num_packed_containers;
+                if (elts_partial_container) {
+                  filter_vals_container_p++;
                 }
               }
             }
@@ -1255,7 +1260,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
               GetTensorShape(output), GetTensorData<uint8_t>(output));
         }
       }  else if ((filter_width == 8) && (input_offset == 0) && (input_depth == 1) &&
-          (needed_size <= kReshapedFilterDataSize)) {
+          (needed_size <= kReshapedFilterDataSize) && (filter->quantization.details.type != kTfLiteSub8BitPackedUniformDetail)) {
         // Use the optimized version if possible
         DepthwiseConvOptimizedForFilterWidthEight(
             context, op_params, &data, GetTensorShape(input),
