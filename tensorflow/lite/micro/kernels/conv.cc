@@ -20,6 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/conv.h"
+#include "tensorflow/lite/kernels/internal/reference/conv_packed_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
@@ -193,12 +194,20 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.output_shift = -data.output_shift;
   op_params.quantized_activation_min = data.output_activation_min;
   op_params.quantized_activation_max = data.output_activation_max;
-  reference_ops::Conv(op_params, GetTensorShape(input),
-                      GetTensorData<uint8_t>(input), GetTensorShape(filter),
-                      GetTensorData<uint8_t>(filter), GetTensorShape(bias),
-                      GetTensorData<int32_t>(bias), GetTensorShape(output),
-                      GetTensorData<uint8_t>(output), GetTensorShape(im2col),
-                      GetTensorData<uint8_t>(im2col), nullptr);
+
+  if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
+    reference_ops::EvalConvQuantizedPacked(
+            op_params,
+            input, filter, bias, output, context,
+            *filter->quantization.details.data.custom_sub8bit_packing);
+  } else {
+    reference_ops::Conv(op_params, GetTensorShape(input),
+                        GetTensorData<uint8_t>(input), GetTensorShape(filter),
+                        GetTensorData<uint8_t>(filter), GetTensorShape(bias),
+                        GetTensorData<int32_t>(bias), GetTensorShape(output),
+                        GetTensorData<uint8_t>(output), GetTensorShape(im2col),
+                        GetTensorData<uint8_t>(im2col), nullptr);
+  }
 }
 
 void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,

@@ -12,6 +12,7 @@
 #include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/types.h"
+#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 
 namespace tflite {
 namespace reference_ops {
@@ -176,7 +177,6 @@ TfLiteStatus EvalConvQuantizedPacked(
 
 }  // namespace reference_ops
 }  // namespace tflite
-
 
 
 #endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_CONV_PACKED_OPS_H_ */
