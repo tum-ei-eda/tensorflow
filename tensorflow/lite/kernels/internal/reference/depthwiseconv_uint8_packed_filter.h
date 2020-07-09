@@ -80,7 +80,6 @@ struct DepthwiseConvPackedFilter {
     const int32 mask = (1<<bits_per_item)-1;
 
     for (int b = 0; b < batches; ++b) {
-      const uint32_t input_offset0 = in_dims[1] * b;
       for (int out_y = 0; out_y < output_height; ++out_y) {
         for (int out_x = 0; out_x < output_width; ++out_x) {
           const int in_x_origin = (out_x * stride_width) - pad_width;
@@ -92,11 +91,9 @@ struct DepthwiseConvPackedFilter {
 
           for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
-            const uint32_t input_offset1 = in_dims[2] * (input_offset0 + in_y);
 
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
               const int in_x = in_x_origin + dilation_width_factor * filter_x;
-              const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
 
               // If the location is outside the bounds of the input image,
               // use zero as a default value.
@@ -110,7 +107,7 @@ struct DepthwiseConvPackedFilter {
                   int number_elements_in_container = std::min(output_depth - channel_container * items_per_container, items_per_container);
                   for (int element = 0; element < number_elements_in_container; element++) {
                     const unsigned int output_channel = channel_container*items_per_container + element;
-                    int32 input_val = input_data[input_offset2 + input_channel];
+                    int32 input_val = input_data[Offset(input_shape, b, in_y, in_x, input_channel)];
                     int32 filter_val = filter_vals & mask;
                     filter_vals >>= bits_per_item;
                     accbuf[output_channel] += (filter_val + filter_offset) * (input_val + input_offset);

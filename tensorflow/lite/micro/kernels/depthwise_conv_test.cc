@@ -258,8 +258,8 @@ void TestDepthwiseConvQuantizedPerChannel(
 }  // namespace testing
 }  // namespace tflite
 
-TF_LITE_MICRO_TESTS_BEGIN
 
+TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(SimpleTest) {
   const int input_elements = 12;
