@@ -30,6 +30,6 @@ extern bool strip_debug_info;
 
 // TODO temporary pending implementation of post-processing filter for
 // target-specific packing.
-bool experimental_pack_packable_quantized_constants;
+extern bool experimental_pack_packable_quantized_constants;
 
 #endif  // TENSORFLOW_COMPILER_MLIR_LITE_FLATBUFFER_EXPORT_FLAGS_H_
