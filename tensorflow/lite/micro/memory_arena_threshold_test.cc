@@ -61,9 +61,9 @@ constexpr int kTestConvModelTensorCount = 15;
 constexpr int kTestConvModelNodeAndRegistrationCount = 7;
 
 // NOTE: These values are measured on x86-64 and x86
-constexpr int kTestConvModelTotalSize = kIs64BitSystem ? 11680 : 10512;
+constexpr int kTestConvModelTotalSize = kIs64BitSystem ? 11920 : 10512;
 constexpr int kTestConvModelHeadSize = kIs64BitSystem ? 7744 : 7744;
-constexpr int kTestConvModelTailSize = kIs64BitSystem ? 3936 : 2768;
+constexpr int kTestConvModelTailSize = kIs64BitSystem ? 4176 : 2768;
 constexpr int kTestConvModelTfLiteTensorQuantizationDataSize =  kIs64BitSystem ? 768 : 608;
 constexpr int kTestConvModelOpRuntimeDataSize = 136;
 
