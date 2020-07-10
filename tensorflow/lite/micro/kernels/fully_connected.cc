@@ -20,7 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
-#include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected_packed_weights.h"
+#include "tensorflow/lite/micro/kernels/fully_connected_packed_weights.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
@@ -147,7 +147,7 @@ inline void EvalFullyConnectedUint8PackedWeights(
     auto output_data = GetTensorData<uint8>(output);
 
     // here could "Intercept" arguments for offlikne pre-interpretation
-    return reference_integer_ops::FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
+    return FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
             params,
             input_shape, input_data,
             filter_shape, filter_data,

@@ -68,7 +68,7 @@ static const float output_scale = 1.0f;
 static int zero_points[kBiasElements + 1];
 static float scales[kBiasElements + 1];
 
-static const int benchmarking_iterations = 5;
+static const int benchmarking_iterations = 1;
 
 
 static TfLiteConvParams common_conv_params = {
@@ -79,12 +79,6 @@ static TfLiteConvParams common_conv_params = {
     1,                    // dilation_width_factor
     1,                    // dilation_height_factor
 };
-
-MockAllocator *mock_allocator;
-TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
-{
-  return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
-}
 
 void InitConvTestDataQuantized(const int filter_size, const int output_channels,
                            const int input_channels, const int batches, const int input_size,
@@ -215,14 +209,6 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
 
-  // Memory allocation mock
-  const size_t buffer_arena_size = 1024;
-  const size_t bytes_alignment = 4;
-  uint8_t buffer_arena[buffer_arena_size];
-  mock_allocator = new MockAllocator(buffer_arena, buffer_arena_size, bytes_alignment);
-  context.AllocatePersistentBuffer = AllocatePersistentBuffer;
-
-
   ::tflite::AllOpsResolver resolver;
 
   const TfLiteRegistration* registration =
@@ -260,6 +246,7 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
   }
 
   // Start main benchmarking loop
+  // Increase the variable benchmarking_iterations to make result representative
   auto start = std::chrono::high_resolution_clock::now();
 
   for (int i = 0; i < benchmarking_iterations; i++) {

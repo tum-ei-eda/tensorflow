@@ -31,8 +31,8 @@ limitations under the License.
 #include "tensorflow/lite/micro/memory_planner/memory_planner.h"
 #include "tensorflow/lite/micro/micro_op_resolver.h"
 #include "tensorflow/lite/micro/simple_memory_allocator.h"
-#include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/experimental/custom_quantization_util.h"
+#include "tensorflow/lite/schema/schema_generated.h"
 
 namespace tflite {
 
@@ -285,7 +285,7 @@ TfLiteStatus AllocationInfoBuilder::AddTensors(const SubGraph* subgraph,
 // Model. The following encoding applies:
 //
 // | Metadata component |                 Value                                |
-// |    name:string     | “OfflineMemoryAllocation”                            |
+// |    name:string     | OfflineMemoryAllocation                            |
 // |    buffer:unit     | Index of buffer containing memory allocation data    |
 //
 // The buffer contents for the memory allocation is a list of 32-bit integers.

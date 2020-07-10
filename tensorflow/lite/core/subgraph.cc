@@ -1092,7 +1092,7 @@ TfLiteStatus Subgraph::SetTensorParametersReadOnly(
   // @IFX_PATCH@
   // TODO extend to invoke size checker for recognised quantization detail types.
    
-  if (type != kTfLiteString && sparsity == nullptr && quantization.details.type == kTfLiteNoDetails) {
+  if (type != kTfLiteString && sparsity == nullptr && quantization.details.type != kTfLiteSub8BitPackedUniformDetail) {
     size_t required_bytes;
     TF_LITE_ENSURE_OK(&context_,
                       BytesRequired(type, dims, rank, &required_bytes));

@@ -18,6 +18,7 @@ limitations under the License.
 #include "tensorflow/lite/micro/examples/packed_weights/hello_world_packed_4.h"
 #include "tensorflow/lite/micro/examples/packed_weights/hello_world_packed_5.h"
 #include "tensorflow/lite/micro/examples/packed_weights/hello_world_packed_6.h"
+#include "tensorflow/lite/micro/examples/packed_weights/hello_world_2x4in8.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -55,6 +56,7 @@ void run_model( const uint8_t *model_fb, float refdata[][3] ) {
                          "to supported version %d.\n",
                          model->version(), TFLITE_SCHEMA_VERSION);
   }
+
 
 // This pulls in all the operation implementations we need
   tflite::AllOpsResolver resolver;

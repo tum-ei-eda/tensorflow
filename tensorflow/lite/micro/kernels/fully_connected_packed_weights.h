@@ -12,16 +12,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_INETEGER_OPS_FULLY_CONNECTED_PACKED_WEIGHTS_H_
-#define TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_INETEGER_OPS_FULLY_CONNECTED_PACKED_WEIGHTS_H_
+#ifndef TENSORFLOW_LITE_MICRO_FULLY_CONNECTED_PACKED_WEIGHTS_H_
+#define TENSORFLOW_LITE_MICRO_FULLY_CONNECTED_PACKED_WEIGHTS_H_
 
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/cppmath.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/types.h"
+#include "tensorflow/lite/c/builtin_op_data.h"
 
 namespace tflite {
-namespace reference_integer_ops {
+namespace ops {
+namespace micro {
 
 
 
@@ -144,8 +146,9 @@ void FullyConnectedUint8PackedWeights(
   }
 }
 
-
-}  // namespace reference_integer_ops
+}  // namespace micro
+}  // namespace ops
 }  // namespace tflite
 
-#endif  // TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_INETEGER_OPS_FULLY_CONNECTED_PACKED_WEIGHTS_H_
+
+#endif  // TENSORFLOW_LITE_MICRO_FULLY_CONNECTED_PACKED_WEIGHTS_H_

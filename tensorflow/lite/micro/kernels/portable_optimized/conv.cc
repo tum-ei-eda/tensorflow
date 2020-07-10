@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
+#include "tensorflow/lite/kernels/internal/reference/conv_packed_ops.h"
 
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
@@ -196,8 +197,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     // Precompute the sum of filters
     const int32_t input_offset = -input->params.zero_point;
     if (filters->type == kTfLiteUInt8) {
-      PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
-        filter_shape, input_offset, filter_offset);
+      if (filters->quantization.details.type != kTfLiteSub8BitPackedUniformDetail) {
+        PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
+          filter_shape, input_offset, filter_offset);
+      }
     }
     else {
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
@@ -595,6 +598,10 @@ void EvalQuantizedPerChannelWithPadding(TfLiteContext* context, TfLiteNode* node
   }
 }
 
+
+
+
+
 void EvalFloat(TfLiteContext* context, TfLiteNode* node,
                TfLiteConvParams* params, OpData* data,
                const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -651,6 +658,39 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
                       affine_quantization->zero_point->size);
   }
 
+  ConvParams op_params;
+  op_params.padding_type = RuntimePaddingType(params->padding);
+  op_params.padding_values.width = data->padding.width;
+  op_params.padding_values.height = data->padding.height;
+  op_params.stride_width = params->stride_width;
+  op_params.stride_height = params->stride_height;
+  op_params.dilation_width_factor = params->dilation_width_factor;
+  op_params.dilation_height_factor = params->dilation_height_factor;
+  op_params.input_offset = -input->params.zero_point;
+  op_params.weights_offset = -filter->params.zero_point;
+  op_params.output_offset = output->params.zero_point;
+  op_params.output_multiplier = data->output_multiplier;
+  op_params.output_shift = -data->output_shift;
+  op_params.quantized_activation_min = data->output_activation_min;
+  op_params.quantized_activation_max = data->output_activation_max;
+
+  TfLiteTensor* im2col;
+#define TF_LITE_CONV_2D_PER_CHANNEL(func_c, data_type)                                  \
+  func_c(                                                                               \
+      op_params, data->per_channel_output_multiplier, data->per_channel_output_shift, \
+      GetTensorShape(input), GetTensorData<data_type>(input),                         \
+      GetTensorShape(filter), GetTensorData<data_type>(filter),                       \
+      GetTensorShape(bias), GetTensorData<int32_t>(bias),                             \
+      GetTensorShape(output), GetTensorData<data_type>(output))
+
+#define TF_LITE_CONV_2D_PER_LAYER(func_l, data_type)                                    \
+  func_l(                                                                               \
+      op_params, GetTensorShape(input), GetTensorData<data_type>(input),              \
+      GetTensorShape(filter), GetTensorData<data_type>(filter),                       \
+      GetTensorShape(bias), GetTensorData<int32_t>(bias),                             \
+      GetTensorShape(output), GetTensorData<data_type>(output),                       \
+      GetTensorShape(im2col), GetTensorData<data_type>(im2col), nullptr)
+
   switch (input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
     {
@@ -663,25 +703,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_width_factor = params->dilation_width_factor;
       const int dilation_height_factor = params->dilation_height_factor;
       if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
-        ConvParams op_params;
-        op_params.input_offset = -input->params.zero_point;
-        op_params.output_offset = output->params.zero_point;
-        op_params.stride_height = params->stride_height;
-        op_params.stride_width = params->stride_width;
-        op_params.dilation_height_factor = params->dilation_height_factor;
-        op_params.dilation_width_factor = params->dilation_width_factor;
-        op_params.padding_values.height = data->padding.height;
-        op_params.padding_values.width = data->padding.width;
-        op_params.quantized_activation_min = data->output_activation_min;
-        op_params.quantized_activation_max = data->output_activation_max;
-
-        reference_integer_ops::ConvPerChannel(
-              op_params, data->per_channel_output_multiplier,
-              data->per_channel_output_shift, GetTensorShape(input),
-              GetTensorData<int8>(input), GetTensorShape(filter),
-              GetTensorData<int8>(filter), GetTensorShape(bias),
-              GetTensorData<int32>(bias), GetTensorShape(output),
-              GetTensorData<int8>(output));
+        TF_LITE_CONV_2D_PER_CHANNEL(reference_integer_ops::ConvPerChannel, int8_t);
       }
       else if (data->padding.height != 0 || data->padding.width != 0) {
         EvalQuantizedPerChannelWithPadding(context, node, params, data, data->per_channel_output_multiplier, data->per_channel_output_shift,
@@ -698,29 +720,13 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_width_factor = params->dilation_width_factor;
       const int dilation_height_factor = params->dilation_height_factor;
 
-      if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
-        ConvParams op_params;
-        op_params.padding_type = RuntimePaddingType(params->padding);
-        op_params.padding_values.width = data->padding.width;
-        op_params.padding_values.height = data->padding.height;
-        op_params.stride_width = params->stride_width;
-        op_params.stride_height = params->stride_height;
-        op_params.dilation_width_factor = params->dilation_width_factor;
-        op_params.dilation_height_factor = params->dilation_height_factor;
-        op_params.input_offset = -input->params.zero_point;
-        op_params.weights_offset = -filter->params.zero_point;
-        op_params.output_offset = output->params.zero_point;
-        op_params.output_multiplier = data->output_multiplier;
-        op_params.output_shift = -data->output_shift;
-        op_params.quantized_activation_min = data->output_activation_min;
-        op_params.quantized_activation_max = data->output_activation_max;
-        TfLiteTensor* im2col;
-        reference_ops::Conv(op_params, GetTensorShape(input),
-                            GetTensorData<uint8_t>(input), GetTensorShape(filter),
-                            GetTensorData<uint8_t>(filter), GetTensorShape(bias),
-                            GetTensorData<int32_t>(bias), GetTensorShape(output),
-                            GetTensorData<uint8_t>(output), GetTensorShape(im2col),
-                            GetTensorData<uint8_t>(im2col), nullptr);
+      if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
+        return reference_ops::EvalConvQuantizedPacked(
+                op_params,
+                input, filter, bias, output, context,
+                *filter->quantization.details.data.custom_sub8bit_packing);
+      } else if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
+        TF_LITE_CONV_2D_PER_LAYER(reference_ops::Conv, uint8_t);
       }
       else if (data->padding.height != 0 || data->padding.width != 0) {
         EvalQuantizedWithPadding(context, node, params, data, input, filter, bias, nullptr, nullptr, output);

@@ -191,10 +191,12 @@ else
 fi
 
 BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate )
+
 if [ -n "$WITH_PIP" ]
 then
     BAZEL_TARGETS=( "${BAZEL_TARGETS[@]}" //tensorflow/tools/pip_package:build_pip_package )
 fi
+
 if [ -z "$NOBUILD" ]
 then
     # Some useful recipes from the past... comment out in case needed

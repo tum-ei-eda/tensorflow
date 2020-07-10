@@ -328,7 +328,8 @@ typedef enum TfLiteQuantizationDetailsType {
 
   kTfLiteNoDetails,
   kTfLiteUnknownDetails,
-  kTfLiteSub8BitPackedUniformDetail,
+  kTfLiteSub8BitPackableUniformDetail,    // Potentially packable
+  kTfLiteSub8BitPackedUniformDetail,      // TODO Temporary scaffolding while packing in converter.
 
 } TfLiteQuantizationDetailsType;
 

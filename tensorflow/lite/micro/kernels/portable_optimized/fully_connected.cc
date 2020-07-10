@@ -22,6 +22,12 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/kernels/fully_connected_packed_weights.h"
+
+//#define IFX_DEBUG_LOGGING 1
+#if IFX_DEBUG_LOGGING
+#include <iostream>
+#endif
 
 namespace tflite {
 namespace ops {
@@ -41,7 +47,7 @@ struct OpData {
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
   // A buffer containing the sum-of-weights factor
-  int32 *sum_of_weights_factor;
+  int32* sum_of_weights_factor;
 };
 
 constexpr int kInputTensor = 0;
@@ -73,216 +79,364 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
 }  // namespace
 
 template <typename T>
-inline void PrecomputeSumOfWeightsFactor(const int32* bias, const T *weights, int32_t *sum_of_weights_factor,
-		int cols, int rows, int32_t weights_offset, int32_t input_offset) {
-	for (int row = 0; row < rows; row++) {
-		int32_t sum_of_weights = 0;
-		for (int col = 0; col < cols; col++) {
-			sum_of_weights += weights[col];
-		}
-		weights += cols;
-		sum_of_weights_factor[row] = (sum_of_weights + cols * weights_offset) * input_offset;
-		if (bias) {
-			sum_of_weights_factor[row] += bias[row];
-		}
-	}
+inline void PrecomputeSumOfWeightsFactor(const int32* bias, const T* weights,
+                                         int32_t* sum_of_weights_factor,
+                                         int cols, int rows,
+                                         int32_t weights_offset,
+                                         int32_t input_offset) {
+  for (int row = 0; row < rows; row++) {
+    int32_t sum_of_weights = 0;
+    for (int col = 0; col < cols; col++) {
+      sum_of_weights += weights[col];
+    }
+    weights += cols;
+    sum_of_weights_factor[row] =
+        (sum_of_weights + cols * weights_offset) * input_offset;
+    if (bias) {
+      sum_of_weights_factor[row] += bias[row];
+    }
+  }
 }
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
-    void* raw;
-    context->AllocatePersistentBuffer(context, sizeof(OpData), &raw);
-    OpData* data = reinterpret_cast<OpData*>(raw);
-    *data = {};
-    return raw;
+  void* raw;
+  context->AllocatePersistentBuffer(context, sizeof(OpData), &raw);
+  OpData* data = reinterpret_cast<OpData*>(raw);
+  *data = {};
+  return raw;
 }
 
 void Free(TfLiteContext* context, void* buffer) {}
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-	const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
+  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
 
-	if (weights->type == kTfLiteInt8 || weights->type == kTfLiteUInt8) {
+  if (weights->type == kTfLiteInt8 || weights->type == kTfLiteUInt8) {
+    // Calculate data for quantized operation
+    OpData* data = reinterpret_cast<OpData*>(node->user_data);
+    auto* params =
+        reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
+    const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+    const TfLiteTensor* bias =
+        GetOptionalInputTensor(context, node, kBiasTensor);
+    TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+    TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, input->type, input,
+                                          weights, bias, output, data));
+    // Pre-compute factors for quantized operation
+    const int32_t weights_offset = -weights->params.zero_point;
+    RuntimeShape weights_shape = GetTensorShape(weights);
+    TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
+    const int rows = weights_shape.Dims(0);
+    const int cols = weights_shape.Dims(1);
 
-		//Calculate data for quantized operation
-		OpData* data = reinterpret_cast<OpData*>(node->user_data);
-		auto* params = reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
-		const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-		const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
-		TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-		TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, input->type, input,
-		                                        weights, bias, output, data));
-		//Pre-compute factors for quantized operation
-		const int32_t weights_offset = -weights->params.zero_point;
-		RuntimeShape weights_shape = GetTensorShape(weights);
-		TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
-		const int rows = weights_shape.Dims(0);
-		const int cols = weights_shape.Dims(1);
+    void* raw;
+    context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows, &raw);
+    data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
+    const int32_t input_offset = -input->params.zero_point;
+    const int32* bias_data = GetTensorData<int32_t>(bias);
 
-		void* raw;
-		context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows, &raw);
-	    data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
-		const int32_t input_offset = -input->params.zero_point;
-		const int32* bias_data = GetTensorData<int32_t>(bias);
-
-		if (weights->type == kTfLiteInt8) {
-			PrecomputeSumOfWeightsFactor<int8_t>(bias_data,
-					GetTensorData<int8_t>(weights), data->sum_of_weights_factor,
-					cols, rows, weights_offset, input_offset);
-		} else {
-			PrecomputeSumOfWeightsFactor<uint8_t>(bias_data,
-					GetTensorData<uint8_t>(weights), data->sum_of_weights_factor,
-					cols, rows, weights_offset, input_offset);
-		}
-	}
-	return kTfLiteOk;
+    if (weights->type == kTfLiteInt8) {
+      PrecomputeSumOfWeightsFactor<int8_t>(bias_data,
+                                           GetTensorData<int8_t>(weights),
+                                           data->sum_of_weights_factor, cols,
+                                           rows, weights_offset, input_offset);
+    } else if (weights->quantization.details.type ==
+               kTfLiteSub8BitPackedUniformDetail) {
+      // TODO implement pre-compute sum-of-weights for packed wegihts...
+    } else {
+      PrecomputeSumOfWeightsFactor<uint8_t>(bias_data,
+                                            GetTensorData<uint8_t>(weights),
+                                            data->sum_of_weights_factor, cols,
+                                            rows, weights_offset, input_offset);
+    }
+  }
+  return kTfLiteOk;
 }
 
-template<typename T>
-inline void CalculateOutputNodes(T *output, const T *input, const T *weights,
-		const int32_t *sum_of_weights_factor, int32_t sum_of_inputs_factor,
-		int accum_depth, int output_depth, int32_t output_offset,
-		int32_t output_multiplier, int output_shift,
-		int32_t activation_min, int32_t activation_max) {
-	for (int out_c = 0; out_c < output_depth; out_c++) {
-		//Multiply and accumulate inputs and weights
-		int32_t accum = *sum_of_weights_factor + sum_of_inputs_factor;
-		for (int d = 0; d < accum_depth; ++d) {
-			accum += weights[d] * input[d];
-		}
-		// Re-quantize and clamp
-		accum = MultiplyByQuantizedMultiplier(accum, output_multiplier, output_shift);
-		accum += output_offset;
-		accum = ActivationFunctionWithMinMax(accum, activation_min, activation_max);
-		*output = static_cast<T>(accum);
-		//Increment pointers
-		output++;
-		sum_of_weights_factor++;
-		weights += accum_depth;
-	}
+template <typename T>
+inline void CalculateOutputNodes(T* output, const T* input, const T* weights,
+                                 const int32_t* sum_of_weights_factor,
+                                 int32_t sum_of_inputs_factor, int accum_depth,
+                                 int output_depth, int32_t output_offset,
+                                 int32_t output_multiplier, int output_shift,
+                                 int32_t activation_min,
+                                 int32_t activation_max) {
+  for (int out_c = 0; out_c < output_depth; out_c++) {
+    // Multiply and accumulate inputs and weights
+    int32_t accum = *sum_of_weights_factor + sum_of_inputs_factor;
+    for (int d = 0; d < accum_depth; ++d) {
+      accum += weights[d] * input[d];
+    }
+    // Re-quantize and clamp
+    accum =
+        MultiplyByQuantizedMultiplier(accum, output_multiplier, output_shift);
+    accum += output_offset;
+    accum = ActivationFunctionWithMinMax(accum, activation_min, activation_max);
+    *output = static_cast<T>(accum);
+    // Increment pointers
+    output++;
+    sum_of_weights_factor++;
+    weights += accum_depth;
+  }
 }
 
 template <typename T>
 void EvalQuantized(OpData* opData, const TfLiteTensor* input,
-		const TfLiteTensor* weights, const TfLiteTensor* bias, TfLiteTensor* output) {
-	//Get input info
-	const T* input_data = GetTensorData<T>(input);
+                   const TfLiteTensor* weights, const TfLiteTensor* bias,
+                   TfLiteTensor* output) {
+  // Get input info
+  const T* input_data = GetTensorData<T>(input);
 
-	//Get weights info
-	const T* weights_data = GetTensorData<T>(weights);
-	const int32_t weights_offset = -weights->params.zero_point;
-	RuntimeShape weights_shape = GetTensorShape(weights);
-	TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
-	const int weights_dim_count = weights_shape.DimensionsCount();
-	const int accum_depth = weights_shape.Dims(weights_dim_count - 1);
+  // Get weights info
+  const T* weights_data = GetTensorData<T>(weights);
+  const int32_t weights_offset = -weights->params.zero_point;
+  RuntimeShape weights_shape = GetTensorShape(weights);
+  TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
+  const int weights_dim_count = weights_shape.DimensionsCount();
+  const int accum_depth = weights_shape.Dims(weights_dim_count - 1);
 
-	//Get output info
-	T* output_data = GetTensorData<T>(output);
-	const int32_t output_offset = output->params.zero_point;
-	RuntimeShape output_shape = GetTensorShape(output);
-	TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 2);
-	const int32_t output_multiplier = opData->output_multiplier;
-	// TODO(b/138810107): Figure out whether output shift should be inverted
-	const int output_shift = -opData->output_shift;
-	const int32_t output_activation_min = opData->output_activation_min;
-	const int32_t output_activation_max = opData->output_activation_max;
-	TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
-	const int batches = output_shape.Dims(0);
-	const int output_depth = output_shape.Dims(1);
-	TFLITE_DCHECK_LE(output_depth, weights_shape.Dims(weights_dim_count - 2));
+  // Get output info
+  T* output_data = GetTensorData<T>(output);
+  const int32_t output_offset = output->params.zero_point;
+  RuntimeShape output_shape = GetTensorShape(output);
+  TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 2);
+  const int32_t output_multiplier = opData->output_multiplier;
+  // TODO(b/138810107): Figure out whether output shift should be inverted
+  const int output_shift = -opData->output_shift;
+  const int32_t output_activation_min = opData->output_activation_min;
+  const int32_t output_activation_max = opData->output_activation_max;
+  TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
+  const int batches = output_shape.Dims(0);
+  const int output_depth = output_shape.Dims(1);
+  TFLITE_DCHECK_LE(output_depth, weights_shape.Dims(weights_dim_count - 2));
 
-	//Get factor pre-computed in the Prepare-phase
-	const int32_t *sum_of_weights_factor = opData->sum_of_weights_factor;
+  // Get factor pre-computed in the Prepare-phase
+  const int32_t* sum_of_weights_factor = opData->sum_of_weights_factor;
 
-	for (int b = 0; b < batches; ++b) {
-		//Pre-compute factor for this output-batch
-		int32_t sum_of_inputs_factor = 0;
-		if (weights_offset != 0) {
-			for (int d = 0; d < accum_depth; ++d) {
-				sum_of_inputs_factor += input_data[d];
-			}
-			sum_of_inputs_factor *= weights_offset;
-		}
-		//Calculate output-nodes using pre-computed factors
-		CalculateOutputNodes(output_data, input_data, weights_data,  sum_of_weights_factor,
-				sum_of_inputs_factor, accum_depth, output_depth, output_offset,
-				output_multiplier, output_shift, output_activation_min, output_activation_max);
-		output_data += output_depth;
-		input_data += accum_depth;
-	}
+  for (int b = 0; b < batches; ++b) {
+    // Pre-compute factor for this output-batch
+    int32_t sum_of_inputs_factor = 0;
+    if (weights_offset != 0) {
+      for (int d = 0; d < accum_depth; ++d) {
+        sum_of_inputs_factor += input_data[d];
+      }
+      sum_of_inputs_factor *= weights_offset;
+    }
+    // Calculate output-nodes using pre-computed factors
+    CalculateOutputNodes(output_data, input_data, weights_data,
+                         sum_of_weights_factor, sum_of_inputs_factor,
+                         accum_depth, output_depth, output_offset,
+                         output_multiplier, output_shift, output_activation_min,
+                         output_activation_max);
+    output_data += output_depth;
+    input_data += accum_depth;
+  }
 }
 
-void EvalQuantizedUint8WithOutputInt16(OpData* opData, const TfLiteTensor* input,
-		const TfLiteTensor* weights, const TfLiteTensor* bias, TfLiteTensor* output) {
-	tflite::FullyConnectedParams op_params;
-	op_params.input_offset = -input->params.zero_point;
-	op_params.weights_offset = -weights->params.zero_point;
-	op_params.output_offset = output->params.zero_point;
-	op_params.output_multiplier = opData->output_multiplier;
-	// Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
-	op_params.output_shift = -opData->output_shift;
-	op_params.quantized_activation_min = opData->output_activation_min;
-	op_params.quantized_activation_max = opData->output_activation_max;
-	reference_ops::FullyConnected(
-			op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
-			GetTensorShape(weights), GetTensorData<uint8_t>(weights),
-			GetTensorShape(bias), GetTensorData<int32_t>(bias),
-			GetTensorShape(output), GetTensorData<int16_t>(output));
+void EvalQuantizedUint8WithOutputInt16(OpData* opData,
+                                       const TfLiteTensor* input,
+                                       const TfLiteTensor* weights,
+                                       const TfLiteTensor* bias,
+                                       TfLiteTensor* output) {
+  tflite::FullyConnectedParams op_params;
+  op_params.input_offset = -input->params.zero_point;
+  op_params.weights_offset = -weights->params.zero_point;
+  op_params.output_offset = output->params.zero_point;
+  op_params.output_multiplier = opData->output_multiplier;
+  // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
+  op_params.output_shift = -opData->output_shift;
+  op_params.quantized_activation_min = opData->output_activation_min;
+  op_params.quantized_activation_max = opData->output_activation_max;
+  reference_ops::FullyConnected(
+      op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
+      GetTensorShape(weights), GetTensorData<uint8_t>(weights),
+      GetTensorShape(bias), GetTensorData<int32_t>(bias),
+      GetTensorShape(output), GetTensorData<int16_t>(output));
+}
+
+template <typename CONTAINER_T, size_t bits_per_item,
+          size_t items_per_container>
+inline void EvalFullyConnectedUint8PackedWeights(
+    const FullyConnectedParams& params, const TfLiteTensor* input,
+    const TfLiteTensor* filter, const TfLiteTensor* bias,
+    TfLiteTensor* output) {
+  const RuntimeShape& input_shape = GetTensorShape(input);
+  auto input_data = GetTensorData<uint8_t>(input);
+  const RuntimeShape& filter_shape = GetTensorShape(filter);
+  auto filter_data = GetTensorData<CONTAINER_T>(filter);
+  const RuntimeShape& bias_shape = GetTensorShape(bias);
+  auto bias_data = GetTensorData<int32_t>(bias);
+  const RuntimeShape& output_shape = GetTensorShape(output);
+  auto output_data = GetTensorData<uint8>(output);
+
+  FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item,
+                                   items_per_container>(
+      params, input_shape, input_data, filter_shape, filter_data, bias_shape,
+      bias_data, output_shape, output_data);
+}
+
+TfLiteStatus EvalQuantizedPacked(
+    OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,
+    const TfLiteTensor* bias, TfLiteTensor* output, TfLiteContext* context,
+    const TfLiteCustomSub8BitPackingDetails& custom) {
+  tflite::FullyConnectedParams op_params;
+  op_params.input_offset = -input->params.zero_point;
+  op_params.weights_offset = -weights->params.zero_point;
+  op_params.output_offset = output->params.zero_point;
+  op_params.output_multiplier = opData->output_multiplier;
+  // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
+  op_params.output_shift = -opData->output_shift;
+  op_params.quantized_activation_min = opData->output_activation_min;
+  op_params.quantized_activation_max = opData->output_activation_max;
+
+  unsigned int bits_per_item = custom.bits_per_item;
+  unsigned int container_bits = custom.container_bits;
+  unsigned int packed_minor_dims = custom.packed_minor_dims;
+  switch (bits_per_item) {
+    case 4: {
+      if (container_bits != 8) break;
+      EvalFullyConnectedUint8PackedWeights<uint8_t, 4, 8 / 4>(
+          op_params, input, weights, bias, output);
+      return kTfLiteOk;
+    }
+    case 5: {
+      if (container_bits != 16) break;
+      EvalFullyConnectedUint8PackedWeights<uint16_t, 5, 16 / 5>(
+          op_params, input, weights, bias, output);
+      return kTfLiteOk;
+    }
+    case 6: {
+      if (container_bits != 32) break;
+      EvalFullyConnectedUint8PackedWeights<uint32_t, 6, 32 / 6>(
+          op_params, input, weights, bias, output);
+      return kTfLiteOk;
+    }
+    default: {
+      TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
+                         bits_per_item);
+      return kTfLiteError;
+    }
+  }
+  TF_LITE_KERNEL_LOG(
+      context, "Container bitwidth %d not supported for %d bit packed values",
+      container_bits, bits_per_item);
+  return kTfLiteError;
+}
+
+TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
+                           OpData* data, const TfLiteTensor* input,
+                           const TfLiteTensor* filter, const TfLiteTensor* bias,
+                           TfLiteTensor* output) {
+  const int32_t input_offset = -input->params.zero_point;
+  const int32_t filter_offset = -filter->params.zero_point;
+  const int32_t output_offset = output->params.zero_point;
+
+  tflite::FullyConnectedParams op_params;
+  op_params.input_offset = input_offset;
+  op_params.weights_offset = filter_offset;
+  op_params.output_offset = output_offset;
+  op_params.output_multiplier = data->output_multiplier;
+  // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
+  op_params.output_shift = -data->output_shift;
+  op_params.quantized_activation_min = data->output_activation_min;
+  op_params.quantized_activation_max = data->output_activation_max;
+
+#define TF_LITE_FULLY_CONNECTED(func, output_data_type)                 \
+  func(op_params, GetTensorShape(input), GetTensorData<uint8_t>(input), \
+       GetTensorShape(filter), GetTensorData<uint8_t>(filter),          \
+       GetTensorShape(bias), GetTensorData<int32_t>(bias),              \
+       GetTensorShape(output), GetTensorData<output_data_type>(output))
+  switch (output->type) {
+    case kTfLiteUInt8:
+      if (filter->quantization.details.type ==
+          kTfLiteSub8BitPackedUniformDetail) {
+        return EvalQuantizedPacked(
+            data, input, filter, bias, output, context,
+            *filter->quantization.details.data.custom_sub8bit_packing);
+      } else {
+        EvalQuantized<uint8_t>(data, input, filter, bias, output);
+      }
+      break;
+    case kTfLiteInt16:
+      TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, int16_t);
+      break;
+    default:
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                         TfLiteTypeGetName(output->type), output->type);
+      return kTfLiteError;
+  }
+
+  return kTfLiteOk;
 }
 
 void EvalFloat(TfLiteFullyConnectedParams* params, const TfLiteTensor* input,
-		const TfLiteTensor* weights, const TfLiteTensor* bias, TfLiteTensor* output) {
-	float output_activation_min, output_activation_max;
-	CalculateActivationRange(params->activation, &output_activation_min,
-			&output_activation_max);
-	tflite::FullyConnectedParams op_params;
-	op_params.float_activation_min = output_activation_min;
-	op_params.float_activation_max = output_activation_max;
-	tflite::reference_ops::FullyConnected(
-			op_params, GetTensorShape(input), GetTensorData<float>(input),
-			GetTensorShape(weights), GetTensorData<float>(weights),
-			GetTensorShape(bias), GetTensorData<float>(bias), GetTensorShape(output),
-			GetTensorData<float>(output));
+               const TfLiteTensor* weights, const TfLiteTensor* bias,
+               TfLiteTensor* output) {
+  float output_activation_min, output_activation_max;
+  CalculateActivationRange(params->activation, &output_activation_min,
+                           &output_activation_max);
+  tflite::FullyConnectedParams op_params;
+  op_params.float_activation_min = output_activation_min;
+  op_params.float_activation_max = output_activation_max;
+  tflite::reference_ops::FullyConnected(
+      op_params, GetTensorShape(input), GetTensorData<float>(input),
+      GetTensorShape(weights), GetTensorData<float>(weights),
+      GetTensorShape(bias), GetTensorData<float>(bias), GetTensorShape(output),
+      GetTensorData<float>(output));
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-	const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-	const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
-	const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
-	TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-	auto* params = reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
-	OpData* opData = reinterpret_cast<OpData*>(node->user_data);
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
+  const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+  auto* params =
+      reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
+  OpData* opData = reinterpret_cast<OpData*>(node->user_data);
 
-	switch (weights->type) {  // Already know in/out types are same.
-	case kTfLiteFloat32:
-		EvalFloat(params, input, weights, bias, output);
-		break;
-	case kTfLiteInt8:
-		switch (output->type) {
-		case kTfLiteInt8:
-			EvalQuantized<int8_t>(opData, input, weights, bias, output);
-			break;
-		default:
-			TF_LITE_KERNEL_LOG(context, "Quantized int8 expects output int8");
-			return kTfLiteError;
-		}
-		break;
-	case kTfLiteUInt8:
-		switch (output->type) {
-		case kTfLiteUInt8:
-			EvalQuantized<uint8_t>(opData, input, weights, bias, output);
-			break;
-		case kTfLiteInt16:
-			EvalQuantizedUint8WithOutputInt16(opData, input, weights, bias, output);
-			break;
-		default:
-			TF_LITE_KERNEL_LOG(context, "Quantized uint8 expects output uint8 or int16");
-			return kTfLiteError;
-		}
-		break;
-	default:
-		TF_LITE_KERNEL_LOG(context, "Weight type %d not currently supported.", weights->type);
-		return kTfLiteError;
-	}
+  switch (weights->type) {  // Already know in/out types are same.
+    case kTfLiteFloat32:
+      EvalFloat(params, input, weights, bias, output);
+      break;
+    case kTfLiteInt8:
+      switch (output->type) {
+        case kTfLiteInt8:
+          EvalQuantized<int8_t>(opData, input, weights, bias, output);
+          break;
+        default:
+          TF_LITE_KERNEL_LOG(context, "Quantized int8 expects output int8");
+          return kTfLiteError;
+      }
+      break;
+    case kTfLiteUInt8:
+      switch (output->type) {
+        case kTfLiteUInt8:
+          // TODO packed variant pre-computing to eliminate tensor_offset
+          // addition
+          if (weights->quantization.details.type ==
+              kTfLiteSub8BitPackedUniformDetail) {
+            return EvalQuantizedPacked(
+                opData, input, weights, bias, output, context,
+                *weights->quantization.details.data.custom_sub8bit_packing);
+          } else {
+            EvalQuantized<uint8_t>(opData, input, weights, bias, output);
+          }
+          break;
+        case kTfLiteInt16:
+          EvalQuantizedUint8WithOutputInt16(opData, input, weights, bias,
+                                            output);
+          break;
+        default:
+          TF_LITE_KERNEL_LOG(context,
+                             "Quantized uint8 expects output uint8 or int16");
+          return kTfLiteError;
+      }
+      break;
+    default:
+      TF_LITE_KERNEL_LOG(context, "Weight type %d not currently supported.",
+                         weights->type);
+      return kTfLiteError;
+  }
   return kTfLiteOk;
 }
 

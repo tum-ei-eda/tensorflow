@@ -1,11 +1,9 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 
+/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-
     http://www.apache.org/licenses/LICENSE-2.0
-
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +29,7 @@ namespace {
 // Ensure memory doesn't expand more that 3%:
 constexpr float kAllocationThreshold = 0.03;
 constexpr float kAllocationTailMiscCeiling = 1024;
-const bool kIs64BitSystem = sizeof(void*) == 8;
+const bool kIs64BitSystem = (sizeof(void*) == 8);
 
 constexpr int kKeywordModelTensorArenaSize = 22 * 1024;
 uint8_t keyword_model_tensor_arena[kKeywordModelTensorArenaSize];
@@ -39,12 +37,21 @@ uint8_t keyword_model_tensor_arena[kKeywordModelTensorArenaSize];
 constexpr int kKeywordModelTensorCount = 54;
 constexpr int kKeywordModelNodeAndRegistrationCount = 15;
 
-// NOTE: These values are measured on x86-64 and x86
-constexpr int kKeywordModelTotalSize = kIs64BitSystem ? 21040 : 16912;
-constexpr int kKeywordModelHeadSize = kIs64BitSystem ? 672 : 672;
-constexpr int kKeywordModelTailSize = kIs64BitSystem ? 20368 : 16240;
+// NOTE: These values are measured on x86-64:
+// TODO(b/158651472): Consider auditing these values on non-64 bit systems.
+//
+// Run this test with '--copt=-DTF_LITE_MICRO_OPTIMIZED_RUNTIME' to get
+// optimized memory runtime values:
+#ifdef TF_LITE_STATIC_MEMORY
+constexpr int kKeywordModelTotalSize = 18080;
+constexpr int kKeywordModelTailSize = 17408;
+#else
+constexpr int kKeywordModelTotalSize = 21040;
+constexpr int kKeywordModelTailSize = 20368;
+#endif
+constexpr int kKeywordModelHeadSize = 672;
 constexpr int kKeywordModelTfLiteTensorVariableBufferDataSize = 10240;
-constexpr int kKeywordModelTfLiteTensorQuantizationDataSize = kIs64BitSystem ? 1728 : 1080;
+constexpr int kKeywordModelTfLiteTensorQuantizationDataSize = 1728;
 constexpr int kKeywordModelOpRuntimeDataSize = 148;
 
 constexpr int kTestConvModelArenaSize = 12 * 1024;
@@ -82,7 +89,7 @@ void EnsureAllocatedSizeThreshold(const char* allocation_type, size_t actual,
     TF_LITE_MICRO_EXPECT_NEAR(actual, expected, kAllocationThreshold);
     if (actual != expected) {
       TF_LITE_REPORT_ERROR(micro_test::reporter,
-                           "%s threshold failed: %ld != %ld", allocation_type,
+                           "%s threshold failed: %d != %d", allocation_type,
                            actual, expected);
     }
   } else {
@@ -148,6 +155,7 @@ void ValidateModelAllocationThresholds(
                            sizeof(tflite::NodeAndRegistration) *
                                thresholds.node_and_registration_count +
                            thresholds.op_runtime_data_size;
+
   TF_LITE_MICRO_EXPECT_LE(thresholds.tail_alloc_size - tail_est_length,
                           kAllocationTailMiscCeiling);
 }
