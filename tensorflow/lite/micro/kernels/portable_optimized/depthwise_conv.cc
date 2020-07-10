@@ -21,14 +21,12 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_float.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
-#include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8_packed_filter.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
-#include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8_packed_filter.h"
 
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
+#define MIN(A, B) ((A) < (B) ? (A) : (B))
 
 namespace tflite {
 namespace ops {
@@ -64,7 +62,7 @@ struct OpData {
   int32_t output_activation_max;
 
   // The precomputed sum of filters factor
-  int32 *sum_of_filters_factor;
+  int32* sum_of_filters_factor;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
@@ -102,9 +100,13 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
   return kTfLiteOk;
 }
 
-template<typename T>
-inline void PrecomputeSumOfFiltersFactor(const int32* bias, const TfLiteTensor* filters, int32_t *sum_of_filters_factor,
-    RuntimeShape filter_shape, int32_t input_offset, int32_t filter_offset=0) {
+template <typename T>
+inline void PrecomputeSumOfFiltersFactor(const int32* bias,
+                                         const TfLiteTensor* filters,
+                                         int32_t* sum_of_filters_factor,
+                                         RuntimeShape filter_shape,
+                                         int32_t input_offset,
+                                         int32_t filter_offset = 0) {
   if (filters->type == kTfLiteInt8) {
     // Ensure that the filter offset is 0 in the signed integer case
     TFLITE_DCHECK_EQ(filter_offset, 0);
@@ -119,21 +121,23 @@ inline void PrecomputeSumOfFiltersFactor(const int32* bias, const TfLiteTensor* 
   for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
     int32_t sum_of_filter_factor = filter_size * filter_offset;
 
-    for (int filter_index = out_channel; filter_index < filter_size * num_filters; filter_index += num_filters) {
+    for (int filter_index = out_channel;
+         filter_index < filter_size * num_filters;
+         filter_index += num_filters) {
       sum_of_filter_factor += filter_data[filter_index];
     }
     sum_of_filters_factor[out_channel] = sum_of_filter_factor * input_offset;
 
-    if (bias) { 
+    if (bias) {
       sum_of_filters_factor[out_channel] += bias[out_channel];
     }
   }
 }
 
-
-
-inline void PrecomputeSumOfPackedFiltersFactor(const int32* bias, const TfLiteTensor* filters, int32_t *sum_of_filters_factor,
-    RuntimeShape filter_shape, int32_t input_offset, int32_t filter_offset,
+inline void PrecomputeSumOfPackedFiltersFactor(
+    const int32* bias, const TfLiteTensor* filters,
+    int32_t* sum_of_filters_factor, RuntimeShape filter_shape,
+    int32_t input_offset, int32_t filter_offset,
     const TfLiteCustomSub8BitPackingDetails& packing_details) {
   if (filters->type == kTfLiteInt8) {
     // Ensure that the filter offset is 0 in the signed integer case
@@ -146,26 +150,26 @@ inline void PrecomputeSumOfPackedFiltersFactor(const int32* bias, const TfLiteTe
 
   int filter_size = filter_width * filter_height;
 
-  uint32_t mask = (1u<<packing_details.bits_per_item)-1u;
+  uint32_t mask = (1u << packing_details.bits_per_item) - 1u;
   uint32_t container;
   size_t bits_in_container = 0;
-  const uint8_t * filter_byte_p = filter_data;
+  const uint8_t* filter_byte_p = filter_data;
 
   for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
     sum_of_filters_factor[out_channel] = filter_size * filter_offset;
   }
 
-  for (int filter_coord = 0; filter_coord < filter_size ; ++filter_coord ) {
+  for (int filter_coord = 0; filter_coord < filter_size; ++filter_coord) {
     for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
-      if( bits_in_container < packing_details.bits_per_item ) {
+      if (bits_in_container < packing_details.bits_per_item) {
         container = 0;
-        switch( packing_details.container_bits ) {
+        switch (packing_details.container_bits) {
           case 32u:
-            container = *reinterpret_cast<const uint32_t *>(filter_byte_p);
+            container = *reinterpret_cast<const uint32_t*>(filter_byte_p);
             filter_byte_p += 4;
             break;
           case 16u:
-            container = *reinterpret_cast<const uint16_t *>(filter_byte_p);
+            container = *reinterpret_cast<const uint16_t*>(filter_byte_p);
             filter_byte_p += 2;
             break;
           case 8u:
@@ -184,7 +188,6 @@ inline void PrecomputeSumOfPackedFiltersFactor(const int32* bias, const TfLiteTe
     }
     bits_in_container = 0;
   }
-
 
   for (int out_channel = 0; out_channel < num_filters; ++out_channel) {
     sum_of_filters_factor[out_channel] *= input_offset;
@@ -254,7 +257,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
 
   if (filter->type == kTfLiteInt8 || filter->type == kTfLiteUInt8) {
-
     const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
     const int32* bias_data = GetTensorData<int32_t>(bias);
 
@@ -263,25 +265,28 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
 
     void* raw;
-    context->AllocatePersistentBuffer(context, sizeof(int32_t) * num_channels, &raw);
+    context->AllocatePersistentBuffer(context, sizeof(int32_t) * num_channels,
+                                      &raw);
     data->sum_of_filters_factor = reinterpret_cast<int32_t*>(raw);
 
     // Precompute the sum of filters
     const int32_t input_offset = -input->params.zero_point;
     if (filter->type == kTfLiteUInt8) {
-
-      if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
-        PrecomputeSumOfPackedFiltersFactor(bias_data, filter, data->sum_of_filters_factor,
-          filter_shape, input_offset, filter_offset,
-          *filter->quantization.details.data.custom_sub8bit_packing); 
+      if (filter->quantization.details.type ==
+          kTfLiteSub8BitPackedUniformDetail) {
+        PrecomputeSumOfPackedFiltersFactor(
+            bias_data, filter, data->sum_of_filters_factor, filter_shape,
+            input_offset, filter_offset,
+            *filter->quantization.details.data.custom_sub8bit_packing);
       } else {
-      PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filter, data->sum_of_filters_factor,
-        filter_shape, input_offset, filter_offset);
+        PrecomputeSumOfFiltersFactor<uint8_t>(
+            bias_data, filter, data->sum_of_filters_factor, filter_shape,
+            input_offset, filter_offset);
       }
-    }
-    else {
-      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter, data->sum_of_filters_factor,
-        filter_shape, input_offset, 0);
+    } else {
+      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter,
+                                           data->sum_of_filters_factor,
+                                           filter_shape, input_offset, 0);
     }
   }
 
@@ -476,57 +481,53 @@ static inline void DepthwiseConvOptimizedForFilterWidthEight(
   }
 }
 
-
 struct DepthwiseConvPackedTraits {
-  struct WithPadding
-  {
-    WithPadding(const DepthwiseParams& params, const OpData *data, const int32_t* bias_data) :
-      input_offset_(params.input_offset),
-      bias_data_(bias_data)
-    {}
+  struct WithPadding {
+    WithPadding(const DepthwiseParams& params, const OpData* data,
+                const int32_t* bias_data)
+        : input_offset_(params.input_offset), bias_data_(bias_data) {}
 
-    inline void SumOfFiltersCorrectionAndBias( int32_t &raw_sum, uint32_t out_chan) const {
+    inline void SumOfFiltersCorrectionAndBias(int32_t& raw_sum,
+                                              uint32_t out_chan) const {
       raw_sum += bias_data_[out_chan];
     }
 
-    inline int32_t OffsetInputValue( int32_t input_value) const {
-      return input_offset_+input_value;
+    inline int32_t OffsetInputValue(int32_t input_value) const {
+      return input_offset_ + input_value;
     };
 
     const int32 input_offset_;
     const int32_t* bias_data_;
   };
 
-  struct WithoutPadding
-  {
-    WithoutPadding(const DepthwiseParams& params, const OpData *data, const int32_t* bias_data) :
-      sum_of_filters_factor_(data->sum_of_filters_factor)
-    {}
+  struct WithoutPadding {
+    WithoutPadding(const DepthwiseParams& params, const OpData* data,
+                   const int32_t* bias_data)
+        : sum_of_filters_factor_(data->sum_of_filters_factor) {}
 
-    inline void SumOfFiltersCorrectionAndBias( int32_t &raw_sum, uint32_t out_chan) const {
+    inline void SumOfFiltersCorrectionAndBias(int32_t& raw_sum,
+                                              uint32_t out_chan) const {
       raw_sum += sum_of_filters_factor_[out_chan];
     }
 
-    inline int32_t OffsetInputValue( int32_t input_value) const {
+    inline int32_t OffsetInputValue(int32_t input_value) const {
       return input_value;
     };
 
-    const int32_t *sum_of_filters_factor_;
+    const int32_t* sum_of_filters_factor_;
   };
 };
 
-template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container, class PADDING_TRAIT>
+template <typename CONTAINER_T, size_t bits_per_item,
+          size_t items_per_container, class PADDING_TRAIT>
 struct DepthwiseConvPacked {
-
-  static inline void Run(const DepthwiseParams& params,
-                         const OpData* data,
+  static inline void Run(const DepthwiseParams& params, const OpData* data,
                          const RuntimeShape& input_shape,
                          const uint8* input_data,
                          const RuntimeShape& filter_shape,
                          const CONTAINER_T* filter_data,
                          const RuntimeShape& bias_shape, const int32* bias_data,
                          const RuntimeShape& output_shape, uint8* output_data) {
-
     const PADDING_TRAIT pad_traits(params, data, bias_data);
     const int stride_width = params.stride_width;
     const int stride_height = params.stride_height;
@@ -560,12 +561,15 @@ struct DepthwiseConvPacked {
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
     int32 accbuf[output_depth];
-    const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+    const int* in_dims =
+        reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
-    const unsigned int num_packed_containers =  output_depth / items_per_container;
-    const unsigned int elts_partial_container = output_depth % items_per_container;
+    const unsigned int num_packed_containers =
+        output_depth / items_per_container;
+    const unsigned int elts_partial_container =
+        output_depth % items_per_container;
 
-    const int32 mask = (1<<bits_per_item)-1;
+    const int32 mask = (1 << bits_per_item) - 1;
 
     for (int b = 0; b < batches; ++b) {
       const uint32_t input_offset0 = in_dims[1] * b;
@@ -577,35 +581,40 @@ struct DepthwiseConvPacked {
           for (int i = 0; i < output_depth; ++i) {
             accbuf[i] = 0;
           }
-          
+
           // First container...
-          const CONTAINER_T *filter_vals_container_p = filter_data;
+          const CONTAINER_T* filter_vals_container_p = filter_data;
           for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
             const uint32_t input_offset1 = in_dims[2] * (input_offset0 + in_y);
 
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
               const int in_x = in_x_origin + dilation_width_factor * filter_x;
-              const uint8_t *input_p = &input_data[in_dims[3] * (input_offset1 + in_x)];
+              const uint8_t* input_p =
+                  &input_data[in_dims[3] * (input_offset1 + in_x)];
 
               // If the location is outside the bounds of the input image,
               // use zero as a default value.
               if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
                   (in_y < input_height)) {
-
                 unsigned int input_channel = 0;
                 unsigned int output_channel = 0;
                 // Full containers ...
-                for ( unsigned int container = 0;container < num_packed_containers; ++container) {
+                for (unsigned int container = 0;
+                     container < num_packed_containers; ++container) {
                   CONTAINER_T filter_vals = *filter_vals_container_p;
                   ++filter_vals_container_p;
                   // Unrollable loop!
-                  for (unsigned int element = 0; element < items_per_container; ++element) {
-                    int32 offset_input_val = pad_traits.OffsetInputValue(*input_p);
-                    int32 offset_filter_val = (filter_vals & mask) + filter_offset;
+                  for (unsigned int element = 0; element < items_per_container;
+                       ++element) {
+                    int32 offset_input_val =
+                        pad_traits.OffsetInputValue(*input_p);
+                    int32 offset_filter_val =
+                        (filter_vals & mask) + filter_offset;
 
                     filter_vals >>= bits_per_item;
-                    accbuf[output_channel] += offset_filter_val * offset_input_val;
+                    accbuf[output_channel] +=
+                        offset_filter_val * offset_input_val;
                     ++output_channel;
                     if (output_channel % depth_multiplier == 0) {
                       ++input_p;
@@ -614,15 +623,19 @@ struct DepthwiseConvPacked {
                 }
 
                 // Might be a last, partial, container
-                if ( elts_partial_container )
-                {
+                if (elts_partial_container) {
                   CONTAINER_T filter_vals = *filter_vals_container_p;
                   ++filter_vals_container_p;
-                  for (unsigned int element = 0; element < elts_partial_container; ++element) {
-                    int32 offset_input_val = pad_traits.OffsetInputValue(*input_p);
-                    int32 offset_filter_val = (filter_vals & mask) + filter_offset;;
+                  for (unsigned int element = 0;
+                       element < elts_partial_container; ++element) {
+                    int32 offset_input_val =
+                        pad_traits.OffsetInputValue(*input_p);
+                    int32 offset_filter_val =
+                        (filter_vals & mask) + filter_offset;
+                    ;
                     filter_vals >>= bits_per_item;
-                    accbuf[output_channel] += offset_filter_val  * offset_input_val;
+                    accbuf[output_channel] +=
+                        offset_filter_val * offset_input_val;
                     ++output_channel;
                     if (output_channel % depth_multiplier == 0) {
                       ++input_p;
@@ -630,7 +643,8 @@ struct DepthwiseConvPacked {
                   }
                 }
               } else {
-                // In case of padding, we need to increment the container count for next iteration
+                // In case of padding, we need to increment the container count
+                // for next iteration
                 filter_vals_container_p += num_packed_containers;
                 if (elts_partial_container) {
                   filter_vals_container_p++;
@@ -639,12 +653,11 @@ struct DepthwiseConvPacked {
             }
           }
 
-          for (unsigned int oc =0; oc < output_depth; ++oc) {
+          for (unsigned int oc = 0; oc < output_depth; ++oc) {
             int32 acc = accbuf[oc];
             pad_traits.SumOfFiltersCorrectionAndBias(acc, oc);
-            acc = MultiplyByQuantizedMultiplier(
-                          acc, output_multiplier,
-                          output_shift);
+            acc = MultiplyByQuantizedMultiplier(acc, output_multiplier,
+                                                output_shift);
             acc += output_offset;
             acc = std::max(acc, output_activation_min);
             acc = std::min(acc, output_activation_max);
@@ -657,13 +670,13 @@ struct DepthwiseConvPacked {
   }
 };
 
-template<class PADDING_TRAITS>
+template <class PADDING_TRAITS>
 void DepthwiseConvPackedFilter(
-    const DepthwiseParams& params, const OpData* data, const RuntimeShape& input_shape,
-    const uint8* input_data, const RuntimeShape& filter_shape,
-    const void* filter_data, const RuntimeShape& bias_shape,
-    const int32* bias_data, const RuntimeShape& output_shape,
-    uint8* output_data,
+    const DepthwiseParams& params, const OpData* data,
+    const RuntimeShape& input_shape, const uint8* input_data,
+    const RuntimeShape& filter_shape, const void* filter_data,
+    const RuntimeShape& bias_shape, const int32* bias_data,
+    const RuntimeShape& output_shape, uint8* output_data,
     const TfLiteCustomSub8BitPackingDetails& packing_details) {
   // We need to allocate output_depth size buffer for accumulators.
 
@@ -705,14 +718,12 @@ void DepthwiseConvPackedFilter(
   }
 }
 
-
-
 inline void DepthwiseConv(
-    TfLiteContext* context, const DepthwiseParams& params, const OpData* data, const RuntimeShape& input_shape,
-    const uint8* input_data, const RuntimeShape& filter_shape,
-    const uint8* filter_data, const RuntimeShape& bias_shape,
-    const int32* bias_data, const RuntimeShape& output_shape,
-    uint8* output_data) {
+    TfLiteContext* context, const DepthwiseParams& params, const OpData* data,
+    const RuntimeShape& input_shape, const uint8* input_data,
+    const RuntimeShape& filter_shape, const uint8* filter_data,
+    const RuntimeShape& bias_shape, const int32* bias_data,
+    const RuntimeShape& output_shape, uint8* output_data) {
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
   const int dilation_width_factor = params.dilation_width_factor;
@@ -746,19 +757,19 @@ inline void DepthwiseConv(
   TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
-  const int* fi_dims = reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
+  const int* in_dims =
+      reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+  const int* fi_dims =
+      reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
   int32 acc[output_depth];
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
-
       const int in_y_origin = (out_y * stride_height) - pad_height;
       const int32_t ker_y_start = MAX(0, -in_y_origin);
       const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
-
         const int in_x_origin = (out_x * stride_width) - pad_width;
         const int32_t ker_x_start = MAX(0, -in_x_origin);
         const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
@@ -774,14 +785,16 @@ inline void DepthwiseConv(
           for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
             const int in_x = in_x_origin + dilation_width_factor * filter_x;
             const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
-            const uint32_t filter_offset2 = fi_dims[3] * (filter_x + filter_offset1);
+            const uint32_t filter_offset2 =
+                fi_dims[3] * (filter_x + filter_offset1);
 
             for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
               for (int m = 0; m < depth_multiplier; ++m) {
                 const int output_channel = m + in_channel * depth_multiplier;
                 int32 input_val = input_data[input_offset2 + in_channel];
                 int32 filter_val = filter_data[filter_offset2 + output_channel];
-                acc[output_channel] += (input_val + input_offset) * (filter_val + filter_offset);
+                acc[output_channel] +=
+                    (input_val + input_offset) * (filter_val + filter_offset);
               }
             }
           }
@@ -791,13 +804,12 @@ inline void DepthwiseConv(
           if (bias_data) {
             acc[i] += bias_data[i];
           }
-          acc[i] = MultiplyByQuantizedMultiplier(
-                          acc[i], output_multiplier,
-                          output_shift);
+          acc[i] = MultiplyByQuantizedMultiplier(acc[i], output_multiplier,
+                                                 output_shift);
           acc[i] += output_offset;
           acc[i] = std::max(acc[i], output_activation_min);
           acc[i] = std::min(acc[i], output_activation_max);
-          output_data[out_base+i] = static_cast<uint8_t>(acc[i]);
+          output_data[out_base + i] = static_cast<uint8_t>(acc[i]);
         }
       }
     }
@@ -805,11 +817,11 @@ inline void DepthwiseConv(
 }
 
 inline void DepthwiseConvNoPadding(
-    TfLiteContext* context, const DepthwiseParams& params, const OpData* data, const RuntimeShape& input_shape,
-    const uint8* input_data, const RuntimeShape& filter_shape,
-    const uint8* filter_data, const RuntimeShape& bias_shape,
-    const int32* bias_data, const RuntimeShape& output_shape,
-    uint8* output_data) {
+    TfLiteContext* context, const DepthwiseParams& params, const OpData* data,
+    const RuntimeShape& input_shape, const uint8* input_data,
+    const RuntimeShape& filter_shape, const uint8* filter_data,
+    const RuntimeShape& bias_shape, const int32* bias_data,
+    const RuntimeShape& output_shape, uint8* output_data) {
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
   const int dilation_width_factor = params.dilation_width_factor;
@@ -841,19 +853,19 @@ inline void DepthwiseConvNoPadding(
   TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
-  const int* fi_dims = reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
+  const int* in_dims =
+      reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+  const int* fi_dims =
+      reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
   int32 acc[output_depth];
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
-
       const int in_y_origin = (out_y * stride_height);
       const int32_t ker_y_start = MAX(0, -in_y_origin);
       const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
-
         const int in_x_origin = (out_x * stride_width);
         const int32_t ker_x_start = MAX(0, -in_x_origin);
         const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
@@ -869,7 +881,8 @@ inline void DepthwiseConvNoPadding(
           for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
             const int in_x = in_x_origin + dilation_width_factor * filter_x;
             const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
-            const uint32_t filter_offset2 = fi_dims[3] * (filter_x + filter_offset1);
+            const uint32_t filter_offset2 =
+                fi_dims[3] * (filter_x + filter_offset1);
 
             for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
               for (int m = 0; m < depth_multiplier; ++m) {
@@ -884,13 +897,12 @@ inline void DepthwiseConvNoPadding(
         uint32_t out_base = Offset(output_shape, batch, out_y, out_x, 0);
         for (int i = 0; i < output_depth; i++) {
           acc[i] += data->sum_of_filters_factor[i];
-          acc[i] = MultiplyByQuantizedMultiplier(
-                          acc[i], output_multiplier,
-                          output_shift);
+          acc[i] = MultiplyByQuantizedMultiplier(acc[i], output_multiplier,
+                                                 output_shift);
           acc[i] += output_offset;
           acc[i] = std::max(acc[i], output_activation_min);
           acc[i] = std::min(acc[i], output_activation_max);
-          output_data[out_base+i] = static_cast<uint8_t>(acc[i]);
+          output_data[out_base + i] = static_cast<uint8_t>(acc[i]);
         }
       }
     }
@@ -930,7 +942,6 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                              const OpData* data, const TfLiteTensor* input,
                              const TfLiteTensor* filter,
                              const TfLiteTensor* bias, TfLiteTensor* output) {
-
   const int32* output_multiplier = data->per_channel_output_multiplier;
   const int32* output_shift = data->per_channel_output_shift;
 
@@ -939,7 +950,7 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
   const RuntimeShape& filter_shape = GetTensorShape(filter);
   const int8* filter_data = GetTensorData<int8>(filter);
   const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32* bias_data= GetTensorData<int32>(bias);
+  const int32* bias_data = GetTensorData<int32>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
   int8* output_data = GetTensorData<int8>(output);
 
@@ -976,19 +987,19 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
   TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
-  const int* fi_dims = reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
+  const int* in_dims =
+      reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+  const int* fi_dims =
+      reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
   int32 acc[output_depth];
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
-
       const int in_y_origin = (out_y * stride_height) - pad_height;
       const int32_t ker_y_start = MAX(0, -in_y_origin);
       const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
-
         const int in_x_origin = (out_x * stride_width) - pad_width;
         const int32_t ker_x_start = MAX(0, -in_x_origin);
         const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
@@ -1004,7 +1015,8 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
           for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
             const int in_x = in_x_origin + dilation_width_factor * filter_x;
             const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
-            const uint32_t filter_offset2 = fi_dims[3] * (filter_x + filter_offset1);
+            const uint32_t filter_offset2 =
+                fi_dims[3] * (filter_x + filter_offset1);
 
             for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
               for (int m = 0; m < depth_multiplier; ++m) {
@@ -1014,7 +1026,6 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                 acc[out_channel] += (input_val + input_offset) * filter_val;
               }
             }
-
           }
         }
         uint32_t out_base = Offset(output_shape, batch, out_y, out_x, 0);
@@ -1022,25 +1033,22 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
           if (bias) {
             acc[i] += bias_data[i];
           }
-          acc[i] = MultiplyByQuantizedMultiplier(
-                          acc[i], output_multiplier[i],
-                          output_shift[i]);
+          acc[i] = MultiplyByQuantizedMultiplier(acc[i], output_multiplier[i],
+                                                 output_shift[i]);
           acc[i] += output_offset;
           acc[i] = std::max(acc[i], output_activation_min);
           acc[i] = std::min(acc[i], output_activation_max);
-          output_data[out_base+i] = static_cast<int8_t>(acc[i]);
+          output_data[out_base + i] = static_cast<int8_t>(acc[i]);
         }
       }
     }
   }
 }
 
-void EvalQuantizedPerChannelNoPadding(TfLiteContext* context, TfLiteNode* node,
-                             TfLiteDepthwiseConvParams* params,
-                             const OpData* data, const TfLiteTensor* input,
-                             const TfLiteTensor* filter,
-                             const TfLiteTensor* bias, TfLiteTensor* output) {
-
+void EvalQuantizedPerChannelNoPadding(
+    TfLiteContext* context, TfLiteNode* node, TfLiteDepthwiseConvParams* params,
+    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter,
+    const TfLiteTensor* bias, TfLiteTensor* output) {
   const int32* output_multiplier = data->per_channel_output_multiplier;
   const int32* output_shift = data->per_channel_output_shift;
 
@@ -1049,7 +1057,7 @@ void EvalQuantizedPerChannelNoPadding(TfLiteContext* context, TfLiteNode* node,
   const RuntimeShape& filter_shape = GetTensorShape(filter);
   const int8* filter_data = GetTensorData<int8>(filter);
   const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32* bias_data= GetTensorData<int32>(bias);
+  const int32* bias_data = GetTensorData<int32>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
   int8* output_data = GetTensorData<int8>(output);
 
@@ -1084,19 +1092,19 @@ void EvalQuantizedPerChannelNoPadding(TfLiteContext* context, TfLiteNode* node,
   TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
   TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-  const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
-  const int* fi_dims = reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
+  const int* in_dims =
+      reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+  const int* fi_dims =
+      reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
   int32 acc[output_depth];
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
-
       const int in_y_origin = (out_y * stride_height);
       const int32_t ker_y_start = MAX(0, -in_y_origin);
       const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
-
         const int in_x_origin = (out_x * stride_width);
         const int32_t ker_x_start = MAX(0, -in_x_origin);
         const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
@@ -1112,7 +1120,8 @@ void EvalQuantizedPerChannelNoPadding(TfLiteContext* context, TfLiteNode* node,
           for (int filter_x = ker_x_start; filter_x < ker_x_end; ++filter_x) {
             const int in_x = in_x_origin + dilation_width_factor * filter_x;
             const uint32_t input_offset2 = in_dims[3] * (input_offset1 + in_x);
-            const uint32_t filter_offset2 = fi_dims[3] * (filter_x + filter_offset1);
+            const uint32_t filter_offset2 =
+                fi_dims[3] * (filter_x + filter_offset1);
 
             for (int in_channel = 0; in_channel < input_depth; ++in_channel) {
               for (int m = 0; m < depth_multiplier; ++m) {
@@ -1122,25 +1131,22 @@ void EvalQuantizedPerChannelNoPadding(TfLiteContext* context, TfLiteNode* node,
                 acc[out_channel] += input_val * filter_val;
               }
             }
-
           }
         }
         uint32_t out_base = Offset(output_shape, batch, out_y, out_x, 0);
         for (int i = 0; i < output_depth; i++) {
           acc[i] += data->sum_of_filters_factor[i];
-          acc[i] = MultiplyByQuantizedMultiplier(
-                          acc[i], output_multiplier[i],
-                          output_shift[i]);
+          acc[i] = MultiplyByQuantizedMultiplier(acc[i], output_multiplier[i],
+                                                 output_shift[i]);
           acc[i] += output_offset;
           acc[i] = std::max(acc[i], output_activation_min);
           acc[i] = std::min(acc[i], output_activation_max);
-          output_data[out_base+i] = static_cast<int8_t>(acc[i]);
+          output_data[out_base + i] = static_cast<int8_t>(acc[i]);
         }
       }
     }
   }
 }
-
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   TFLITE_DCHECK(node->user_data != nullptr);
@@ -1160,15 +1166,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
     case kTfLiteFloat32:
       EvalFloat(context, node, params, &data, input, filter, bias, output);
       break;
-    case kTfLiteInt8:
-    {
+    case kTfLiteInt8: {
       const int dilation_width_factor = params->dilation_width_factor;
       const int dilation_height_factor = params->dilation_height_factor;
       const int pad_width = data.padding.width;
       const int pad_height = data.padding.height;
 
       // Check if optimized filter width is used
-      const bool use_optimized_filter_width = (GetTensorShape(filter).Dims(0) != 1);
+      const bool use_optimized_filter_width =
+          (GetTensorShape(filter).Dims(0) != 1);
 
       DepthwiseParams op_params;
       op_params.padding_type = PaddingType::kSame;
@@ -1185,26 +1191,28 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       op_params.quantized_activation_min = std::numeric_limits<int8_t>::min();
       op_params.quantized_activation_max = std::numeric_limits<int8_t>::max();
 
-      if ((dilation_width_factor != 1) || (dilation_height_factor != 1) || use_optimized_filter_width) {
+      if ((dilation_width_factor != 1) || (dilation_height_factor != 1) ||
+          use_optimized_filter_width) {
         // If dilation is used, the reference implementation
         reference_integer_ops::DepthwiseConvPerChannel(
-              op_params, data.per_channel_output_multiplier,
-              data.per_channel_output_shift, GetTensorShape(input),
-              GetTensorData<int8>(input), GetTensorShape(filter),
-              GetTensorData<int8>(filter), GetTensorShape(bias),
-              GetTensorData<int32>(bias), GetTensorShape(output),
-              GetTensorData<int8>(output));
+            op_params, data.per_channel_output_multiplier,
+            data.per_channel_output_shift, GetTensorShape(input),
+            GetTensorData<int8>(input), GetTensorShape(filter),
+            GetTensorData<int8>(filter), GetTensorShape(bias),
+            GetTensorData<int32>(bias), GetTensorShape(output),
+            GetTensorData<int8>(output));
       } else if (pad_width != 0 || pad_height != 0) {
         // Use the version that can handle padding
-        EvalQuantizedPerChannel(context, node, params, &data, input, filter, bias, output);
+        EvalQuantizedPerChannel(context, node, params, &data, input, filter,
+                                bias, output);
       } else {
         // Use the optimized version without padding
-        EvalQuantizedPerChannelNoPadding(context, node, params, &data, input, filter, bias, output);
+        EvalQuantizedPerChannelNoPadding(context, node, params, &data, input,
+                                         filter, bias, output);
       }
       break;
     }
-    case kTfLiteUInt8:
-    {
+    case kTfLiteUInt8: {
       const int dilation_width_factor = params->dilation_width_factor;
       const int dilation_height_factor = params->dilation_height_factor;
       const int pad_width = data.padding.width;
@@ -1215,7 +1223,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int32_t output_offset = output->params.zero_point;
 
       // Check if optimized filter width is used
-      const bool use_optimized_filter_width = (GetTensorShape(filter).Dims(0) != 1);
+      const bool use_optimized_filter_width =
+          (GetTensorShape(filter).Dims(0) != 1);
 
       tflite::DepthwiseParams op_params;
       // Padding type is ignored, but still set.
@@ -1233,34 +1242,48 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       op_params.weights_offset = filter_offset;
       op_params.output_offset = output_offset;
       op_params.output_multiplier = data.output_multiplier;
-      // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
+      // Legacy ops used mixed left and right shifts. Now all are
+      // +ve-means-left.
       op_params.output_shift = -data.output_shift;
 
       const int filter_width = GetTensorShape(filter).Dims(2);
       const int input_depth = GetTensorShape(input).Dims(3);
       const int output_depth = GetTensorShape(filter).Dims(3);
       const int filter_height = GetTensorShape(filter).Dims(1);
-      const int needed_size = output_depth * filter_width * filter_height * input_depth;
+      const int needed_size =
+          output_depth * filter_width * filter_height * input_depth;
 
-      if ((dilation_width_factor != 1) || (dilation_height_factor != 1) || use_optimized_filter_width) {
-        // If dilation is used, then the reference implementation is used
-        // @IFX_PATCH@
-        if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
-            reference_ops::DepthwiseConvPackedFilter( op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<void>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output),
-                *filter->quantization.details.data.custom_sub8bit_packing);
+      if (filter->quantization.details.type !=
+          kTfLiteSub8BitPackedUniformDetail) {
+        if (pad_width != 0 || pad_height != 0) {
+          DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
+              op_params, &data, GetTensorShape(input),
+              GetTensorData<uint8_t>(input), GetTensorShape(filter),
+              GetTensorData<void>(filter), GetTensorShape(bias),
+              GetTensorData<int32_t>(bias), GetTensorShape(output),
+              GetTensorData<uint8_t>(output),
+              *filter->quantization.details.data.custom_sub8bit_packing);
         } else {
-          // If dilation is used, then the reference implementation is used
-          tflite::reference_ops::DepthwiseConv(
-              op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
-              GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-              GetTensorShape(bias), GetTensorData<int32_t>(bias),
-              GetTensorShape(output), GetTensorData<uint8_t>(output));
+          DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>(
+              op_params, &data, GetTensorShape(input),
+              GetTensorData<uint8_t>(input), GetTensorShape(filter),
+              GetTensorData<void>(filter), GetTensorShape(bias),
+              GetTensorData<int32_t>(bias), GetTensorShape(output),
+              GetTensorData<uint8_t>(output),
+              *filter->quantization.details.data.custom_sub8bit_packing);
         }
-      }  else if ((filter_width == 8) && (input_offset == 0) && (input_depth == 1) &&
-          (needed_size <= kReshapedFilterDataSize) && (filter->quantization.details.type != kTfLiteSub8BitPackedUniformDetail)) {
+      } else if ((dilation_width_factor != 1) ||
+                 (dilation_height_factor != 1) || use_optimized_filter_width) {
+        // If dilation is used, then the reference implementation is used
+        tflite::reference_ops::DepthwiseConv(
+            op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
+            GetTensorShape(filter), GetTensorData<uint8_t>(filter),
+            GetTensorShape(bias), GetTensorData<int32_t>(bias),
+            GetTensorShape(output), GetTensorData<uint8_t>(output));
+
+      } else if ((filter_width == 8) && (input_offset == 0) &&
+                 (input_depth == 1) &&
+                 (needed_size <= kReshapedFilterDataSize)) {
         // Use the optimized version if possible
         DepthwiseConvOptimizedForFilterWidthEight(
             context, op_params, &data, GetTensorShape(input),
@@ -1270,40 +1293,20 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
             GetTensorData<uint8_t>(output));
 
       } else if (pad_width != 0 || pad_height != 0) {
-        // @IFX_PATCH@
         // Use the version(s) that can handle padding if padding is used
-        if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
-            DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>( 
-                op_params, &data, GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<void>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output),
-                *filter->quantization.details.data.custom_sub8bit_packing);
-        } else {
-          DepthwiseConv(
-              context, op_params, &data, GetTensorShape(input), GetTensorData<uint8_t>(input),
-              GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-              GetTensorShape(bias), GetTensorData<int32_t>(bias),
-              GetTensorShape(output), GetTensorData<uint8_t>(output));
-        }
+        DepthwiseConv(context, op_params, &data, GetTensorShape(input),
+                      GetTensorData<uint8_t>(input), GetTensorShape(filter),
+                      GetTensorData<uint8_t>(filter), GetTensorShape(bias),
+                      GetTensorData<int32_t>(bias), GetTensorShape(output),
+                      GetTensorData<uint8_t>(output));
       } else {
         // Use the optimized version without padding
-        // @IFX_PATCH@
-        // Use the version(s) that can handle padding if padding is used
-        if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
-            DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>( 
-                op_params,  &data, GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<void>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output),
-                *filter->quantization.details.data.custom_sub8bit_packing);
-        } else {
-          DepthwiseConvNoPadding(
-              context, op_params, &data, GetTensorShape(input), GetTensorData<uint8_t>(input),
-              GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-              GetTensorShape(bias), GetTensorData<int32_t>(bias),
-              GetTensorShape(output), GetTensorData<uint8_t>(output));
-        }
+        DepthwiseConvNoPadding(
+            context, op_params, &data, GetTensorShape(input),
+            GetTensorData<uint8_t>(input), GetTensorShape(filter),
+            GetTensorData<uint8_t>(filter), GetTensorShape(bias),
+            GetTensorData<int32_t>(bias), GetTensorShape(output),
+            GetTensorData<uint8_t>(output));
       }
       break;
     }
