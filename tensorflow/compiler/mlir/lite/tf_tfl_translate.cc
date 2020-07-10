@@ -43,6 +43,7 @@ limitations under the License.
 #include "tensorflow/lite/model.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/stream_executor/lib/statusor.h"
+#include "tensorflow/compiler/mlir/lite/experimental/sub_byte_packing.h"
 
 using mlir::FuncOp;
 using mlir::MLIRContext;
@@ -181,6 +182,7 @@ int main(int argc, char **argv) {
 
   mlir::PassManager pm(&context);
   mlir::applyPassManagerCLOptions(pm);
+  SubBytePacking::SetValueBufferPacking(experimental_pack_packable_quantized_constants);
 
   // Set the quantization specifications from the command line flags.
   mlir::TFL::QuantizationSpecs quant_specs;

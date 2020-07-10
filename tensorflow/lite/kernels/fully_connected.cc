@@ -27,7 +27,6 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/fully_connected.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
-#include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected_packed_weights.h"
 #include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/reference/sparse_ops/fully_connected.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
@@ -474,84 +473,6 @@ void FullyConnectedInt16(const OpData* data, const TfLiteTensor* input,
 }
 }  // namespace
 
-
-namespace {
-
-
-template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
-inline void EvalFullyConnectedUint8PackedWeights(
-        const FullyConnectedParams& params,
-        const TfLiteTensor* input,
-        const TfLiteTensor* filter, const TfLiteTensor* bias,
-        TfLiteTensor* output) {
-
-    const RuntimeShape &input_shape = GetTensorShape(input);
-    auto input_data = GetTensorData<uint8_t>(input);
-    const RuntimeShape &filter_shape = GetTensorShape(filter);
-    auto filter_data =  GetTensorData<CONTAINER_T>(filter);
-    const RuntimeShape &bias_shape = GetTensorShape(bias);
-    auto bias_data = GetTensorData<int32_t>(bias);
-    const RuntimeShape &output_shape = GetTensorShape(output);
-    auto output_data = GetTensorData<uint8>(output);
-
-    // here could "Intercept" arguments for offlikne pre-interpretation
-    return reference_integer_ops::FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
-            params,
-            input_shape, input_data,
-            filter_shape, filter_data,
-            bias_shape, bias_data,
-            output_shape, output_data);
-}
-
-
-
-TfLiteStatus EvalQuantizedPackedWeights(
-        const FullyConnectedParams &params,
-        const TfLiteTensor* input,
-        const TfLiteTensor* filter, const TfLiteTensor* bias,
-        TfLiteTensor* output,
-        TfLiteContext* context,
-        const TfLiteCustomSub8BitPackingDetails &packing_details) {
-
-    
-    unsigned int bits_per_item = packing_details.bits_per_item;
-    unsigned int container_bits = packing_details.container_bits;
-    unsigned int packed_minor_dims = packing_details.packed_minor_dims;
-
-    // TODO Check alignment run-length marches minor dimension.
-    TFLITE_CHECK(packed_minor_dims == 1);
-    switch (bits_per_item) {
-
-        case 4: {
-            TFLITE_CHECK(container_bits == 8);
-             EvalFullyConnectedUint8PackedWeights<uint8_t, 4, 8 / 4>(params, input,
-                                                                    filter, bias,
-                                                                    output);
-            return kTfLiteOk;
-        }
-        case 5: {
-            TFLITE_CHECK(container_bits == 16);
-            EvalFullyConnectedUint8PackedWeights<uint16_t, 5, 16 / 5>(params, input,
-                                                                      filter, bias,
-                                                                      output);
-            return kTfLiteOk;
-        }
-        case 6: {
-            TFLITE_CHECK(container_bits == 32);
-            EvalFullyConnectedUint8PackedWeights<uint32_t, 6, 32 / 6>(params, input,
-                                                                      filter, bias,
-                                                                      output);
-            return kTfLiteOk;
-        }
-        default: {
-            TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
-                               bits_per_item);
-            return kTfLiteError;
-        }
-    }
-}
-}  // namespace
-
 template <KernelType kernel_type>
 TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                            TfLiteFullyConnectedParams* params, OpData* data,
@@ -584,13 +505,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
     op_params.rhs_cacheable = IsConstantTensor(input);
     switch (output->type) {
       case kTfLiteUInt8:
-        // @IFX_PATCH@
-        if (filter->quantization.details.type ==
-                kTfLiteSub8BitPackedUniformDetail) {
-          return EvalQuantizedPackedWeights(
-              op_params, input, filter, bias, output, context,
-              *filter->quantization.details.data.custom_sub8bit_packing);
-        } else if (kernel_type == kReference) {
+        if (kernel_type == kReference) {
           reference_ops::FullyConnected(
               op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
               GetTensorShape(filter), GetTensorData<uint8_t>(filter),

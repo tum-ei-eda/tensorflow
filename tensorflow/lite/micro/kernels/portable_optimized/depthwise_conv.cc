@@ -124,7 +124,7 @@ inline void PrecomputeSumOfFiltersFactor(const int32* bias, const TfLiteTensor* 
     }
     sum_of_filters_factor[out_channel] = sum_of_filter_factor * input_offset;
 
-    if (bias) {
+    if (bias) { 
       sum_of_filters_factor[out_channel] += bias[out_channel];
     }
   }

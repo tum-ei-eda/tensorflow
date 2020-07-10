@@ -132,9 +132,10 @@ struct DepthwiseConvPackedFilter {
             output_data[Offset(output_shape, b, out_y, out_x, oc)] =
                 static_cast<uint8>(acc);
           }
-        }
-      }
-    }
+
+        }  // out_x
+      } // out_y
+    } // batch b
   }
 };
 

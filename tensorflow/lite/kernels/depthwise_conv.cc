@@ -31,7 +31,6 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_float.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
-#include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8_packed_filter.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
@@ -353,14 +352,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   TF_LITE_ENSURE_STATUS(ComputeDepthMultiplier(context, input, filter,
                                                &op_params.depth_multiplier));
   
-  // @IFX_PATCH@
-  if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
-    reference_ops::DepthwiseConvPackedFilter( op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
-        GetTensorShape(filter), GetTensorData<void>(filter),
-        GetTensorShape(bias), GetTensorData<int32_t>(bias),
-        GetTensorShape(output), GetTensorData<uint8_t>(output),
-        *filter->quantization.details.data.custom_sub8bit_packing);
-  } else if (kernel_type == kReference) {
+ if (kernel_type == kReference) {
     reference_ops::DepthwiseConv(
         op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
         GetTensorShape(filter), GetTensorData<uint8_t>(filter),

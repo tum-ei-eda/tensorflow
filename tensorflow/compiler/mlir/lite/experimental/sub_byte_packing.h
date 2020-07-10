@@ -24,13 +24,10 @@ limitations under the License.
 #include "mlir/IR/Value.h"            // from @llvm-project
 #include "tensorflow/lite/schema/schema_generated.h"
 
-// @IFX_PATCH@
-// Layout and export of tensors contants with packed sub-byte sized elements
-// (currently used for for sub-byte bitwidth quantized constants)
-//
+
+
 class SubBytePacking {
  public:
-
   SubBytePacking(mlir::Value value);
 
   //
@@ -50,23 +47,31 @@ class SubBytePacking {
   // Shape is not available when packing object needs to be
   // constructed so need member to setup when it is available.
   // No-op if not Packable
+  // TODO Temporary scaffolding pending post-processing based
+  // packing
   void SetPackingRunLength(const std::vector<int32_t>& shape);
 
   // Sub-byte packing info is packed as CustomQuantization
   // entry in the quantizaton strcuture.   This inserts the
   // corresponding entry into flat-buffer and returns offset.
-  //
+  // Temporary scaffolding pending post-processing based
+  // packing
   flatbuffers::Offset<void> CustomDetails(
-    flatbuffers::FlatBufferBuilder& _fbb) const;
+      flatbuffers::FlatBufferBuilder& _fbb) const;
 
- // 
- inline bool Packable() const { return bits_per_item_ != 0; }
+  //
+  inline bool Packable() const { return bits_per_item_ != 0; }
 
+  // TODO Temporary scaffolding pending post-processing based
+  // packing
+  static void SetValueBufferPacking( bool value_buffer_packing ) {
+    value_buffer_packing_s = value_buffer_packing;
+  }
 
  protected:
   // Create buffer holding  data coding sub-8-bit uniform quantized
   // tensor values packed into `container_bits` container values.
-  //
+  // 
   template <typename CONTAINER_T, size_t container_bits>
   flatbuffers::Offset<tflite::Buffer> CreatePackedValueBuffer(
       flatbuffers::FlatBufferBuilder& builder, mlir::Operation* inst,
@@ -89,6 +94,13 @@ class SubBytePacking {
   // Product of sizes of packed minor dimensions.
   size_t packing_run_length_;
   mlir::Operation* src_const_op;
+
+  // Enable  in-place packing of value buffers rather than just 
+  // enforcing packed value range and leaving actual packing to downstream
+  // target-specific flat-buffer post-processing.
+  // TODO Temporary scaffolding pending post-processing based
+  // packing
+  static bool value_buffer_packing_s;
 };
 
-#endif // TENSORFLOW_COMPILER_MLIR_LITE_EXPERIMENTAL_SUB_BYTE_PACKING_H_
+#endif  // TENSORFLOW_COMPILER_MLIR_LITE_EXPERIMENTAL_SUB_BYTE_PACKING_H_

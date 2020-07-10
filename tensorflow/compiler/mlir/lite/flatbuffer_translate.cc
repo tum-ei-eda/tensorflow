@@ -113,6 +113,14 @@ static opt<bool, true> strip_debug_info_flag(
     "strip-debug-info", llvm::cl::desc("Strip debug info during export"),
     llvm::cl::location(strip_debug_info), llvm::cl::init(false));
 
+bool experimental_pack_packable_quantized_constants;
+
+static opt<bool, true> experimental_pack_packable_quantized_constants_flag(
+    "experimental-pack-packable-quant-constants",
+    llvm::cl::desc("Actually pack flatbuffer values for packable quantized constants."),
+    llvm::cl::location(experimental_pack_packable_quantized_constants),
+    llvm::cl::init(false));
+
 namespace mlir {
 namespace {
 static OwningModuleRef FlatBufferFileToMlirTrans(
