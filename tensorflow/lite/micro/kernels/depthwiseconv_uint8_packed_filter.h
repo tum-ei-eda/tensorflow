@@ -12,8 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_DEPTHWISECONV_UINT8__PACKED_FILTER_H_
-#define TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_DEPTHWISECONV_UINT8__PACKED_FILTER_H_
+#ifndef TENSORFLOW_LITE_MICRO_KERNELS_DEPTHWISECONV_UINT8_PACKED_FILTER_H_
+#define TENSORFLOW_LITE_MICRO_KERNELS_DEPTHWISECONV_UINT8_PACKED_FILTER_H_
 
 #include <algorithm>
 
@@ -21,14 +21,15 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/internal/types.h"
-#include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
 
 namespace tflite {
+namespace ops {
+namespace micro {
 
-namespace reference_ops {
+  
 namespace depthwise_conv {
 
-template <DepthwiseConvOutputRounding output_rounding, typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
+template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 struct DepthwiseConvPackedFilter {
 
   static inline void Run(const DepthwiseParams& params,
@@ -124,8 +125,7 @@ struct DepthwiseConvPackedFilter {
             if (bias_data) {
               acc += bias_data[oc];
             }
-            acc = DepthwiseConvRound<output_rounding>(acc, output_multiplier,
-                                                      output_shift);
+            acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
             acc += output_offset;
             acc = std::max(acc, output_activation_min);
             acc = std::min(acc, output_activation_max);
@@ -159,8 +159,7 @@ inline void DepthwiseConvPackedFilter(
   switch (bits_per_item) {
     case 4: {
       TFLITE_CHECK(container_bits == 8);
-      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<
-          DepthwiseConvOutputRounding::kAwayFromZero, uint8_t, 4, 8 / 4>;
+      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint8_t, 4, 8 / 4>;
       KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint8_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
@@ -168,8 +167,7 @@ inline void DepthwiseConvPackedFilter(
     }
     case 5: {
       TFLITE_CHECK(container_bits == 16);
-      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<
-          DepthwiseConvOutputRounding::kAwayFromZero, uint16_t, 5, 16 / 5>;
+      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint16_t, 5, 16 / 5>;
       KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint16_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
@@ -177,8 +175,7 @@ inline void DepthwiseConvPackedFilter(
     }
     case 6: {
       TFLITE_CHECK(container_bits == 32);
-      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<
-          DepthwiseConvOutputRounding::kAwayFromZero, uint32_t, 6, 32 / 6>;
+      using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint32_t, 6, 32 / 6>;
       KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint32_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
@@ -191,7 +188,10 @@ inline void DepthwiseConvPackedFilter(
   }
 }
 
-}  // namespace reference_ops
-}  // end namespace tflite
 
-#endif  // TENSORFLOW_LITE_KERNELS_INTERNAL_REFERENCE_DEPTHWISECONV_UINT8__PACKED_FILTER_H_
+}  // namespace micro
+}  // namespace ops
+}  // namespace tflite
+
+
+#endif  // TENSORFLOW_LITE_MICRO_KERNELS_DEPTHWISECONV_UINT8_PACKED_FILTER_H_
