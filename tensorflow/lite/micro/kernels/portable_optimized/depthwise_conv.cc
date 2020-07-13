@@ -1171,6 +1171,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_height_factor = params->dilation_height_factor;
       const int pad_width = data.padding.width;
       const int pad_height = data.padding.height;
+      const int pad_width_offset = data.padding.width_offset;
+      const int pad_height_offset = data.padding.height_offset;
 
       // Check if optimized filter width is used
       const bool use_optimized_filter_width =
@@ -1180,6 +1182,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       op_params.padding_type = PaddingType::kSame;
       op_params.padding_values.width = pad_width;
       op_params.padding_values.height = pad_height;
+      op_params.padding_values.width_offset = pad_width_offset;
+      op_params.padding_values.height_offset = pad_height_offset;
       op_params.stride_width = params->stride_width;
       op_params.stride_height = params->stride_height;
       op_params.dilation_width_factor = params->dilation_width_factor;
@@ -1201,7 +1205,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
             GetTensorData<int8>(filter), GetTensorShape(bias),
             GetTensorData<int32>(bias), GetTensorShape(output),
             GetTensorData<int8>(output));
-      } else if (pad_width != 0 || pad_height != 0) {
+      } else if (pad_width != 0 || pad_height != 0 || pad_width_offset != 0 || pad_height_offset != 0) {
         // Use the version that can handle padding
         EvalQuantizedPerChannel(context, node, params, &data, input, filter,
                                 bias, output);
@@ -1217,6 +1221,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_height_factor = params->dilation_height_factor;
       const int pad_width = data.padding.width;
       const int pad_height = data.padding.height;
+      const int pad_width_offset = data.padding.width_offset;
+      const int pad_height_offset = data.padding.height_offset;
 
       const int32_t input_offset = -input->params.zero_point;
       const int32_t filter_offset = -filter->params.zero_point;
@@ -1231,6 +1237,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       op_params.padding_type = PaddingType::kSame;
       op_params.padding_values.width = data.padding.width;
       op_params.padding_values.height = data.padding.height;
+      op_params.padding_values.width_offset = pad_width_offset;
+      op_params.padding_values.height_offset = pad_height_offset;
       op_params.stride_width = params->stride_width;
       op_params.stride_height = params->stride_height;
       op_params.dilation_width_factor = params->dilation_width_factor;
@@ -1292,7 +1300,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
             GetTensorData<int32_t>(bias), GetTensorShape(output),
             GetTensorData<uint8_t>(output));
 
-      } else if (pad_width != 0 || pad_height != 0) {
+      } else if (pad_width != 0 || pad_height != 0 || pad_width_offset != 0 || pad_height_offset != 0) {
         // Use the version(s) that can handle padding if padding is used
         DepthwiseConv(context, op_params, &data, GetTensorShape(input),
                       GetTensorData<uint8_t>(input), GetTensorShape(filter),

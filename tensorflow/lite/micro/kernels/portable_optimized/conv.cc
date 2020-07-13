@@ -662,6 +662,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   op_params.padding_type = RuntimePaddingType(params->padding);
   op_params.padding_values.width = data->padding.width;
   op_params.padding_values.height = data->padding.height;
+  op_params.padding_values.width_offset = data->padding.width_offset;
+  op_params.padding_values.height_offset = data->padding.height_offset;
   op_params.stride_width = params->stride_width;
   op_params.stride_height = params->stride_height;
   op_params.dilation_width_factor = params->dilation_width_factor;
@@ -705,7 +707,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
         TF_LITE_CONV_2D_PER_CHANNEL(reference_integer_ops::ConvPerChannel, int8_t);
       }
-      else if (data->padding.height != 0 || data->padding.width != 0) {
+      else if (data->padding.height != 0 || data->padding.width != 0 ||
+          data->padding.height_offset != 0 || data->padding.width_offset != 0) {
         EvalQuantizedPerChannelWithPadding(context, node, params, data, data->per_channel_output_multiplier, data->per_channel_output_shift,
                                                input, filter, bias, output, nullptr);
       }
@@ -728,7 +731,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       } else if ((dilation_width_factor != 1) || (dilation_height_factor != 1)) {
         TF_LITE_CONV_2D_PER_LAYER(reference_ops::Conv, uint8_t);
       }
-      else if (data->padding.height != 0 || data->padding.width != 0) {
+      else if (data->padding.height != 0 || data->padding.width != 0 ||
+          data->padding.height_offset != 0 || data->padding.width_offset != 0) {
         EvalQuantizedWithPadding(context, node, params, data, input, filter, bias, nullptr, nullptr, output);
       }
       else {
