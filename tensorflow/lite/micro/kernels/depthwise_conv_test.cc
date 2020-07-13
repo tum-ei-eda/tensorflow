@@ -371,6 +371,52 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedWithPadding) {
       output_zero_point, padding_depthwise_conv_params);
 }
 
+TF_LITE_MICRO_TEST(SimpleTestQuantizedWithPaddingOffset) {
+  const int input_elements = 16;
+  const int input_shape[] = {4, 1, 4, 4, 1};
+  const float input_values[] = {1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
+  const int filter_elements = 9;
+  const int filter_shape[] = {4, 1, 3, 3, 1};
+  const float filter_values[] = {1, 1, 1, 2, 2, 2, 3, 3, 3};
+  const int bias_elements = 1;
+  const int bias_shape[] = {4, 1, 1, 1, 1};
+  const int output_elements = 4;
+  const float bias_values[] = {1};
+  const float golden[] = {43, 29, 34, 23};
+
+  const int output_shape[] = {4, 1, 2, 2, 1};
+
+  const float input_scale = 0.5f;
+  const int input_zero_point = 128;
+  const float filter_scale = 0.5f;
+  const int filter_zero_point = 128;
+  const float output_scale = 1.0f;
+  const int output_zero_point = 128;
+
+  uint8_t input_quantized[input_elements];
+  uint8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  uint8_t golden_quantized[output_elements];
+  uint8_t output_data[output_elements];
+
+  static TfLiteDepthwiseConvParams padding_depthwise_conv_params = {
+      kTfLitePaddingSame,  /* Padding */
+      2,                    /* Stride Width */
+      2,                    /* Stride Height */
+      1,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      input_shape, input_values, input_quantized, input_scale, input_zero_point,
+      filter_shape, filter_values, filter_quantized, filter_scale,
+      filter_zero_point, bias_shape, bias_values, bias_quantized, golden,
+      golden_quantized, output_shape, output_data, output_scale,
+      output_zero_point, padding_depthwise_conv_params);
+}
+
 TF_LITE_MICRO_TEST(SimpleTestRelu) {
   const int input_elements = 12;
   const int input_shape[] = {4, 1, 3, 2, 2};
@@ -572,6 +618,53 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannelWithPadding) {
       1,                    /* Stride Width */
       1,                    /* Stride Height */
       2,                    /* Depth Multiplier */
+      kTfLiteActNone,       /* Activation*/
+      1,                    /* Dilation Width*/
+      1                     /* Dilation Height */
+  };
+
+  tflite::testing::TestDepthwiseConvQuantizedPerChannel(
+        input_shape, input_values, input_quantized, input_scale, input_zero_point,
+        filter_shape, filter_values, filter_quantized, bias_shape, bias_values,
+        bias_quantized, output_shape, golden, golden_quantized, output_data,
+        output_scale, output_zero_point, padding_depthwise_conv_params);
+}
+
+TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannelWithPaddingOffset) {
+  // This test covers the case of one side padding
+  const int input_elements = 16;
+  const int input_shape[] = {4, 1, 4, 4, 1};
+  const float input_values[] = {1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
+  const int filter_elements = 9;
+  const int filter_shape[] = {4, 1, 3, 3, 1};
+  const float filter_values[] = {1,1,1,2,2,2,3,3,3};
+  const int bias_elements = 1;
+  const int bias_shape[] = {4, 1, 1, 1, 1};
+  const int output_elements = 4;
+  const float bias_values[] = {1};
+  const float golden[] = {43, 29, 34, 23};
+
+  const int output_shape[] = {4, 1, 2, 2, 1};
+
+  const float input_scale = 0.5;
+  const float output_scale = 1.0f;
+  const int input_zero_point = 0;
+  const int output_zero_point = 0;
+
+  int8_t input_quantized[input_elements];
+  int8_t filter_quantized[filter_elements];
+  int32_t bias_quantized[bias_elements];
+  int8_t golden_quantized[output_elements];
+  int8_t output_data[output_elements];
+
+  int zero_points[bias_elements + 1];
+  float scales[bias_elements + 1];
+
+  static TfLiteDepthwiseConvParams padding_depthwise_conv_params = {
+      kTfLitePaddingSame,  /* Padding */
+      2,                    /* Stride Width */
+      2,                    /* Stride Height */
+      1,                    /* Depth Multiplier */
       kTfLiteActNone,       /* Activation*/
       1,                    /* Dilation Width*/
       1                     /* Dilation Height */
