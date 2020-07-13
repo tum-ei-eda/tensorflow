@@ -1253,7 +1253,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int needed_size =
           output_depth * filter_width * filter_height * input_depth;
 
-      if (filter->quantization.details.type !=
+      if (filter->quantization.details.type ==
           kTfLiteSub8BitPackedUniformDetail) {
         if (pad_width != 0 || pad_height != 0) {
           DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
