@@ -44,7 +44,7 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
 // TODO(b/150257460) As a future optimization, this struct could be replaced by
 // a union, since once `data` is populated, `bytes` and `node_idx` is not
 // needed.
-typedef struct {
+typedef struct ScratchBufferHandle {
   // Pointer to the scratch buffer.
   uint8_t* data;
   // Number of bytes required by the buffer. The actual allocated size might be
@@ -54,6 +54,7 @@ typedef struct {
   // determine the lifetime of the buffer. In AllocationInfo, this buffer will
   // have `before` = node_idx and `after` = node_idx.
   int node_idx;
+
 } ScratchBufferHandle;
 }  // namespace internal
 
@@ -199,13 +200,17 @@ class MicroAllocator {
   ErrorReporter* error_reporter_;
   bool model_is_allocating_;
 
-  // In reverse order for efficiency.
-  // i.e. scratch_buffer_handles_[0] is the handle for the last buffer,
-  // corresponding to the last RequestScratchBufferInArena call.
-  internal::ScratchBufferHandle* scratch_buffer_handles_ = nullptr;
+
+  // Invariant:
+  // scratch_buffer_handles_+scratch_buffer_block_size_ == 
+  // scratch_buffer_block_begin_+scratch_buffer_block_size_
+
   // How many scratch buffers have been allocated.
   size_t scratch_buffer_count_ = 0;
 
+
+  // Current size of block of handles in persistent storage...
+  internal::ScratchBufferHandle* scratch_buffer_handles_begin_ = nullptr;
   TF_LITE_REMOVE_VIRTUAL_DELETE
 };
 
