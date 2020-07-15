@@ -1263,7 +1263,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
       if (filter->quantization.details.type ==
           kTfLiteSub8BitPackedUniformDetail) {
-        if (pad_width != 0 || pad_height != 0) {
+        if (pad_width != 0 || pad_height != 0|| pad_width_offset != 0 || pad_height_offset != 0) {
           DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
               op_params, &data, GetTensorShape(input),
               GetTensorData<uint8_t>(input), GetTensorShape(filter),
