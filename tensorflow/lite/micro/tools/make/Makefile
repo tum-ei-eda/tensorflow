@@ -146,6 +146,7 @@ $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/*model_data.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*model.cc) \
+$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*_supp.cc) \
 $(TFLITE_U_PATH)tensorflow/lite/c/common.c \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/error_reporter.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
