@@ -336,7 +336,7 @@ typedef enum TfLiteQuantizationDetailsType {
 
 
 //
-// Custom Quantization details for sub 8-bit packed weights\
+// Custom Quantization details for sub 8-bit packed weights
 //
 // TfLiteQuantizationDetails hold only a raw 8-bit data-vector
 // This structure gives an interpretation of these as packing parameters for
