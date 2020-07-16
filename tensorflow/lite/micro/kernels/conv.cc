@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <tensorflow/lite/micro/kernels/conv_packed_ops.h>
 #include "tensorflow/lite/kernels/internal/reference/conv.h"
 
 #include "tensorflow/lite/c/builtin_op_data.h"
@@ -21,6 +20,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/conv.h"
+#include "tensorflow/lite/micro/kernels/conv_packed_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
@@ -43,7 +43,7 @@ constexpr int kConvQuantizedDimension = 0;
 
 struct OpData {
   TfLitePaddingValues padding;
-  // The scaling factor from input to output (aka the 'real multiplier') can
+  // The scaling factor from input to output (aka the 'real multiplier') can 
   // be represented as a fixed point multiplier plus a left shift.
   int32_t output_multiplier;
   int output_shift;
