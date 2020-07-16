@@ -38,7 +38,8 @@ constexpr int kMaxBiasChannels = 64;
 // DepthwiseConv.
 constexpr int kOutputTensorIndex = 3;
 
-static const int number_of_invocations = 10;
+static const int benchmarking_iterations = 1;
+static const int number_of_invocations = 1000;
 
 static const int batches = 4;
 static const int input_size = 32;
@@ -190,13 +191,15 @@ TfLiteStatus ValidateDepthwiseConvGoldens(const T* expected_output_data,
 
   // Start main benchmarking loop
   // Increase benchmarking iterations to make result representative
-  const int benchmarking_iterations = 5;
   auto start = std::chrono::high_resolution_clock::now();
 
-  for (int j = 0; j < number_of_invocations; j++) {
-    TfLiteStatus return_val = registration->invoke(&context, &node);
-    if (return_val != kTfLiteOk) {
-      return return_val;
+  for (int i = 0; i < benchmarking_iterations; i++) {
+    TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
+    for (int j = 0; j < number_of_invocations; j++) {
+      TfLiteStatus return_val = registration->invoke(&context, &node);
+      if (return_val != kTfLiteOk) {
+        return return_val;
+      }
     }
   }
 

@@ -69,7 +69,7 @@ static int zero_points[kBiasElements + 1];
 static float scales[kBiasElements + 1];
 
 static const int benchmarking_iterations = 1;
-
+static const int number_of_invocations = 1000;
 
 static TfLiteConvParams common_conv_params = {
     kTfLitePaddingValid,  // padding
@@ -204,8 +204,7 @@ TfLiteStatus ValidateConvGoldensPerformance(TfLiteTensor* tensors, int tensors_s
                                  const T* expected_output_data, T* output_data,
                                  int output_length,
                                  TfLiteConvParams* conv_params,
-                                 float tolerance = 1e-5,
-                                 int number_of_invocations = 100) {
+                                 float tolerance = 1e-5) {
   TfLiteContext context;
   PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
 
@@ -280,7 +279,7 @@ void TestConvQuantizedPerformance(
     const int* bias_dims_data, const float* bias_data, int32_t* bias_quantized,
     const int* output_dims_data, const float* expected_output_data,
     T* expected_output_quantized, T* output_data,
-    float output_scale, TfLiteConvParams* conv_params, int number_of_invocations) {
+    float output_scale, TfLiteConvParams* conv_params) {
   TfLiteIntArray* input_dims = IntArrayFromInts(input_dims_data);
   TfLiteIntArray* filter_dims = IntArrayFromInts(filter_dims_data);
   TfLiteIntArray* bias_dims = IntArrayFromInts(bias_dims_data);
@@ -312,7 +311,7 @@ void TestConvQuantizedPerformance(
   TF_LITE_MICRO_EXPECT_EQ(
       kTfLiteOk,
       ValidateConvGoldensPerformance(tensors, tensors_size, expected_output_quantized,
-                          output_data, output_dims_count, conv_params, 1e-5, number_of_invocations));
+                          output_data, output_dims_count, conv_params, 1e-5));
 }
 
 void TestConvQuantizedPerChannelPerformance(
@@ -324,7 +323,7 @@ void TestConvQuantizedPerChannelPerformance(
     int* bias_zero_points, const int* output_dims_data,
     const float* expected_output_data, int8_t* expected_output_data_quantized,
     int8_t* output_data, float output_scale, int output_zero_point,
-    TfLiteConvParams* conv_params, int number_of_invocations)
+    TfLiteConvParams* conv_params)
 {
   TfLiteIntArray* input_dims = IntArrayFromInts(input_dims_data);
   TfLiteIntArray* filter_dims = IntArrayFromInts(filter_dims_data);
@@ -382,7 +381,7 @@ void TestConvQuantizedPerChannelPerformance(
       kTfLiteOk,
       ValidateConvGoldensPerformance(tensors, tensors_size, expected_output_data_quantized,
                           output_data, output_dims_count, conv_params,
-                          1.0 /* tolerance */, number_of_invocations));
+                          1.0 /* tolerance */));
 }
 
 }  // namespace
@@ -392,8 +391,6 @@ void TestConvQuantizedPerChannelPerformance(
 TF_LITE_MICRO_TESTS_BEGIN
 
 TF_LITE_MICRO_TEST(ConvPerformanceTestQuantizedUint8) {
-  
-  const int number_of_invocations = 100;
 
   tflite::testing::InitConvTestDataQuantized(tflite::testing::filter_size, tflite::testing::number_filters,
                                              tflite::testing::input_channels, tflite::testing::batches, tflite::testing::input_size,
@@ -422,13 +419,10 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestQuantizedUint8) {
       tflite::testing::kBiasShape, tflite::testing::kBiasData, bias_quantized,
       tflite::testing::kOutputShape, tflite::testing::kGoldenData,
       golden_quantized, output_data, tflite::testing::output_scale,
-      &tflite::testing::common_conv_params,
-      number_of_invocations);
+      &tflite::testing::common_conv_params);
 }
 
 TF_LITE_MICRO_TEST(ConvPerformanceTestQuantizedInt8) {
-
-  const int number_of_invocations = 100;
 
   tflite::testing::InitConvTestDataQuantized(tflite::testing::filter_size, tflite::testing::number_filters,
                                              tflite::testing::input_channels, tflite::testing::batches, tflite::testing::input_size,
@@ -457,8 +451,7 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestQuantizedInt8) {
       tflite::testing::kBiasShape, tflite::testing::kBiasData, bias_quantized, tflite::testing::scales, tflite::testing::zero_points,
       tflite::testing::kOutputShape, tflite::testing::kGoldenData,
       golden_quantized, output_data, tflite::testing::output_scale, tflite::testing::output_zero_point,
-      &tflite::testing::common_conv_params,
-      number_of_invocations);
+      &tflite::testing::common_conv_params);
 }
 
 TF_LITE_MICRO_TEST(ConvPerformanceTestUint8Padding) {
@@ -498,8 +491,6 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestUint8Padding) {
       1,                    // dilation_height_factor
   };
 
-  const int number_of_invocations = 100;
-
     tflite::testing::InitConvTestDataQuantized(filter_size, number_filters,
                                                input_channels, batches, input_size,
                                                kInputData,
@@ -527,8 +518,7 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestUint8Padding) {
         kBiasShape, kBiasData, bias_quantized,
         kOutputShape, kGoldenData,
         golden_quantized, output_data, output_scale,
-        &padding_conv_params,
-        number_of_invocations);
+        &padding_conv_params);
 }
 
 TF_LITE_MICRO_TEST(ConvPerformanceTestInt8Padding) {
@@ -573,8 +563,6 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestInt8Padding) {
       1,                    // dilation_height_factor
   };
 
-  const int number_of_invocations = 100;
-
     tflite::testing::InitConvTestDataQuantized(filter_size, number_filters,
                                                input_channels, batches, input_size,
                                                kInputData,
@@ -602,8 +590,7 @@ TF_LITE_MICRO_TEST(ConvPerformanceTestInt8Padding) {
         kBiasShape, kBiasData, bias_quantized, scales, zero_points,
         kOutputShape, kGoldenData,
         golden_quantized, output_data, output_scale, output_zero_point,
-        &padding_conv_params,
-        number_of_invocations);
+        &padding_conv_params);
 }
 
 TF_LITE_MICRO_TESTS_END

@@ -26,6 +26,8 @@ namespace tflite {
 namespace testing {
 namespace {
 
+static const int number_of_invocations = 1000;
+
 MockAllocator *mock_allocator;
 TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr)
 {
@@ -85,7 +87,7 @@ void InitTestDataQuantized(const int accum_depth, const int output_depth,const i
 }
 
 template <typename T>
-void TestFullyConnectedQuantized(const int number_of_invocations,
+void TestFullyConnectedQuantized(
     const int* input_dims_data, const T* input_data, const float input_min,
     const float input_max, const int* weights_dims_data, const T* weights_data,
     const float weights_min, const float weights_max, const int* bias_dims_data,
@@ -167,7 +169,7 @@ void TestFullyConnectedQuantized(const int number_of_invocations,
 
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  micro_test::reporter->Report("Run time =  %d us", duration);
+  micro_test::reporter->Report("Avg Invoke run time %d invocations =  %d us", number_of_invocations, duration);
 
   if (registration->free) {
     registration->free(&context, user_data);
@@ -220,7 +222,7 @@ TF_LITE_MICRO_TEST(PerformanceTestQuantizedInt8) {
 
   int8_t output_data[output_dims_count];
   const int number_of_invocations = 1000;
-  tflite::testing::TestFullyConnectedQuantized<int8_t>(number_of_invocations,
+  tflite::testing::TestFullyConnectedQuantized<int8_t>(
       input_dims_data, input_data, input_min, input_max, weights_dims_data,
       weights_data, weights_min, weights_max, bias_dims_data, bias_data,
       bias_scale, expected_output_data, output_dims_data, output_min,
@@ -265,7 +267,7 @@ TF_LITE_MICRO_TEST(PerformanceTestQuantizedUint8) {
 
   uint8_t output_data[output_dims_count];
   const int number_of_invocations = 100;
-  tflite::testing::TestFullyConnectedQuantized<uint8_t>(number_of_invocations,
+  tflite::testing::TestFullyConnectedQuantized<uint8_t>(
       input_dims_data, input_data, input_min, input_max, weights_dims_data,
       weights_data, weights_min, weights_max, bias_dims_data, bias_data,
       bias_scale, expected_output_data, output_dims_data, output_min,
