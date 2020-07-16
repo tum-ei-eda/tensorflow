@@ -684,11 +684,6 @@ Optional<BufferOffset<tflite::Tensor>> Translator::BuildTensor(
   BufferOffset<tflite::QuantizationParameters> q_params;
   if (auto qtype = element_type.dyn_cast<mlir::quant::UniformQuantizedType>()) {
     auto details = packing.CustomDetails(builder_);
-    if (!details.IsNull()) {
-      mlir::emitRemark(value.getLoc(), "CustomDetails are specified");
-    } else {
-      mlir::emitRemark(value.getLoc(), "none");
-    }
     q_params = tflite::CreateQuantizationParameters(
         // TODO(fengliuai): min and max values are not stored in the
         // quantized type, so both are set to 0. The model couldn't be
