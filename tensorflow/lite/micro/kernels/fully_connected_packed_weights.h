@@ -73,8 +73,9 @@ void FullyConnectedUint8PackedWeights(
   const int32 mask = (1<<bits_per_item)-1;
 #if IFX_DEBUG_LOGGING
   std::cout << "Packed implementation!: accum-depth = " << std::dec << accum_depth << std::endl;
-#endif
   bool once = false;
+#endif
+
   unsigned int final_container_begin = accum_depth-(accum_depth%items_per_container);
   for (int b = 0; b < batches; ++b) {
     for (unsigned int out_c = 0; out_c < output_depth; ++out_c) {
@@ -127,15 +128,15 @@ void FullyConnectedUint8PackedWeights(
           ++i;
       }
 
+      if (bias_data) {
+        acc += bias_data[out_c];
+      }
 #if IFX_DEBUG_LOGGING
       if( !once ) {
         std::cout << "RAW ACC " << acc << std::endl;
       }
       once = true;
 #endif
-      if (bias_data) {
-        acc += bias_data[out_c];
-      }
       acc = MultiplyByQuantizedMultiplier(acc, output_multiplier, output_shift);
       acc += output_offset;
       acc = std::max(acc, output_activation_min);
