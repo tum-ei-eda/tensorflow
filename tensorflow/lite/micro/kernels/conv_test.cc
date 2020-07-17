@@ -524,7 +524,7 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPerChannelPaddingOffset) {
       1,                    // dilation_height_factor
   };
 
-  const int kInputElements = 9;
+  const int kInputElements = 16;
   const int kInputShape[] = {4, 1, 4, 4, 1};
   const float kInputData[] = {1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4};
   const int kFilterElements = 9;
