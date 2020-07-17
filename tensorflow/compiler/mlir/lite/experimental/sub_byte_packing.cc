@@ -146,6 +146,10 @@ SubBytePacking::SubBytePacking(Value value)
   // Check consumers of constant are all supported ops.
   //
 
+#if IFX_PATCH_LOGGING
+  qcst_op.emitRemark("CANDIDATE FOR PACKING!");
+#endif
+
   bool consistent_usage = true;
   for (auto user_i : value.getUsers()) {
     Operation* op = user_i;
@@ -267,14 +271,18 @@ void SubBytePacking::SetPackingRunLength(const std::vector<int32_t>& shape) {
 }
 
 tflite::QuantizationDetails SubBytePacking::QuantizationDetailsType() const {
-  return bits_per_item_ != 0 ? tflite::QuantizationDetails_CustomQuantization
-                             : tflite::QuantizationDetails_NONE;
+  if (Packable() && value_buffer_packing_s)
+    return tflite::QuantizationDetails_CustomQuantization;
+  else
+    return tflite::QuantizationDetails_NONE;
 }
 
 flatbuffers::Offset<void> SubBytePacking::CustomDetails(
     flatbuffers::FlatBufferBuilder& _fbb) const {
-  if (!Packable()) return 0;
-
+  if (!Packable() ) return 0;
+  if(!value_buffer_packing_s){
+    return 0;
+  }
   tflite::CustomQuantizationT qdetails;
   TfLiteCustomSub8BitPackingDetails details_struct;
   details_struct.bits_per_item = bits_per_item_;
@@ -412,17 +420,18 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
         default: {
           // No supported packed container format could be identified
           // Fall through to use generic 8-bit unpacked format.
+
+          break;
+        }
+      }
+    }
+
 #ifdef IFX_PATCH_LOGGING
           inst->emitRemark("Leaving " + Twine(bits_per_item_) +
                            " unpacked but enforcing " +
                            Twine(bits_per_item_) +
                            " bit width");
 #endif
-          break;
-        }
-      }
-    }
-    
     // Fall-through to here if format not supported or packing disabled.
     // Enforce specified item bit-width so  bugs in bitwidth inference
     // upstream can be detected by tests wrttien using TF-lite intererpreter with standard
@@ -432,9 +441,21 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
       for (size_t i = 0; i < tensor_data.size(); ++i) {
         narrowed_data.push_back(raw_tensor_data[i] & mask);
       }
+#ifdef IFX_PATCH_LOGGING
+      std::ostringstream msg;
+      msg << "Enforced values ";
+      for (size_t i = 0; i < tensor_data.size(); ++i) {
+        msg << " " << (uint32_t)(narrowed_data[i]);
+      }
+
+      inst->emitRemark(msg.str());
+#endif
       auto buffer_data = builder.CreateVector(narrowed_data);
       return tflite::CreateBuffer(builder, buffer_data);
   } else {
+#ifdef IFX_PATCH_LOGGING
+          inst->emitRemark("Not packable!");
+#endif
     // Not Packable - leave as-is
     auto buffer_data = builder.CreateVector(raw_tensor_data, tensor_data.size());
     return tflite::CreateBuffer(builder, buffer_data);

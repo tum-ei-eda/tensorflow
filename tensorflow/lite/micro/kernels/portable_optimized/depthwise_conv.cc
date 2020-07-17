@@ -151,7 +151,7 @@ inline void PrecomputeSumOfPackedFiltersFactor(
   int filter_size = filter_width * filter_height;
 
   uint32_t mask = (1u << packing_details.bits_per_item) - 1u;
-  uint32_t container;
+  uint32_t container  = 0;
   size_t bits_in_container = 0;
   const uint8_t* filter_byte_p = filter_data;
 
