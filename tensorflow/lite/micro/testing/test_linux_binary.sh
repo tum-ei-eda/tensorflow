@@ -41,7 +41,7 @@ print_error_and_exit() {
 
 # This traps the signal from the test binary ($1) and checks if there was a
 # segfault and adds that to the error log (which would otherwise be missing).
-trap 'echo foo ; if [[ $? -eq 139 ]]; then echo "Segmentation fault" >> ${MICRO_LOG_FILENAME}; print_error_and_exit; fi' CHLD
+trap 'if [[ $? -eq 139 ]]; then echo "Segmentation fault" >> ${MICRO_LOG_FILENAME}; print_error_and_exit; fi' CHLD
 
 # This trap statement prevents the bash script from segfaulting with a cryptic
 # message like:

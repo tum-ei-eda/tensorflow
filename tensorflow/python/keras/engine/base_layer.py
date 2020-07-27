@@ -35,7 +35,6 @@ from tensorflow.python import tf2
 from tensorflow.python.autograph.core import ag_ctx
 from tensorflow.python.autograph.impl import api as autograph
 from tensorflow.python.distribute import distribution_strategy_context as ds_context
-from tensorflow.python.distribute import sharded_variable
 from tensorflow.python.eager import context
 from tensorflow.python.eager import execute
 from tensorflow.python.eager import function
@@ -483,7 +482,6 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
                  regularizer=None,
                  trainable=None,
                  constraint=None,
-                 partitioner=None,
                  use_resource=None,
                  synchronization=tf_variables.VariableSynchronization.AUTO,
                  aggregation=tf_variables.VariableAggregation.NONE,
@@ -502,7 +500,6 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         Note that `trainable` cannot be `True` if `synchronization`
         is set to `ON_READ`.
       constraint: Constraint instance (callable).
-      partitioner: Partitioner to be passed to the `Trackable` API.
       use_resource: Whether to use `ResourceVariable`.
       synchronization: Indicates when a distributed a variable will be
         aggregated. Accepted values are constants defined in the class
@@ -517,24 +514,20 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         `collections`, `experimental_autocast` and `caching_device`.
 
     Returns:
-      The created variable. Usually either a `Variable` or `ResourceVariable`
-      instance. If `partitioner` is not `None`, a `PartitionedVariable`
-      instance is returned.
+      The variable created.
 
     Raises:
-      RuntimeError: If called with partitioned variable regularization and
-        eager execution is enabled.
       ValueError: When giving unsupported dtype and no initializer or when
         trainable has been set to True with synchronization set as `ON_READ`.
     """
     if shape is None:
       shape = ()
+    kwargs.pop('partitioner', None)  # Ignored.
     # Validate optional keyword arguments.
     for kwarg in kwargs:
-      if kwarg not in ['getter', 'collections', 'experimental_autocast',
-                       'caching_device']:
+      if kwarg not in ['collections', 'experimental_autocast',
+                       'caching_device', 'getter']:
         raise TypeError('Unknown keyword argument:', kwarg)
-    getter = kwargs.pop('getter', base_layer_utils.make_variable)
     collections_arg = kwargs.pop('collections', None)
     # 'experimental_autocast' can be set to False by the caller to indicate an
     # AutoCastVariable should never be created.
@@ -579,10 +572,11 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         raise ValueError('An initializer for variable %s of type %s is required'
                          ' for layer %s' % (name, dtype.base_dtype, self.name))
 
+    getter = kwargs.pop('getter', base_layer_utils.make_variable)
     if (autocast and self._dtype_policy.should_cast_variables and
         dtype.is_floating):
-      # Wrap 'getter' with a version that returns an AutoCastVariable.
       old_getter = getter
+      # Wrap variable constructor to return an AutoCastVariable.
       def getter(*args, **kwargs):  # pylint: disable=function-redefined
         variable = old_getter(*args, **kwargs)
         return autocast_variable.create_autocast_variable(variable)
@@ -606,7 +600,6 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         dtype=dtype,
         constraint=constraint,
         trainable=trainable,
-        partitioner=partitioner,
         use_resource=use_resource,
         collections=collections_arg,
         synchronization=synchronization,
@@ -620,9 +613,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       self._handle_weight_regularization(name_in_scope,
                                          variable,
                                          regularizer)
-    if isinstance(
-        variable,
-        (tf_variables.PartitionedVariable, sharded_variable.ShardedVariable)):
+    if base_layer_utils.is_split_variable(variable):
       for v in variable:
         backend.track_variable(v)
         if trainable:
@@ -738,7 +729,9 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
                   '`compute_output_shape` method on your layer (%s).' %
                   self.__class__.__name__), e)
       return nest.map_structure(lambda t: t.shape, outputs)
-    raise NotImplementedError
+    raise NotImplementedError(
+        'Please run in eager mode or implement the `compute_output_shape` '
+        'method on your layer (%s).' % self.__class__.__name__)
 
   @doc_controls.for_subclass_implementers
   def compute_output_signature(self, input_signature):
@@ -840,8 +833,9 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         self._handle_activity_regularization(inputs, outputs)
       self._set_mask_metadata(inputs, outputs, input_masks,
                               build_graph=False)
+      outputs = nest.map_structure(
+          keras_tensor.keras_tensor_from_tensor, outputs)
 
-    outputs = nest.map_structure(keras_tensor.keras_tensor_from_tensor, outputs)
     if hasattr(self, '_set_inputs') and not self.inputs:
       # TODO(kaftan): figure out if we ned to do this at all
       # Subclassed network: explicitly set metadata normally set by
@@ -921,7 +915,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     # >> inputs = tf.keras.Input(10)
     # >> outputs = MyLayer()(inputs)  # Functional construction mode.
     # >> model = tf.keras.Model(inputs, outputs)
-    if _in_functional_construction_mode(inputs, args, kwargs, input_list):
+    if _in_functional_construction_mode(self, inputs, args, kwargs, input_list):
       return self._functional_construction_call(inputs, args, kwargs,
                                                 input_list)
 
@@ -943,10 +937,14 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       kwargs['mask'] = input_masks
 
     # Training mode for `Layer.call` is set via (in order of priority):
-    # (1) The `training` argument passed to this `Layer.call`.
+    # (1) The `training` argument passed to this `Layer.call`, if it is not None
     # (2) The training mode of an outer `Layer.call`.
-    # (3) The default mode set by `tf.keras.backed.set_learning_phase` (if set).
-    training_mode = self._set_training_mode(args, kwargs, call_context)
+    # (3) The default mode set by `tf.keras.backend.set_learning_phase` (if set)
+    # (4) Any non-None default value for `training` specified in the call
+    #  signature
+    # (5) False (treating the layer as if it's in inference)
+    args, kwargs, training_mode = self._set_training_mode(
+        args, kwargs, call_context)
 
     # Losses are cleared for all sublayers on the outermost `Layer.call`.
     # Losses are not cleared on inner `Layer.call`s, because sublayers can be
@@ -1020,7 +1018,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     # propagate `training` value from this layer's calling layer.
     training_value = None
     training_arg_passed_by_framework = False
-    # Priority 1: `training` was explicitly passed.
+    # Priority 1: `training` was explicitly passed a non-None value.
     if self._call_arg_was_passed('training', args, kwargs):
       training_value = self._get_call_arg_value('training', args, kwargs)
       if not self._expects_training_arg:
@@ -1030,17 +1028,23 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       # Priority 2: `training` was passed to a parent layer.
       if call_context.training is not None:
         training_value = call_context.training
-      # Priority 3a: `learning_phase()` has been set.
+      # Priority 3: `learning_phase()` has been set.
       elif backend.global_learning_phase_is_set():
         training_value = backend.learning_phase()
-
-      if self._expects_training_arg and training_value is not None:
         # Force the training_value to be bool type which matches to the contract
         # for layer/model call args.
         if tensor_util.is_tensor(training_value):
           training_value = math_ops.cast(training_value, dtypes.bool)
         else:
           training_value = bool(training_value)
+      # Priority 4: trace layer with the default training argument specified
+      # in the `call` signature (or in inference mode if the `call` signature
+      # specifies no non-None default).
+      else:
+        training_value = self._default_training_arg
+      # In cases (2), (3), (4) the training argument is passed automatically
+      # by the framework, and will not be hard-coded into the model.
+      if self._expects_training_arg:
         args, kwargs = self._set_call_arg_value('training', training_value,
                                                 args, kwargs)
         training_arg_passed_by_framework = True
@@ -1150,6 +1154,8 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       # (1) `training` was passed to this `Layer.call`.
       if self._call_arg_was_passed('training', args, kwargs):
         training_mode = self._get_call_arg_value('training', args, kwargs)
+      # If no `training` arg was passed, or `None` was explicitly passed,
+      # the framework will make a decision about the training mode is.
       if training_mode is None:
         call_ctx_training = call_context.training
         # (2) `training` mode is inferred from an outer `Layer.call`.
@@ -1165,10 +1171,15 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
             training_mode = math_ops.cast(training_mode, dtypes.bool)
           else:
             training_mode = bool(training_mode)
+        # (4) We default to using `call`'s default value for `training`,
+        # or treating the layer as if it is in inference if no non-None default
+        # is specified in the `call` signature.
+        else:
+          training_mode = self._default_training_arg
 
-        # For case (2) or (3), `training` arg is passed by framework.
-        if training_mode is not None:
-          kwargs['training'] = training_mode
+        # For case (2), (3), (4) `training` arg is passed by framework.
+        args, kwargs = self._set_call_arg_value('training', training_mode, args,
+                                                kwargs)
     else:
       if 'training' in kwargs:
         # `training` was passed to this `Layer` but is not needed for
@@ -1178,7 +1189,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         # Grab the current `training` mode from any outer `Layer.call`.
         training_mode = call_context.training
 
-    return training_mode
+    return args, kwargs, training_mode
 
   def _autographed_call(self):
     # Wrapping `call` function in autograph to allow for dynamic control
@@ -1382,9 +1393,11 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     >>> outputs = tf.keras.layers.Dense(1)(x)
     >>> model = tf.keras.Model(inputs, outputs)
     >>> # Activity regularization.
+    >>> len(model.losses)
+    0
     >>> model.add_loss(tf.abs(tf.reduce_mean(x)))
-    >>> model.losses
-    [<tf.Tensor 'Abs:0' shape=() dtype=float32>]
+    >>> len(model.losses)
+    1
 
     >>> inputs = tf.keras.Input(shape=(10,))
     >>> d = tf.keras.layers.Dense(10, kernel_initializer='ones')
@@ -1697,8 +1710,6 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       aggregation = None if from_metric_obj else 'mean'
       self._graph_network_add_metric(value, aggregation, name)
 
-  @deprecation.deprecated_args(None, '`inputs` is now automatically inferred',
-                               'inputs')
   @doc_controls.do_not_doc_inheritable
   def add_update(self, updates, inputs=None):
     """Add update op(s), potentially dependent on layer inputs.
@@ -1721,6 +1732,10 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         on this Layer, when executing in Eager mode.
       inputs: Deprecated, will be automatically inferred.
     """
+    if inputs is not None:
+      tf_logging.warning(
+          '`add_update` `inputs` kwarg has been deprecated. You no longer need '
+          'to pass a value to `inputs` as it is being automatically inferred.')
     call_context = base_layer_utils.call_context()
     # No need to run updates during Functional API construction.
     if call_context.in_keras_graph:
@@ -2416,7 +2431,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
         regularization = regularizer(v)
       return regularization
 
-    if isinstance(variable, tf_variables.PartitionedVariable):
+    if base_layer_utils.is_split_variable(variable):
       for v in variable:
         self.add_loss(functools.partial(_loss_for_variable, v))
     else:
@@ -2529,7 +2544,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
       if len(args) > arg_pos:
         args = list(args)
         args[arg_pos] = new_value
-        return args, kwargs
+        return tuple(args), kwargs
     if new_value is None and pop_kwarg_if_none:
       kwargs.pop(arg_name, None)
     else:
@@ -2724,7 +2739,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     super(tracking.AutoTrackable, self).__delattr__(name)
 
     if (isinstance(existing_value, Layer)
-        or trackable_layer_utils.has_weights(existing_value)):
+        or base_layer_utils.has_weights(existing_value)):
       super(tracking.AutoTrackable, self).__setattr__(
           '_layers',
           [l for l in self._layers if l is not existing_value])
@@ -2774,7 +2789,7 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     # Be careful about metric if it becomes a Module in future.
     # Append value to self._layers if relevant
     if (getattr(self, '_auto_track_sub_layers', True) and
-        (isinstance(value, Layer) or trackable_layer_utils.has_weights(value))):
+        (isinstance(value, Layer) or base_layer_utils.has_weights(value))):
       self._maybe_create_attribute('_layers', [])
       # We need to check object identity to avoid de-duplicating empty
       # container types which compare equal.
@@ -2873,6 +2888,10 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     call_fn_args = self._call_fn_args
     self._expects_training_arg = ('training' in call_fn_args or
                                   self._call_accepts_kwargs)
+    # The default training arg will be any (non-None) default specified in the
+    # method signature, or None if no value is specified.
+    self._default_training_arg = self._call_fn_arg_defaults.get(
+        'training')
     self._expects_mask_arg = ('mask' in call_fn_args or
                               self._call_accepts_kwargs)
 
@@ -2891,6 +2910,19 @@ class Layer(module.Module, version_utils.LayerVersionSelector):
     if all_args and all_args[0] == 'self':
       return all_args[1:]
     return all_args
+
+  @property
+  @tracking.cached_per_instance
+  def _call_fn_arg_defaults(self):
+    call_fn_args = self._call_fn_args
+    call_fn_defaults = self._call_full_argspec.defaults or []
+    defaults = dict()
+
+    # The call arg defaults are an n-tuple of the last n elements of the args
+    # list. (n = # of elements that have a default argument)
+    for i in range(-1 * len(call_fn_defaults), 0):
+      defaults[call_fn_args[i]] = call_fn_defaults[i]
+    return defaults
 
   @property
   @tracking.cached_per_instance
@@ -3059,6 +3091,9 @@ class TensorFlowOpLayer(Layer):
     # This means `built` is not set in `__call__`.
     self.built = True
 
+    # Do not individually trace TensorflowOpLayers in the SavedModel.
+    self._must_restore_from_config = True
+
   def call(self, inputs):
     if context.executing_eagerly():
       return self._defun_call(inputs)
@@ -3171,7 +3206,7 @@ class AddMetric(Layer):
     return config
 
 
-def _in_functional_construction_mode(inputs, args, kwargs, input_list):  # pylint: disable=unused-argument
+def _in_functional_construction_mode(layer, inputs, args, kwargs, input_list):  # pylint: disable=unused-argument
   """Check the arguments to see if we are constructing a functional model."""
   if keras_tensor.keras_tensors_enabled():
     # We are constructing a functional model if any of the inputs
@@ -3181,7 +3216,20 @@ def _in_functional_construction_mode(inputs, args, kwargs, input_list):  # pylin
         for tensor in nest.flatten([inputs, args, kwargs]))
   else:
     if context.executing_eagerly():
-      return all(tf_utils.is_symbolic_tensor(t) for t in input_list)
+      all_inputs_symbolic = all(
+          tf_utils.is_symbolic_tensor(t) for t in input_list)
+      if (base_layer_utils.is_subclassed(layer) and
+          any(tf_utils.is_symbolic_tensor(t) for t in nest.flatten(
+              [inputs, args, kwargs])) and not all_inputs_symbolic):
+        raise ValueError('It appears you are trying to construct a '
+                         'functional model, but not all of the inputs in '
+                         'the first positional argument of your layer call '
+                         'are symbolic tensors. '
+                         '(Input objects, or the output of another layer) '
+                         'Functional models cannot correctly track custom '
+                         'layers unless all values in the first call argument '
+                         'are symbolic.')
+      return all_inputs_symbolic
     else:
       return (base_layer_utils.is_in_keras_graph() or
               all(hasattr(t, '_keras_history') for t in input_list))

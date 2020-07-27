@@ -3,7 +3,7 @@
 #  ":platform" - Low-level and platform-specific Python code.
 
 load("//tensorflow:tensorflow.bzl", "py_strict_library")
-load("//tensorflow:tensorflow.bzl", "cc_header_only_library", "if_mlir", "if_not_windows", "if_xla_available", "py_test", "py_tests", "tf_cc_shared_object", "tf_cc_test", "tf_cuda_library", "tf_gen_op_wrapper_py")
+load("//tensorflow:tensorflow.bzl", "cc_header_only_library", "if_mlir", "if_not_windows", "if_tpu", "if_xla_available", "py_test", "py_tests", "tf_cc_shared_object", "tf_cc_test", "tf_cuda_library", "tf_enable_mlir_bridge", "tf_gen_op_wrapper_py")
 
 # buildifier: disable=same-origin-load
 load("//tensorflow:tensorflow.bzl", "tf_monitoring_python_deps")
@@ -56,6 +56,7 @@ visibility = [
     "//third_party/py/reverb:__subpackages__",
     "//third_party/py/neural_structured_learning:__subpackages__",
     "//third_party/py/tensorflow_examples:__subpackages__",
+    "//third_party/py/tf_agents:__subpackages__",  # For benchmarks.
     "//third_party/py/tf_slim:__subpackages__",
     # TODO(aselle): to pass open source test.
     "//bazel_pip/tensorflow/lite/toco/python:__pkg__",
@@ -390,7 +391,6 @@ tf_py_test(
     tags = [
         "no_windows",
         "nomac",
-        "notap",  # TODO(b/137133525): enable after this is fixed.
     ],
     deps = [
         ":client_testlib",
@@ -558,7 +558,7 @@ cc_library(
     deps = [
         ":bfloat16_lib",
         ":numpy_lib",
-        "//tensorflow/c:c_api",
+        "//tensorflow/c:c_api_no_xla",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
     ],
@@ -789,6 +789,16 @@ tf_python_pybind_extension(
 )
 
 tf_python_pybind_extension(
+    name = "_pywrap_tf32_execution",
+    srcs = ["util/tf32.cc"],
+    hdrs = ["//tensorflow/core/platform:tf32_hdr"],
+    module_name = "_pywrap_tf32_execution",
+    deps = [
+        "@pybind11",
+    ],
+)
+
+tf_python_pybind_extension(
     name = "_pywrap_util_port",
     srcs = ["util/port_wrapper.cc"],
     hdrs = ["//tensorflow/core/util:port_hdrs"],
@@ -968,6 +978,7 @@ cc_library(
 
 cc_header_only_library(
     name = "py_func_headers_lib",
+    features = ["-parse_headers"],
     tags = ["no-ide"],
     deps = [
         ":py_func_lib",
@@ -987,11 +998,13 @@ tf_python_pybind_extension(
 
 cc_library(
     name = "safe_ptr",
-    srcs = ["lib/core/safe_ptr.cc"],
+    srcs = [
+        "lib/core/safe_ptr.cc",
+        "//tensorflow/c/eager:headers",
+    ],
     hdrs = ["lib/core/safe_ptr.h"],
     deps = [
-        "//tensorflow/c:c_api",
-        "//tensorflow/c/eager:c_api",
+        "//tensorflow/c:c_api_no_xla",
         "//third_party/python_runtime:headers",
     ],
 )
@@ -1036,7 +1049,6 @@ cc_library(
         ":ndarray_tensor_bridge",
         ":numpy_lib",
         ":safe_ptr",
-        "//tensorflow/c:c_api",
         "//tensorflow/c:c_api_internal",
         "//tensorflow/c:tf_status_helper",
         "//tensorflow/c:tf_tensor_internal",
@@ -1050,6 +1062,7 @@ cc_library(
     name = "py_seq_tensor",
     srcs = ["lib/core/py_seq_tensor.cc"],
     hdrs = ["lib/core/py_seq_tensor.h"],
+    features = ["-parse_headers"],
     deps = [
         ":ndarray_tensor",
         ":ndarray_tensor_bridge",
@@ -1202,6 +1215,7 @@ cc_header_only_library(
     extra_deps = [
         "//tensorflow/core:protos_all_cc",
     ],
+    features = ["-parse_headers"],
     tags = ["no-ide"],
     deps = [
         ":python_op_gen",
@@ -1943,6 +1957,7 @@ py_library(
     srcs = ["framework/tensor_util.py"],
     srcs_version = "PY2AND3",
     deps = [
+        ":errors",
         ":tensor_shape",
         ":util",
         "//tensorflow/core:protos_all_py",
@@ -5649,11 +5664,19 @@ cc_library(
     hdrs = ["util/stack_trace.h"],
     deps = [
         ":py_util",
+        "//tensorflow/core/platform:str_util",
+        "//tensorflow/core/platform:stringpiece",
+        "//tensorflow/core/util:abstract_stack_trace",
         "//third_party/python_runtime:headers",  # buildcleaner: keep
         "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:optional",
     ],
+)
+
+py_library(
+    name = "global_test_configuration",
+    deps = if_mlir(["//tensorflow/compiler/mlir/tensorflow:mlir_roundtrip_pass_registration"]) +
+           tf_enable_mlir_bridge(),
 )
 
 py_library(
@@ -5678,6 +5701,11 @@ py_library(
         "//tensorflow:composite_tensor_whitelist",
     ],
     deps = [
+        ":_pywrap_tf32_execution",
+        # global_test_configuration is added here because all major tests depend on this
+        # library. It isn't possible to add these test dependencies via tensorflow.bzl's
+        # py_test because not all tensorflow tests use tensorflow.bzl's py_test.
+        ":global_test_configuration",
         ":tf_decorator",
         ":tf_export",
         ":tf_stack",
@@ -5687,7 +5715,7 @@ py_library(
         "@six_archive//:six",
         "@wrapt",
         "//tensorflow/tools/compatibility:all_renames_v2",
-    ] + if_mlir(["//tensorflow/compiler/mlir/tensorflow:mlir_roundtrip_pass_registration"]),
+    ],
 )
 
 tf_py_test(
@@ -6059,6 +6087,7 @@ pywrap_tensorflow_macro(
         "//tensorflow/core/distributed_runtime:server_lib",
         "//tensorflow/core/platform:stacktrace_handler",
         "//tensorflow/core/profiler/internal:print_model_analysis",
+        "//tensorflow/lite/delegates/flex:delegate",
         "//tensorflow/core/profiler/internal/cpu:python_tracer",
         "//tensorflow/tools/graph_transforms:transform_graph_lib",
         "//tensorflow/lite/toco/python:toco_python_api",
@@ -6072,12 +6101,9 @@ pywrap_tensorflow_macro(
         "@ngraph_tf//:ngraph_tf",
     ]) + if_xla_available([
         "//tensorflow/compiler/aot:tfcompile_lib",
-    ]) + select({
-        "//tensorflow:windows": [],  # TODO(b/159077703): Enable Flex on Windows
-        "//conditions:default": [
-            "//tensorflow/lite/delegates/flex:delegate",
-        ],
-    }),
+    ]) + if_tpu([
+        "//tensorflow/core/tpu:tpu_api_dlsym_initializer",
+    ]) + if_static(extra_deps = ["//tensorflow/core/platform:tf32_utils"]),
 )
 
 # ** Targets for Windows build (start) **
@@ -6130,6 +6156,7 @@ filegroup(
         "//tensorflow/core/grappler/graph_analyzer:graph_analyzer_tool",  # graph_analyzer
         "//tensorflow/core/grappler/optimizers:meta_optimizer",  # tf_optimizer
         "//tensorflow/core/grappler/utils:topological_sort",  # tf_item
+        "//tensorflow/core/platform:tf32_utils",  # tf32
         "//tensorflow/core/profiler/internal:annotation_stack_impl",  # profiler
         "//tensorflow/core/profiler/internal:print_model_analysis",  # tfprof
         "//tensorflow/core/profiler/internal:traceme_recorder_impl",  # profiler
@@ -6319,6 +6346,9 @@ tf_py_test(
     srcs = ["training/server_lib_test.py"],
     grpc_enabled = True,
     python_version = "PY3",
+    tags = [
+        "noasan",  # TODO(b/161236904): flaky timeout in trying to start gRPC server
+    ],
     deps = [
         ":array_ops",
         ":client",
@@ -7249,6 +7279,7 @@ py_tests(
     size = "small",
     srcs = [
         "summary/plugin_asset_test.py",
+        "summary/summary_iterator_test.py",
         "summary/summary_test.py",
         "summary/writer/writer_test.py",
     ],

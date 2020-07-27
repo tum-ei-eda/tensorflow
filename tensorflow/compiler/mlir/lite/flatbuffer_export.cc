@@ -72,7 +72,7 @@ limitations under the License.
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/status.h"
-#include "tensorflow/lite/delegates/flex/whitelisted_flex_ops.h"
+#include "tensorflow/lite/delegates/flex/allowlisted_flex_ops.h"
 #include "tensorflow/lite/kernels/internal/kernel_utils.h"
 #include "tensorflow/lite/experimental/custom_quantization_util.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -107,7 +107,7 @@ using mlir::Value;
 using tensorflow::OpOrArgLocNameMapper;
 using tensorflow::OpOrArgNameMapper;
 using tensorflow::Status;
-using tflite::flex::IsWhitelistedFlexOp;
+using tflite::flex::IsAllowlistedFlexOp;
 using xla::StatusOr;
 
 template <typename T>
@@ -155,6 +155,9 @@ static StatusOr<tflite::TensorType> GetTFLiteType(Type type,
       if (ftype && ftype.isF32()) {
         return tflite::TensorType_COMPLEX64;
       }
+      if (ftype && ftype.isF64()) {
+        return tflite::TensorType_COMPLEX128;
+      }
       return Status(error::INVALID_ARGUMENT, "Unsupported type");
     }
     case mlir::StandardTypes::Integer: {
@@ -196,9 +199,8 @@ static StatusOr<tflite::TensorType> GetTFLiteType(Type type,
 }
 
 static bool IsConst(Operation* op) {
-  return isa<mlir::ConstantOp>(op) || isa<mlir::TF::ConstOp>(op) ||
-         isa<tfl::ConstOp>(op) || isa<tfl::QConstOp>(op) ||
-         isa<tfl::SparseConstOp>(op) || isa<tfl::SparseQConstOp>(op);
+  return isa<mlir::ConstantOp, mlir::TF::ConstOp, tfl::ConstOp, tfl::QConstOp,
+             tfl::SparseConstOp, tfl::SparseQConstOp>(op);
 }
 
 template <typename T>
@@ -246,10 +248,10 @@ static bool IsValidTFLiteMlirModule(ModuleOp module) {
   }
 
   for (auto fn : module.getOps<FuncOp>()) {
-    if (fn.getBlocks().size() != 1) {
+    if (!llvm::hasSingleElement(fn)) {
       return fn.emitError("should have exactly one basic block"), false;
     }
-    auto& bb = fn.getBlocks().front();
+    auto& bb = fn.front();
 
     for (auto arg : bb.getArguments()) {
       if (!HasValidTFLiteType(arg, fn))
@@ -1025,7 +1027,7 @@ Optional<BufferOffset<tflite::Operator>> Translator::BuildOperator(
     // model is of an open op system.
     //
     //  The following algorithm is followed:
-    //   if flex is enabled and the op is whitelisted as flex
+    //   if flex is enabled and the op is allowlisted as flex
     //     we emit op as flex.
     //   if custom is enabled
     //    we emit the op as custom.
@@ -1035,11 +1037,11 @@ Optional<BufferOffset<tflite::Operator>> Translator::BuildOperator(
     }
 
     // Flex op case
-    // Eventually, the whitelist will go away and we will rely on some TF op
+    // Eventually, the allowlist will go away and we will rely on some TF op
     // trait (e.g. No side effect) to determine if it is a supported "Flex"
     // op or not.
     if (enabled_op_types_.contains(OpType::kSelectTf) &&
-        IsWhitelistedFlexOp(node_def->op())) {
+        IsAllowlistedFlexOp(node_def->op())) {
       // Construct ops as flex op encoding TensorFlow node definition
       // as custom options.
       // Flex ops are named with the kFlexOpNamePrefix prefix to the actual
@@ -1090,7 +1092,7 @@ Optional<BufferOffset<tflite::Operator>> Translator::BuildOperator(
       }
 
       // Insert failed op to `flex_ops` or `custom_ops`.
-      if (IsWhitelistedFlexOp(node_def->op())) {
+      if (IsAllowlistedFlexOp(node_def->op())) {
         failed_flex_ops_.insert(os.str());
       } else {
         failed_custom_ops_.insert(os.str());
@@ -1141,7 +1143,7 @@ void Translator::InitializeNamesFromAttribute(FuncOp fn, bool* has_input_attr) {
           dict_attr.get("outputs").dyn_cast_or_null<mlir::StringAttr>()) {
     str.getValue().split(output_names, ',', /*MaxSplit=*/-1,
                          /*KeepEmpty=*/false);
-    auto term = fn.getBlocks().back().getTerminator();
+    auto term = fn.back().getTerminator();
     if (output_names.size() != term->getNumOperands()) {
       fn.emitWarning() << "output names (" << output_names.size()
                        << ") != terminator operands (" << term->getNumOperands()

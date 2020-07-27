@@ -28,7 +28,6 @@ void TestNegFloat(std::initializer_list<int> input_dims_data,
                   std::initializer_list<float> expected_output_data,
                   std::initializer_list<int> output_dims_data,
                   float* output_data) {
-  using tflite::testing::IntArrayFromInitializer;
   TfLiteIntArray* input_dims = IntArrayFromInitializer(input_dims_data);
   TfLiteIntArray* output_dims = IntArrayFromInitializer(output_dims_data);
   const int output_dims_count = ElementCount(*output_dims);
@@ -51,18 +50,14 @@ void TestNegFloat(std::initializer_list<int> input_dims_data,
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 1};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
   node.user_data = nullptr;
   node.builtin_data = nullptr;
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
 
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
   TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, registration->invoke(&context, &node));

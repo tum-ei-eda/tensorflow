@@ -72,9 +72,8 @@ private:
 // USE WITH CARE!! Returns pointer to data member of argument
 // so this object's lifetime must outlive any access to its underlying
 // data via this pointer.
-// Pass-by lvalue ref of argument protects against simply programmer
+// Pass-by lvalue ref of argument protects against simple programmer
 // oops but is by no means foolproof.
-
 inline TfLiteIntArray* IntArrayFromInitializer(
     std::initializer_list<int> &int_initializer) {
   return IntArrayFromInts(int_initializer.begin());
@@ -95,7 +94,8 @@ inline float MinFromZeroPointScale(const int zero_point, const float scale) {
 // Derives the quantization scaling factor from a min and max range.
 template <typename T>
 inline float ScaleFromMinMax(const float min, const float max) {
-  return (max - min) / ((std::numeric_limits<T>::max() * 1.0) -
+  return (max - min) /
+         static_cast<float>((std::numeric_limits<T>::max() * 1.0) -
                         std::numeric_limits<T>::min());
 }
 

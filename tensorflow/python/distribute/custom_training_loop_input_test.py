@@ -191,8 +191,8 @@ class InputIterationTest(test.TestCase, parameterized.TestCase,
 
     input_iterator = iter(distribution.experimental_distribute_dataset(dataset))
 
-    with self.assertRaisesRegexp(NotImplementedError,
-                                 "does not support pure eager execution"):
+    with self.assertRaisesRegex(NotImplementedError,
+                                "does not support pure eager execution"):
       distribution.run(train_step, args=(next(input_iterator),))
 
   @combinations.generate(
@@ -454,10 +454,11 @@ class InputIterationTest(test.TestCase, parameterized.TestCase,
       ))
   def testDistributeDatasetHostPrefetch(self, distribution):
     data = [5., 6., 7., 8.]
-    distribution.extended._set_prefetch_on_host(True)  # pylint: disable=protected-access
     input_iterator = iter(
         distribution.experimental_distribute_dataset(
-            get_dataset_from_tensor_slices(data).batch(2)))
+            get_dataset_from_tensor_slices(data).batch(2),
+            distribute_lib.InputOptions(
+                experimental_prefetch_to_device=False)))
 
     local_results = distribution.experimental_local_results(
         input_iterator.get_next())
@@ -473,10 +474,11 @@ class InputIterationTest(test.TestCase, parameterized.TestCase,
       ))
   def testDistributeDatasetFunctionHostPrefetch(self, distribution):
     data = [5., 6., 7., 8.]
-    distribution.extended._set_prefetch_on_host(True)  # pylint: disable=protected-access
     input_iterator = iter(
         distribution.experimental_distribute_datasets_from_function(
-            lambda _: get_dataset_from_tensor_slices(data)))
+            lambda _: get_dataset_from_tensor_slices(data),
+            distribute_lib.InputOptions(
+                experimental_prefetch_to_device=False)))
 
     local_results = distribution.experimental_local_results(
         input_iterator.get_next())
@@ -530,6 +532,31 @@ class InputIterationTest(test.TestCase, parameterized.TestCase,
 
     # This assumes that there are exactly 2 replicas
     self.assertAllEqual([5.5, 7.], run(input_iterator))
+
+  @combinations.generate(
+      combinations.combine(
+          distribution=strategy_combinations.multidevice_strategies,
+          mode=["eager"]))
+  def testDynamicOutputsWithX64(self, distribution):
+    dataset = get_dataset_from_tensor_slices(
+        [5]).map(lambda x: math_ops.cast(x, dtypes.int64)).batch(2)
+    input_iterator = iter(distribution.experimental_distribute_dataset(dataset))
+
+    @def_function.function
+    def run(iterator):
+
+      def computation(x):
+        return math_ops.add(x, x)
+
+      inputs = next(iterator)
+      outputs = distribution.experimental_local_results(
+          distribution.run(computation, args=(inputs,)))
+      return outputs
+
+    # This assumes that there are exactly 2 replicas
+    result = run(input_iterator)
+    self.assertAllEqual([10], result[0])
+    self.assertAllEqual([], result[1])
 
   @combinations.generate(
       combinations.combine(
@@ -794,10 +821,6 @@ class InputIterationTest(test.TestCase, parameterized.TestCase,
           mode=["eager"]
       ))
   def testMultiDeviceDataCapturedFunction(self, distribution):
-    if getattr(distribution, "_enable_packed_variable_in_eager_mode", False):
-      self.skipTest(
-          "Dataset captured function doesn't support packed tensors yet "
-          "(b/145922293).")
     inputs = constant_op.constant([2., 3.])
     dataset = lambda _: dataset_ops.Dataset.from_tensor_slices(inputs).repeat(5)
     input_iterator = iter(
