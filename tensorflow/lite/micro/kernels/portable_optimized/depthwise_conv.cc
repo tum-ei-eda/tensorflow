@@ -283,9 +283,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
             bias_data, filter, data->sum_of_filters_factor, filter_shape,
             input_offset, filter_offset);
       }
-    } else {
-      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter,
-                                           data->sum_of_filters_factor,
+    else {
+      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter, data->sum_of_filters_factor,
                                            filter_shape, input_offset, 0);
     }
   }
@@ -831,7 +830,6 @@ inline void DepthwiseConvNoPadding(
   const int depth_multiplier = params.depth_multiplier;
   const int32 output_activation_min = params.quantized_activation_min;
   const int32 output_activation_max = params.quantized_activation_max;
-  const int32 input_offset = params.input_offset;
   const int32 filter_offset = params.weights_offset;
   const int32 output_offset = params.output_offset;
   const int32 output_multiplier = params.output_multiplier;
@@ -1057,7 +1055,6 @@ void EvalQuantizedPerChannelNoPadding(
   const RuntimeShape& filter_shape = GetTensorShape(filter);
   const int8* filter_data = GetTensorData<int8>(filter);
   const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32* bias_data = GetTensorData<int32>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
   int8* output_data = GetTensorData<int8>(output);
 
@@ -1069,7 +1066,6 @@ void EvalQuantizedPerChannelNoPadding(
   TFLITE_DCHECK_EQ(dilation_height_factor, 1);
 
   const int depth_multiplier = params->depth_multiplier;
-  const int32 input_offset = -input->params.zero_point;
   const int32 output_offset = output->params.zero_point;
   const int32 output_activation_min = std::numeric_limits<int8_t>::min();
   const int32 output_activation_max = std::numeric_limits<int8_t>::max();
@@ -1302,7 +1298,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
       } else if (pad_width != 0 || pad_height != 0 || pad_width_offset != 0 || pad_height_offset != 0) {
         // Use the version(s) that can handle padding if padding is used
-        DepthwiseConv(context, op_params, &data, GetTensorShape(input),
+        DepthwiseConv(
+            context, op_params, &data, GetTensorShape(input),
                       GetTensorData<uint8_t>(input), GetTensorShape(filter),
                       GetTensorData<uint8_t>(filter), GetTensorShape(bias),
                       GetTensorData<int32_t>(bias), GetTensorShape(output),
@@ -1328,16 +1325,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace depthwise_conv
 
-TfLiteRegistration* Register_DEPTHWISE_CONV_2D() {
-  static TfLiteRegistration r = {/*init=*/depthwise_conv::Init,
-                                 /*free=*/nullptr,
-                                 /*prepare=*/depthwise_conv::Prepare,
-                                 /*invoke=*/depthwise_conv::Eval,
-                                 /*profiling_string=*/nullptr,
-                                 /*builtin_code=*/0,
-                                 /*custom_name=*/nullptr,
-                                 /*version=*/0};
-  return &r;
+TfLiteRegistration Register_DEPTHWISE_CONV_2D() {
+  return {/*init=*/depthwise_conv::Init,
+          /*free=*/nullptr,
+          /*prepare=*/depthwise_conv::Prepare,
+          /*invoke=*/depthwise_conv::Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace micro

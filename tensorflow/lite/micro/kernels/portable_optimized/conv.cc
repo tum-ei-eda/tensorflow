@@ -25,7 +25,6 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
-#include "tensorflow/lite/micro/kernels/conv_packed_ops.h"
 
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
@@ -180,7 +179,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     RuntimeShape filter_shape = GetTensorShape(filters);
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
 
-    const int input_depth = filter_shape.Dims(3);
     const int output_depth = filter_shape.Dims(0);
     TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
 
@@ -201,8 +199,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
           filter_shape, input_offset, filter_offset);
       }
-    }
-    else {
+    } else {
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
         filter_shape, input_offset, 0);
     }
@@ -220,7 +217,6 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                    const TfLiteTensor* input, const TfLiteTensor* filter,
                    const TfLiteTensor* bias, TfLiteTensor* im2col,
                    TfLiteTensor* hwcn_weights, TfLiteTensor* output) {
-  const int32 input_offset = -input->params.zero_point;
   const int32 filter_offset = -filter->params.zero_point;
   const int32 output_offset = output->params.zero_point;
 
@@ -411,8 +407,6 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                              const TfLiteTensor* filter,
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              TfLiteTensor* im2col) {
-  const int32 input_offset = -input->params.zero_point;
-  const int32 filter_offset = 0;
   const int32 output_offset = output->params.zero_point;
 
   const RuntimeShape& input_shape = GetTensorShape(input);
@@ -508,7 +502,6 @@ void EvalQuantizedPerChannelWithPadding(TfLiteContext* context, TfLiteNode* node
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              TfLiteTensor* im2col) {
   const int32 input_offset = -input->params.zero_point;
-  const int32 filter_offset = 0;
   const int32 output_offset = output->params.zero_point;
 
   const RuntimeShape& input_shape = GetTensorShape(input);
@@ -597,10 +590,6 @@ void EvalQuantizedPerChannelWithPadding(TfLiteContext* context, TfLiteNode* node
     }
   }
 }
-
-
-
-
 
 void EvalFloat(TfLiteContext* context, TfLiteNode* node,
                TfLiteConvParams* params, OpData* data,
@@ -752,13 +741,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace conv
 
-TfLiteRegistration* Register_CONV_2D() {
-  static TfLiteRegistration r = {};
-  r.prepare = conv::Prepare;
-  r.init = conv::Init;
-  r.free = conv::Free;
-  r.invoke = conv::Eval;
-  return &r;
+TfLiteRegistration Register_CONV_2D() {
+  return {/*init=*/conv::Init,
+          /*free=*/conv::Free,
+          /*prepare=*/conv::Prepare,
+          /*invoke=*/conv::Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace micro
