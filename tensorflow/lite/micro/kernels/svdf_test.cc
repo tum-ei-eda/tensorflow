@@ -410,21 +410,21 @@ inline void TestIntegerSVDF(
   float input_scales[] = {1, input_scale};
   TfLiteAffineQuantization input_quant = {FloatArrayFromFloats(input_scales),
                                           IntArrayFromInts(zero_points), 0};
-  tensors[0].quantization = {kTfLiteAffineQuantization, &input_quant};
+  tensors[0].quantization = {kTfLiteAffineQuantization, &input_quant, {kTfLiteNoDetails, {}}};
 
   // Weights features quant params:
   float weights_features_scales[] = {1, weights_feature_scale};
   TfLiteAffineQuantization weights_feature_quant = {
       FloatArrayFromFloats(weights_features_scales),
       IntArrayFromInts(zero_points), 0};
-  tensors[1].quantization = {kTfLiteAffineQuantization, &weights_feature_quant};
+  tensors[1].quantization = {kTfLiteAffineQuantization, &weights_feature_quant, {kTfLiteNoDetails, {}}};
 
   // Weights time quant params:
   float weights_time_scales[] = {1, weights_time_scale};
   TfLiteAffineQuantization weights_time_quant = {
       FloatArrayFromFloats(weights_time_scales), IntArrayFromInts(zero_points),
       0};
-  tensors[2].quantization = {kTfLiteAffineQuantization, &weights_time_quant};
+  tensors[2].quantization = {kTfLiteAffineQuantization, &weights_time_quant, {kTfLiteNoDetails, {}}};
 
   // Activation state quant params:
   float activation_state_scales[] = {1, activation_scale};
@@ -432,13 +432,13 @@ inline void TestIntegerSVDF(
       FloatArrayFromFloats(activation_state_scales),
       IntArrayFromInts(zero_points), 0};
   tensors[4].quantization = {kTfLiteAffineQuantization,
-                             &activation_state_quant};
+                             &activation_state_quant, {kTfLiteNoDetails, {}}};
 
   // Output quant params:
   float output_scales[] = {1, output_scale};
   TfLiteAffineQuantization output_quant = {FloatArrayFromFloats(output_scales),
                                            IntArrayFromInts(zero_points), 0};
-  tensors[5].quantization = {kTfLiteAffineQuantization, &output_quant};
+  tensors[5].quantization = {kTfLiteAffineQuantization, &output_quant, {kTfLiteNoDetails, {}}};
 
   ValidateIntegerSVDFGoldens(
       batch_size, num_units, input_size, rank, tensors, tensor_count,

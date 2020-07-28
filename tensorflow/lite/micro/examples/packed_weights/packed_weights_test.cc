@@ -33,12 +33,12 @@ limitations under the License.
 
 uint8_t input_quant( float x )
 {
-  return static_cast<uint8_t>(x/0.024639942381096416);
+  return static_cast<uint8_t>(x/0.024639942381096416f);
 }
 
 float output_dquant( uint8_t x)
 {
-  return (x-128)*7.812500e-03;
+  return (x-128)*7.812500e-03f;
 }
 
 
@@ -116,7 +116,7 @@ void run_model( const uint8_t *model_fb, float refdata[][3] ) {
 // Check that the output value is within 0.001 of the expected  value
 // (produced using from a face-quantized prediction using the original model)
     std::cout << ref_y << " " << value << std::endl;
-    TF_LITE_MICRO_EXPECT_NEAR(ref_y, value, 0.05);
+    TF_LITE_MICRO_EXPECT_NEAR(ref_y, value, 0.05f);
   }
 
 }

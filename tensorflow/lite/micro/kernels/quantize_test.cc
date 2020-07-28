@@ -93,7 +93,7 @@ void TestQuantizeFloat(const int* input_dims_data, const float* input_data,
   int zero_points[] = {1, zero_point};
   quant.scale = FloatArrayFromFloats(scales);
   quant.zero_point = IntArrayFromInts(zero_points);
-  output_tensor.quantization = {kTfLiteAffineQuantization, &quant};
+  output_tensor.quantization = {kTfLiteAffineQuantization, &quant, {kTfLiteNoDetails, {}}};
 
   // 1 input, 1 output.
   constexpr int tensors_size = 2;
@@ -125,7 +125,7 @@ void TestRequantize(const int* input_dims_data, const float* input_data,
   int zero_points[] = {1, output_zero_point};
   quant.scale = FloatArrayFromFloats(scales);
   quant.zero_point = IntArrayFromInts(zero_points);
-  output_tensor.quantization = {kTfLiteAffineQuantization, &quant};
+  output_tensor.quantization = {kTfLiteAffineQuantization, &quant, {kTfLiteNoDetails, {}}};
 
   // 1 input, 1 output.
   constexpr int tensors_size = 2;

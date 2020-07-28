@@ -281,7 +281,7 @@ TfLiteStatus AllocationInfoBuilder::AddTensors(const SubGraph* subgraph,
 // Model. The following encoding applies:
 //
 // | Metadata component |                 Value                                |
-// |    name:string     | OfflineMemoryAllocation                            |
+// |    name:string     | “OfflineMemoryAllocation”                            |
 // |    buffer:unit     | Index of buffer containing memory allocation data    |
 //
 // The buffer contents for the memory allocation is a list of 32-bit integers.
@@ -330,9 +330,8 @@ TfLiteStatus AllocationInfoBuilder::AddScratchBuffers(
   // Set up allocation info for buffers.
   for (size_t i = tensor_count_; i < tensor_count_ + buffer_count_; ++i) {
     AllocationInfo* current = &info_[i];
-    size_t buf_i = i-tensor_count_;
     internal::ScratchBufferHandle* handle =
-        &(buffer_handles[buffer_count_-1-buf_i]);
+        &(buffer_handles[i - tensor_count_]);
     current->output_ptr = reinterpret_cast<void**>(&handle->data);
     current->bytes = handle->bytes;
     current->first_created = handle->node_idx;
@@ -593,9 +592,7 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     }
   }
 
-  if (flatbuffer_tensor.name() != nullptr) {
-    result->name = flatbuffer_tensor.name()->c_str();
-  }
+
   return kTfLiteOk;
 }
 
@@ -778,46 +775,34 @@ TfLiteStatus MicroAllocator::RequestScratchBufferInArena(int node_id,
   // A sanity check to make sure scratch_buffer_handles_ is contiguous i.e.
   // scratch_buffer_handles_ is pointing to the last allocation from memory
   // allocator.
-#if 0
   if (scratch_buffer_handles_ != nullptr &&
       reinterpret_cast<uint8_t*>(scratch_buffer_handles_) !=
-          memory_allocator_->GetHead()) {
+          memory_allocator_->GetTail()) {
     TF_LITE_REPORT_ERROR(error_reporter_,
                          "Internal error: AllocateFromTail can not be called directly"
                          "between two RequestScratchBufferInArena calls.");
     return kTfLiteError;
   }
-#endif
 
   internal::ScratchBufferHandle* handle =
-        reinterpret_cast<internal::ScratchBufferHandle*>(
-            memory_allocator_->AllocateFromHead(
-                sizeof(internal::ScratchBufferHandle),
-                alignof(internal::ScratchBufferHandle)));
-  
+      reinterpret_cast<internal::ScratchBufferHandle*>(
+          memory_allocator_->AllocateFromTail(
+              sizeof(internal::ScratchBufferHandle),
+              alignof(internal::ScratchBufferHandle)));
   if (handle == nullptr) {
     TF_LITE_REPORT_ERROR(error_reporter_,
-                        "Failed to register scratch buffer handle for node %s",
-                        node_id);
+                         "Failed to register scratch buffer handle for node %s",
+                         node_id);
     return kTfLiteError;
   }
-
-  if (scratch_buffer_handles_begin_ != nullptr) {
-    auto next_contiguous = scratch_buffer_handles_begin_+scratch_buffer_count_;
-    if (next_contiguous != handle) {
-            TF_LITE_REPORT_ERROR(error_reporter_,
-                         "Internal error: AllocateFromHead can not be called "
-                         "between two RequestScratchBufferInArena calls.");
-    }
-  } else {
-    scratch_buffer_handles_begin_ = handle;
-  }
-
   *handle = {};
   handle->bytes = bytes;
   handle->node_idx = node_id;
   *buffer_idx = scratch_buffer_count_;
   scratch_buffer_count_ += 1;
+  // scratch_buffer_handles_ is in reverse order. The following code ensures
+  // that scratch_buffers[0] is pointing to the newly allocated handle.
+  scratch_buffer_handles_ = handle;
   return kTfLiteOk;
 }
 
@@ -829,7 +814,7 @@ void* MicroAllocator::GetScratchBuffer(int buffer_idx) const {
     return nullptr;
   }
   // scratch_buffer_handles_ is in reverse order.
-  return scratch_buffer_handles_begin_[buffer_idx].data;
+  return scratch_buffer_handles_[scratch_buffer_count_ - buffer_idx - 1].data;
 }
 
 size_t MicroAllocator::used_bytes() const {
@@ -1130,7 +1115,7 @@ TfLiteStatus MicroAllocator::CommitStaticMemoryPlan(
     TF_LITE_ENSURE_STATUS(
         builder.AddTensors(subgraph, offline_planner_offsets, eval_tensors));
 
-    TF_LITE_ENSURE_STATUS(builder.AddScratchBuffers(scratch_buffer_handles_begin_));
+    TF_LITE_ENSURE_STATUS(builder.AddScratchBuffers(scratch_buffer_handles_));
     const AllocationInfo* allocation_info = builder.Finish();
 
     // Remaining arena size that memory planner can use for calculating offsets.

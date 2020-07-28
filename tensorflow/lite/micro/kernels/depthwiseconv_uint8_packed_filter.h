@@ -75,7 +75,6 @@ struct DepthwiseConvPackedFilter {
     // TODO allocate external / from heap for large dimensioned kernels?
 
     int32 accbuf[output_depth];
-    const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
     const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
     const int32 mask = (1<<bits_per_item)-1;
@@ -120,7 +119,7 @@ struct DepthwiseConvPackedFilter {
               }
             }
           }
-          for (unsigned int oc =0; oc < output_depth; ++oc) {
+          for (int oc =0; oc < output_depth; ++oc) {
             int32 acc = accbuf[oc];
             if (bias_data) {
               acc += bias_data[oc];

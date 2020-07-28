@@ -166,7 +166,6 @@ TfLiteStatus EvalQuantizedPacked(
 
     unsigned int bits_per_item = custom.bits_per_item;
     unsigned int container_bits = custom.container_bits; 
-    unsigned int packed_minor_dims =  custom.packed_minor_dims;
     switch (bits_per_item) {
 
         case 4: {

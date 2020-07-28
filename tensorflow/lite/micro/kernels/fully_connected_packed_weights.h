@@ -80,17 +80,13 @@ void FullyConnectedUint8PackedWeights(
   for (int b = 0; b < batches; ++b) {
     for (unsigned int out_c = 0; out_c < output_depth; ++out_c) {
       int32 acc = 0;
-      unsigned int t;
       const uint8_t *input_vals;
       CONTAINER_T filter_vals;
-      unsigned int i;
-      unsigned int last_d = 0;
       unsigned int d = 0;
       unsigned int container = 0;
       for (;;) {
         input_vals = &input_data[b * accum_depth + d];
         filter_vals = filter_data[out_c * accum_container_depth + container];
-        i = 0;
         // Exit loop once last complete container processed...
         // Next container is setup
         if (d >= final_container_begin)
@@ -114,6 +110,7 @@ void FullyConnectedUint8PackedWeights(
       // TODO template params to handle no bias / weight container type
       // aligned cases.
 
+      unsigned int i = 0;
       while( d < accum_depth ) {
           int32 input_val = input_vals[i] + input_offset;
           int32 filter_val = (filter_vals & mask) + filter_offset;

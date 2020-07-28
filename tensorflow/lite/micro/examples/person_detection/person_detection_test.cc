@@ -68,7 +68,6 @@ TF_LITE_MICRO_TEST(TestInvoke) {
   interpreter.AllocateTensors();
 
   // Get information about the memory area to use for the model's input.
-  auto input_offset = interpreter.inputs().Get(0);
   TfLiteTensor* input = interpreter.input(0);
 
   // Make sure the input has the properties we expect.

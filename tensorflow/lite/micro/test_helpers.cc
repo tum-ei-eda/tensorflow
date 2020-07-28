@@ -842,7 +842,7 @@ TfLiteTensor CreateTensor(TfLiteIntArray* dims, bool is_variable) {
   TfLiteTensor result;
   result.dims = dims;
   result.params = {};
-  result.quantization = {kTfLiteNoQuantization, nullptr};
+  result.quantization = {kTfLiteNoQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.is_variable = is_variable;
   result.allocation_type = kTfLiteMemNone;
   return result;
@@ -890,7 +890,7 @@ TfLiteTensor CreateQuantizedTensor(const uint8_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteUInt8;
   result.data.uint8 = const_cast<uint8_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(uint8_t);
   return result;
 }
@@ -902,7 +902,7 @@ TfLiteTensor CreateQuantizedTensor(const int8_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteInt8;
   result.data.int8 = const_cast<int8_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   return result;
 }
@@ -914,7 +914,7 @@ TfLiteTensor CreateQuantizedTensor(const int16_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteInt16;
   result.data.i16 = const_cast<int16_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int16_t);
   return result;
 }
@@ -947,7 +947,7 @@ static void AsymmetricQuantizePacked(const float* input, uint8_t* output,
     if (bits_in_container + bits_per_item > container_bits ||
         (i % packed_dims_elts == (packed_dims_elts - 1))) {
       // Flatbuffers are stored little-endian
-      for (size_t i = 0; i < container_bits; i += 8) {
+      for (size_t bits = 0; bits < container_bits; bits += 8) {
         uint8_t byte = (container_buf & 0xff);
         *packed_data_byte = byte;
         ++packed_data_byte;
@@ -997,7 +997,7 @@ TfLiteTensor CreateQuantizedBiasTensor(const float* data, int32_t* quantized,
   // int32 values is large, and because zero point costs extra cycles during
   // processing.
   result.params = {bias_scale, 0};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   return result;
 }
@@ -1030,7 +1030,7 @@ TfLiteTensor CreatePerChannelQuantizedBiasTensor(
   TfLiteTensor result = CreateTensor(dims, is_variable);
   result.type = kTfLiteInt32;
   result.data.i32 = const_cast<int32_t*>(quantized);
-  result.quantization = {kTfLiteAffineQuantization, affine_quant};
+  result.quantization = {kTfLiteAffineQuantization, affine_quant, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   return result;
 }
@@ -1057,7 +1057,7 @@ TfLiteTensor CreateSymmetricPerChannelQuantizedTensor(
   TfLiteTensor result = CreateTensor(dims, is_variable);
   result.type = kTfLiteInt8;
   result.data.int8 = const_cast<int8_t*>(quantized);
-  result.quantization = {kTfLiteAffineQuantization, affine_quant};
+  result.quantization = {kTfLiteAffineQuantization, affine_quant, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   return result;
 }

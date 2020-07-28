@@ -21,7 +21,7 @@ limitations under the License.
 // TODO(b/158651472): Consider auditing these values on non-64 bit systems.
 
 const int kKeywordModelTensorCount = 54;
-const unsigned int TfLiteTensor_size_measured = 64u;
+const unsigned int TfLiteTensor_size_measured = 80u;
 const int kKeywordModelHeadSize = 672;
 #ifdef TF_LITE_STATIC_MEMORY
 const int kKeywordModelTailSize = 13664+kKeywordModelTensorCount*(sizeof(TfLiteTensor)-TfLiteTensor_size_measured);
