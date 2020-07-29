@@ -105,7 +105,7 @@ using mlir::Value;
 using tensorflow::OpOrArgLocNameMapper;
 using tensorflow::OpOrArgNameMapper;
 using tensorflow::Status;
-using tflite::flex::IsWhitelistedFlexOp;
+using tflite::flex::IsAllowlistedFlexOp;
 using xla::StatusOr;
 
 // Same prefix as in identifiers
