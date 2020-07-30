@@ -244,7 +244,8 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   // @IFX_PATCH@
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
       ::tflite::ops::micro::DepthwiseConvPackedFilter( 
-          op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
+          context, op_params, 
+          GetTensorShape(input), GetTensorData<uint8_t>(input),
           GetTensorShape(filter), GetTensorData<void>(filter),
           GetTensorShape(bias), GetTensorData<int32_t>(bias),
           GetTensorShape(output), GetTensorData<uint8_t>(output),

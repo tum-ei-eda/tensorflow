@@ -283,7 +283,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
             bias_data, filter, data->sum_of_filters_factor, filter_shape,
             input_offset, filter_offset);
       }
-    else {
+    } else {
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter, data->sum_of_filters_factor,
                                            filter_shape, input_offset, 0);
     }
@@ -520,7 +520,7 @@ struct DepthwiseConvPackedTraits {
 template <typename CONTAINER_T, size_t bits_per_item,
           size_t items_per_container, class PADDING_TRAIT>
 struct DepthwiseConvPacked {
-  static inline void Run(const DepthwiseParams& params, const OpData* data,
+  static inline void Run(TfLiteContext* context, const DepthwiseParams& params, const OpData* data,
                          const RuntimeShape& input_shape,
                          const uint8* input_data,
                          const RuntimeShape& filter_shape,
@@ -537,7 +537,6 @@ struct DepthwiseConvPacked {
     const int depth_multiplier = params.depth_multiplier;
     const int32 output_activation_min = params.quantized_activation_min;
     const int32 output_activation_max = params.quantized_activation_max;
-    const int32 input_offset = params.input_offset;
     const int32 filter_offset = params.weights_offset;
     const int32 output_offset = params.output_offset;
     const int32 output_multiplier = params.output_multiplier;
@@ -559,7 +558,12 @@ struct DepthwiseConvPacked {
     TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-    int32 accbuf[output_depth];
+    void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+    int32_t *accbuf = static_cast<int32_t *>(accbuf_start);
     const int* in_dims =
         reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
@@ -596,7 +600,6 @@ struct DepthwiseConvPacked {
               // use zero as a default value.
               if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
                   (in_y < input_height)) {
-                unsigned int input_channel = 0;
                 unsigned int output_channel = 0;
                 // Full containers ...
                 for (unsigned int container = 0;
@@ -652,7 +655,7 @@ struct DepthwiseConvPacked {
             }
           }
 
-          for (unsigned int oc = 0; oc < output_depth; ++oc) {
+          for (int oc = 0; oc < output_depth; ++oc) {
             int32 acc = accbuf[oc];
             pad_traits.SumOfFiltersCorrectionAndBias(acc, oc);
             acc = MultiplyByQuantizedMultiplier(acc, output_multiplier,
@@ -671,6 +674,7 @@ struct DepthwiseConvPacked {
 
 template <class PADDING_TRAITS>
 void DepthwiseConvPackedFilter(
+    TfLiteContext* context,
     const DepthwiseParams& params, const OpData* data,
     const RuntimeShape& input_shape, const uint8* input_data,
     const RuntimeShape& filter_shape, const void* filter_data,
@@ -689,7 +693,7 @@ void DepthwiseConvPackedFilter(
     case 4: {
       TFLITE_CHECK(container_bits == 8);
       using KERNEL = DepthwiseConvPacked<uint8_t, 4, 8 / 4, PADDING_TRAITS>;
-      KERNEL::Run(params, data, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, data, input_shape, input_data, filter_shape,
                   static_cast<const uint8_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;
@@ -697,7 +701,7 @@ void DepthwiseConvPackedFilter(
     case 5: {
       TFLITE_CHECK(container_bits == 16);
       using KERNEL = DepthwiseConvPacked<uint16_t, 5, 16 / 5, PADDING_TRAITS>;
-      KERNEL::Run(params, data, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, data, input_shape, input_data, filter_shape,
                   static_cast<const uint16_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;
@@ -705,7 +709,7 @@ void DepthwiseConvPackedFilter(
     case 6: {
       TFLITE_CHECK(container_bits == 32);
       using KERNEL = DepthwiseConvPacked<uint32_t, 6, 32 / 6, PADDING_TRAITS>;
-      KERNEL::Run(params, data, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, data, input_shape, input_data, filter_shape,
                   static_cast<const uint32_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;
@@ -760,7 +764,14 @@ inline void DepthwiseConv(
       reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
   const int* fi_dims =
       reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
-  int32 acc[output_depth];
+      
+  void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+  int32_t *acc = static_cast<int32_t *>(accbuf_start);
+
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
@@ -855,7 +866,14 @@ inline void DepthwiseConvNoPadding(
       reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
   const int* fi_dims =
       reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
-  int32 acc[output_depth];
+
+  void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+  int32_t *acc = static_cast<int32_t *>(accbuf_start);
+
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
@@ -989,7 +1007,14 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
       reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
   const int* fi_dims =
       reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
-  int32 acc[output_depth];
+
+  void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+  int32_t *acc = static_cast<int32_t *>(accbuf_start);
+
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
@@ -1092,7 +1117,14 @@ void EvalQuantizedPerChannelNoPadding(
       reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
   const int* fi_dims =
       reinterpret_cast<const int*>(filter_shape.DimsDataUpTo5D());
-  int32 acc[output_depth];
+
+  void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+  int32_t *acc = static_cast<int32_t *>(accbuf_start);
+
   for (int batch = 0; batch < batches; ++batch) {
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
@@ -1261,7 +1293,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
           kTfLiteSub8BitPackedUniformDetail) {
         if (pad_width != 0 || pad_height != 0|| pad_width_offset != 0 || pad_height_offset != 0) {
           DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
-              op_params, &data, GetTensorShape(input),
+              context, op_params, &data, GetTensorShape(input),
               GetTensorData<uint8_t>(input), GetTensorShape(filter),
               GetTensorData<void>(filter), GetTensorShape(bias),
               GetTensorData<int32_t>(bias), GetTensorShape(output),
@@ -1269,7 +1301,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
               *filter->quantization.details.data.custom_sub8bit_packing);
         } else {
           DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>(
-              op_params, &data, GetTensorShape(input),
+              context, op_params, &data, GetTensorShape(input),
               GetTensorData<uint8_t>(input), GetTensorShape(filter),
               GetTensorData<void>(filter), GetTensorShape(bias),
               GetTensorData<int32_t>(bias), GetTensorShape(output),

@@ -18,6 +18,7 @@ limitations under the License.
 #include <algorithm>
 
 #include "fixedpoint/fixedpoint.h"
+#include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/internal/types.h"
@@ -32,7 +33,8 @@ namespace depthwise_conv {
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 struct DepthwiseConvPackedFilter {
 
-  static inline void Run(const DepthwiseParams& params,
+  static inline void Run(TfLiteContext* context, 
+                         const DepthwiseParams& params,
                          const RuntimeShape& input_shape,
                          const uint8* input_data,
                          const RuntimeShape& filter_shape,
@@ -70,12 +72,12 @@ struct DepthwiseConvPackedFilter {
     TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-    // We need a buffer for accumulators as our innermost iteration
-    // is over channel axis ...
-    // TODO allocate external / from heap for large dimensioned kernels?
-
-    int32 accbuf[output_depth];
-
+    void *accbuf_start;
+    TFLITE_CHECK_EQ(
+      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
+      kTfLiteOk
+    );
+    int32_t *accbuf = static_cast<int32_t *>(accbuf_start);
     const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
     const int32 mask = (1<<bits_per_item)-1;
 
@@ -141,6 +143,7 @@ struct DepthwiseConvPackedFilter {
 }  // namespace depthwise_conv
 
 inline void DepthwiseConvPackedFilter(
+    TfLiteContext* context, 
     const DepthwiseParams& params, const RuntimeShape& input_shape,
     const uint8* input_data, const RuntimeShape& filter_shape,
     const void* filter_data, const RuntimeShape& bias_shape,
@@ -159,7 +162,7 @@ inline void DepthwiseConvPackedFilter(
     case 4: {
       TFLITE_CHECK(container_bits == 8);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint8_t, 4, 8 / 4>;
-      KERNEL::Run(params, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
                   static_cast<const uint8_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;
@@ -167,7 +170,7 @@ inline void DepthwiseConvPackedFilter(
     case 5: {
       TFLITE_CHECK(container_bits == 16);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint16_t, 5, 16 / 5>;
-      KERNEL::Run(params, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
                   static_cast<const uint16_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;
@@ -175,7 +178,7 @@ inline void DepthwiseConvPackedFilter(
     case 6: {
       TFLITE_CHECK(container_bits == 32);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint32_t, 6, 32 / 6>;
-      KERNEL::Run(params, input_shape, input_data, filter_shape,
+      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
                   static_cast<const uint32_t*>(filter_data), bias_shape,
                   bias_data, output_shape, output_data);
       return;

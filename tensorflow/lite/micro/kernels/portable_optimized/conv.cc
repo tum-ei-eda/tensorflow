@@ -25,6 +25,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
+#include "tensorflow/lite/micro/kernels/conv_packed_ops.h"
 
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
@@ -665,7 +666,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
 
-  TfLiteTensor* im2col;
+  TfLiteTensor* im2col = nullptr;
 #define TF_LITE_CONV_2D_PER_CHANNEL(func_c, data_type)                                  \
   func_c(                                                                               \
       op_params, data->per_channel_output_multiplier, data->per_channel_output_shift, \
@@ -713,7 +714,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_height_factor = params->dilation_height_factor;
 
       if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
-        return reference_ops::EvalConvQuantizedPacked(
+        return EvalConvQuantizedPacked(
                 op_params,
                 input, filter, bias, output, context,
                 *filter->quantization.details.data.custom_sub8bit_packing);

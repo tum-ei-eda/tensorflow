@@ -196,7 +196,7 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.quantized_activation_max = data.output_activation_max;
 
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
-    reference_ops::EvalConvQuantizedPacked(
+    EvalConvQuantizedPacked(
             op_params,
             input, filter, bias, output, context,
             *filter->quantization.details.data.custom_sub8bit_packing);
