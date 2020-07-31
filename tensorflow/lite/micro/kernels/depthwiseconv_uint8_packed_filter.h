@@ -33,14 +33,13 @@ namespace depthwise_conv {
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 struct DepthwiseConvPackedFilter {
 
-  static inline void Run(TfLiteContext* context, 
-                         const DepthwiseParams& params,
+  static inline void Run(const DepthwiseParams& params,
                          const RuntimeShape& input_shape,
                          const uint8* input_data,
                          const RuntimeShape& filter_shape,
                          const CONTAINER_T* filter_data,
                          const RuntimeShape& bias_shape, const int32* bias_data,
-                         const RuntimeShape& output_shape, uint8* output_data) {
+                         const RuntimeShape& output_shape, uint8* output_data, int32_t *accbuf) {
     const int stride_width = params.stride_width;
     const int stride_height = params.stride_height;
     const int dilation_width_factor = params.dilation_width_factor;
@@ -72,12 +71,6 @@ struct DepthwiseConvPackedFilter {
     TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-    void *accbuf_start;
-    TFLITE_CHECK_EQ(
-      context->AllocateBufferForEval(context, output_depth*sizeof(int32_t), &accbuf_start),
-      kTfLiteOk
-    );
-    int32_t *accbuf = static_cast<int32_t *>(accbuf_start);
     const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
     const int32 mask = (1<<bits_per_item)-1;
 
@@ -143,13 +136,13 @@ struct DepthwiseConvPackedFilter {
 }  // namespace depthwise_conv
 
 inline void DepthwiseConvPackedFilter(
-    TfLiteContext* context, 
     const DepthwiseParams& params, const RuntimeShape& input_shape,
     const uint8* input_data, const RuntimeShape& filter_shape,
     const void* filter_data, const RuntimeShape& bias_shape,
     const int32* bias_data, const RuntimeShape& output_shape,
     uint8* output_data,
-    const TfLiteCustomSub8BitPackingDetails& packing_details) {
+    const TfLiteCustomSub8BitPackingDetails& packing_details,
+    int32_t *acc_buf) {
   // We need to allocated output_deptch size buffer for accumulators.
 
   unsigned int bits_per_item = packing_details.bits_per_item;
@@ -162,25 +155,25 @@ inline void DepthwiseConvPackedFilter(
     case 4: {
       TFLITE_CHECK(container_bits == 8);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint8_t, 4, 8 / 4>;
-      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
+      KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint8_t*>(filter_data), bias_shape,
-                  bias_data, output_shape, output_data);
+                  bias_data, output_shape, output_data, acc_buf);
       return;
     }
     case 5: {
       TFLITE_CHECK(container_bits == 16);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint16_t, 5, 16 / 5>;
-      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
+      KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint16_t*>(filter_data), bias_shape,
-                  bias_data, output_shape, output_data);
+                  bias_data, output_shape, output_data, acc_buf);
       return;
     }
     case 6: {
       TFLITE_CHECK(container_bits == 32);
       using KERNEL = depthwise_conv::DepthwiseConvPackedFilter<uint32_t, 6, 32 / 6>;
-      KERNEL::Run(context, params, input_shape, input_data, filter_shape,
+      KERNEL::Run(params, input_shape, input_data, filter_shape,
                   static_cast<const uint32_t*>(filter_data), bias_shape,
-                  bias_data, output_shape, output_data);
+                  bias_data, output_shape, output_data, acc_buf);
       return;
     }
     default: {
