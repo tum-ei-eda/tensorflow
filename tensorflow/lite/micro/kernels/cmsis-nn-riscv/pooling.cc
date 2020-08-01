@@ -106,7 +106,6 @@ TfLiteStatus AverageEvalInt8(TfLiteContext* context, const TfLiteNode* node,
 
   TFLITE_DCHECK_LE(activation_min, activation_max);
 
-#if defined(RISCV)
   RuntimeShape input_shape = GetTensorShape(input);
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
 
@@ -143,24 +142,6 @@ TfLiteStatus AverageEvalInt8(TfLiteContext* context, const TfLiteNode* node,
                      activation_max, depth, GetTensorData<int8_t>(input),
                      scratch_buffer, GetTensorData<int8_t>(output)),
       RISCV_MATH_SUCCESS);
-#else
-#pragma message( \
-    "CMSIS-NN optimization for avg_pool not available for this target. Using reference kernel.")
-
-  PoolParams op_params;
-  op_params.stride_height = params->stride_height;
-  op_params.stride_width = params->stride_width;
-  op_params.filter_height = params->filter_height;
-  op_params.filter_width = params->filter_width;
-  op_params.padding_values.height = data->padding.height;
-  op_params.padding_values.width = data->padding.width;
-  op_params.quantized_activation_min = activation_min;
-  op_params.quantized_activation_max = activation_max;
-  reference_integer_ops::AveragePool(
-      op_params, GetTensorShape(input), GetTensorData<int8_t>(input),
-      GetTensorShape(output), GetTensorData<int8_t>(output));
-
-#endif
   return kTfLiteOk;
 }
 
@@ -215,7 +196,6 @@ TfLiteStatus MaxEvalInt8(TfLiteContext* context, const TfLiteNode* node,
 
   TFLITE_DCHECK_LE(activation_min, activation_max);
 
-#if defined(RISCV)
   RuntimeShape input_shape = GetTensorShape(input);
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
 
@@ -253,24 +233,6 @@ TfLiteStatus MaxEvalInt8(TfLiteContext* context, const TfLiteNode* node,
                           GetTensorData<int8_t>(input), scratch_buffer,
                           GetTensorData<int8_t>(output)),
       RISCV_MATH_SUCCESS);
-#else
-#pragma message( \
-    "CMSIS-NN optimization for max_pool not available for this target. Using reference kernel.")
-
-  PoolParams op_params;
-  op_params.stride_height = params->stride_height;
-  op_params.stride_width = params->stride_width;
-  op_params.filter_height = params->filter_height;
-  op_params.filter_width = params->filter_width;
-  op_params.padding_values.height = data->padding.height;
-  op_params.padding_values.width = data->padding.width;
-  op_params.quantized_activation_min = activation_min;
-  op_params.quantized_activation_max = activation_max;
-  reference_integer_ops::MaxPool(
-      op_params, GetTensorShape(input), GetTensorData<int8_t>(input),
-      GetTensorShape(output), GetTensorData<int8_t>(output));
-
-#endif
   return kTfLiteOk;
 }
 
@@ -283,7 +245,6 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-#if defined(RISCV)
   const TfLiteTensor* input = GetInput(context, node, kInputTensor);
   const TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
@@ -308,7 +269,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   } else {
     *buffer_idx = -1;
   }
-#endif
   return kTfLiteOk;
 }
 
