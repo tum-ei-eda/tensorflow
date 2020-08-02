@@ -127,22 +127,22 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   RuntimeShape input_shape = GetTensorShape(input);
   RuntimeShape output_shape = GetTensorShape(output);
 
-  // Initialize cmsis-nn input dimensions
-  cmsis_nn_dims input_dims;
+  // Initialize riscv-nn input dimensions
+  riscv_nn_dims input_dims;
   input_dims.n = MatchingDim(input_shape, 0, output_shape, 0);
   input_dims.h = input->dims->data[1];
   input_dims.w = input->dims->data[2];
   input_dims.c = input_shape.Dims(3);
 
-  // Initialize cmsis-nn filter dimensions
-  cmsis_nn_dims filter_dims;
+  // Initialize riscv-nn filter dimensions
+  riscv_nn_dims filter_dims;
   filter_dims.n = output_shape.Dims(3);
   filter_dims.h = filter->dims->data[1];
   filter_dims.w = filter->dims->data[2];
   filter_dims.c = input_dims.c;
 
-  // Initialize cmsis-nn output dimensions
-  cmsis_nn_dims output_dims;
+  // Initialize riscv-nn output dimensions
+  riscv_nn_dims output_dims;
   output_dims.n = input_dims.n;
   output_dims.h = output->dims->data[1];
   output_dims.w = output->dims->data[2];
@@ -155,8 +155,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       filter_dims.h, output_dims.w, output_dims.h, input->type, &data));
 
   if (input->type == kTfLiteInt8) {
-    // Initialize cmsis-nn convolution parameters
-    cmsis_nn_conv_params conv_params;
+    // Initialize riscv-nn convolution parameters
+    riscv_nn_conv_params conv_params;
     conv_params.input_offset = -input->params.zero_point;
     conv_params.output_offset = output->params.zero_point;
     conv_params.stride.h = params->stride_height;
@@ -168,8 +168,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     conv_params.activation.min = data.output_activation_min;
     conv_params.activation.max = data.output_activation_max;
 
-    buf_size = riscv_convolve_wrapper_s8_get_buffer_size(
-        &conv_params, &input_dims, &filter_dims, &output_dims);
+    buf_size = riscv_convolve_s8_get_buffer_size(
+        &input_dims, &filter_dims);
   }
 
   node->user_data = buffer_idx;
@@ -221,8 +221,8 @@ TfLiteStatus EvalQuantizedPerChannel(
     TfLiteContext* context, TfLiteNode* node, TfLiteConvParams* params,
     OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output, TfLiteTensor* im2col) {
-  // Initialize cmsis-nn convolution parameters
-  cmsis_nn_conv_params conv_params;
+  // Initialize riscv-nn convolution parameters
+  riscv_nn_conv_params conv_params;
   conv_params.input_offset = -input->params.zero_point;
   conv_params.output_offset = output->params.zero_point;
   conv_params.stride.h = params->stride_height;
@@ -234,8 +234,8 @@ TfLiteStatus EvalQuantizedPerChannel(
   conv_params.activation.min = data->output_activation_min;
   conv_params.activation.max = data->output_activation_max;
 
-  // Initialize cmsis-nn per channel quantization parameters
-  cmsis_nn_per_channel_quant_params quant_params;
+  // Initialize riscv-nn per channel quantization parameters
+  riscv_nn_per_channel_quant_params quant_params;
   quant_params.multiplier = data->per_channel_output_multiplier;
   quant_params.shift = data->per_channel_output_shift;
 
@@ -257,55 +257,61 @@ TfLiteStatus EvalQuantizedPerChannel(
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
   }
 
-  // Initialize cmsis-nn dimensions
+  // Initialize riscv-nn dimensions
   // Input
-  cmsis_nn_dims input_dims;
+  riscv_nn_dims input_dims;
   input_dims.n = batch_size;
   input_dims.h = input_shape.Dims(1);
   input_dims.w = input_shape.Dims(2);
   input_dims.c = input_depth;
 
   // Filter
-  cmsis_nn_dims filter_dims;
+  riscv_nn_dims filter_dims;
   filter_dims.n = output_depth;
   filter_dims.h = filter_shape.Dims(1);
   filter_dims.w = filter_shape.Dims(2);
   filter_dims.c = input_depth;
 
   // Bias
-  cmsis_nn_dims bias_dims;
+  riscv_nn_dims bias_dims;
   bias_dims.n = 1;
   bias_dims.h = 1;
   bias_dims.w = 1;
   bias_dims.c = output_depth;
 
   // Output
-  cmsis_nn_dims output_dims;
+  riscv_nn_dims output_dims;
   output_dims.n = batch_size;
   output_dims.h = output_shape.Dims(1);
   output_dims.w = output_shape.Dims(2);
   output_dims.c = output_depth;
 
-  // Initialize cmsis-nn context
-  cmsis_nn_context ctx;
+  // Initialize riscv-nn context
+  riscv_nn_context ctx;
   ctx.buf = nullptr;
   ctx.size = 0;
 
   auto* buffer_idx = reinterpret_cast<int*>(node->user_data);
   if (*buffer_idx > -1) {
     ctx.buf = context->GetScratchBuffer(context, *buffer_idx);
-    // Note: ctx.size is currently not used in cmsis-nn.
+    // Note: ctx.size is currently not used in riscv-nn.
     // The buffer should be allocated in the Prepare function through
     // arm_convolve_wrapper_s8_get_buffer_size
   }
 
   // arm_convolve_wrapper_s8 dispatches the optimized kernel accordingly with
   // the parameters passed
-  riscv_status status = riscv_convolve_wrapper_s8(
-      &ctx, &conv_params, &quant_params, &input_dims,
-      GetTensorData<int8_t>(input), &filter_dims, GetTensorData<int8_t>(filter),
-      &bias_dims, GetTensorData<int32>(bias), &output_dims,
-      GetTensorData<int8_t>(output));
+  riscv_status status = riscv_convolve_s8(&ctx, 
+                                          &conv_params, 
+                                          &quant_params, 
+                                          &input_dims,
+                                          GetTensorData<int8_t>(input), 
+                                          &filter_dims, 
+                                          GetTensorData<int8_t>(filter),
+                                          &bias_dims, 
+                                          GetTensorData<int32>(bias), 
+                                          &output_dims,
+                                          GetTensorData<int8_t>(output));
 
   if (status == RISCV_MATH_SUCCESS) {
     return kTfLiteOk;
@@ -315,7 +321,7 @@ TfLiteStatus EvalQuantizedPerChannel(
 
 #else
 #pragma message( \
-    "CMSIS-NN optimization for conv not available for this target. Using reference kernel.")
+    "riscv-NN optimization for conv not available for this target. Using reference kernel.")
 
   ConvParams op_params;
   op_params.input_offset = -input->params.zero_point;
