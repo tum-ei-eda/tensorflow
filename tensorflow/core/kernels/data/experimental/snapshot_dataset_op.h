@@ -40,19 +40,16 @@ namespace experimental {
 
 class SnapshotDatasetV2Op : public UnaryDatasetOpKernel {
  public:
-  static constexpr const char* const kDatasetType = "Snapshot";
-  static constexpr const char* const kOutputTypes = "output_types";
-  static constexpr const char* const kOutputShapes = "output_shapes";
-  static constexpr const char* const kCompression = "compression";
-  static constexpr const char* const kReaderFunc = "reader_func";
-  static constexpr const char* const kShardFunc = "shard_func";
-  static constexpr const char* const kReaderFuncOtherArgs =
-      "reader_func_other_args";
-  static constexpr const char* const kShardFuncOtherArgs =
-      "shard_func_other_args";
-  static constexpr const char* const kReaderFuncTarguments =
-      "Treader_func_args";
-  static constexpr const char* const kShardFuncTarguments = "Tshard_func_args";
+  static const char* const kDatasetType;
+  static const char* const kOutputTypes;
+  static const char* const kOutputShapes;
+  static const char* const kCompression;
+  static const char* const kReaderFunc;
+  static const char* const kShardFunc;
+  static const char* const kReaderFuncOtherArgs;
+  static const char* const kShardFuncOtherArgs ;
+  static const char* const kReaderFuncTarguments;
+  static const char* const kShardFuncTarguments;
 
   explicit SnapshotDatasetV2Op(OpKernelConstruction* ctx);
 
@@ -61,7 +58,7 @@ class SnapshotDatasetV2Op : public UnaryDatasetOpKernel {
                    DatasetBase** output) override;
 
  private:
-  static constexpr const int kFileFormatVersion = 2;
+  static const int kFileFormatVersion;
 
   class Dataset;
 

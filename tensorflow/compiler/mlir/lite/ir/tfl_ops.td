@@ -3463,7 +3463,12 @@ value of `input` in the unique output `output`. In other words:
 //===----------------------------------------------------------------------===//
 // Quantization ops.
 //===----------------------------------------------------------------------===//
-def TFL_DequantizeOp: TFL_Op<"dequantize", [NoSideEffect, NoQuantizableResult]> {
+def TFL_DequantizeOp: TFL_Op<"dequantize", 
+  [ 
+    // TODO Exposes nasty bug in UniformQuantizedPerAxisType (int index, passed to functions
+    // getDimSize supporting only unsiged index value)
+    // NoSideEffect, 
+    NoQuantizableResult]> {
   let summary = "Dequantize operator";
 
   let description = [{
@@ -3564,8 +3569,10 @@ def TFL_SparseQConstOp : Op<TFL_Dialect, "pseudo_sparse_qconst", [
 def TFL_QuantizeOp: TFL_Op<"quantize", [
     FirstAttrDerivedResultType,
     SameOperandsAndResultShape,
-    NoQuantizableResult,
-    NoSideEffect]> {
+    // TODO Exposes nasty bug in UniformQuantizedPerAxisType (int index, passed to functions
+    // getDimSize supporting only unsiged index value)
+    // NoSideEffect,
+    NoQuantizableResult]> {
   let summary = "Quantize operator";
 
   let description = [{
