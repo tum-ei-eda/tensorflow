@@ -2635,8 +2635,6 @@ inline void BroadcastMulFivefold(const ArithmeticParams& params,
                        output_shape, output_data);
 }
 
-
-
 // TODO(jiawen): We can implement BroadcastDiv on buffers of arbitrary
 // dimensionality if the runtime code does a single loop over one dimension
 // that handles broadcasting as the base case. The code generator would then
@@ -2766,37 +2764,39 @@ inline void SubNonBroadcast(const ArithmeticParams& params,
   }
 }
 
-inline void SubWithActivation(const ArithmeticParams& params,
-                              const RuntimeShape& input1_shape,
-                              const int32* input1_data,
-                              const RuntimeShape& input2_shape,
-                              const int32* input2_data,
-                              const RuntimeShape& output_shape,
-                              int32* output_data) {
-  ruy::profiler::ScopeLabel label("SubWithActivation/int32");
-  const int flat_size =
-      MatchingElementsSize(input1_shape, input2_shape, output_shape);
-  for (int i = 0; i < flat_size; ++i) {
-    output_data[i] = ActivationFunctionWithMinMax(
-        input1_data[i] - input2_data[i], params.quantized_activation_min,
-        params.quantized_activation_max);
-  }
+inline void SetActivationMinMax(const ArithmeticParams& params,
+                                int32* activation_min, int32* activation_max) {
+  *activation_min = params.quantized_activation_min;
+  *activation_max = params.quantized_activation_max;
 }
 
-inline void SubWithActivation(const ArithmeticParams& params,
-                              const RuntimeShape& input1_shape,
-                              const float* input1_data,
-                              const RuntimeShape& input2_shape,
-                              const float* input2_data,
-                              const RuntimeShape& output_shape,
-                              float* output_data) {
-  ruy::profiler::ScopeLabel label("SubWithActivation/float");
+inline void SetActivationMinMax(const ArithmeticParams& params,
+                                float* activation_min, float* activation_max) {
+  *activation_min = params.float_activation_min;
+  *activation_max = params.float_activation_max;
+}
+
+inline void SetActivationMinMax(const ArithmeticParams& params,
+                                int64_t* activation_min,
+                                int64_t* activation_max) {
+  *activation_min = params.int64_activation_min;
+  *activation_max = params.int64_activation_max;
+}
+
+template <typename T>
+inline void SubWithActivation(
+    const ArithmeticParams& params, const RuntimeShape& input1_shape,
+    const T* input1_data, const RuntimeShape& input2_shape,
+    const T* input2_data, const RuntimeShape& output_shape, T* output_data) {
+  ruy::profiler::ScopeLabel label("SubWithActivation_optimized");
   const int flat_size =
       MatchingElementsSize(input1_shape, input2_shape, output_shape);
+  T activation_min, activation_max;
+  SetActivationMinMax(params, &activation_min, &activation_max);
+
   for (int i = 0; i < flat_size; ++i) {
     output_data[i] = ActivationFunctionWithMinMax(
-        input1_data[i] - input2_data[i], params.float_activation_min,
-        params.float_activation_max);
+        input1_data[i] - input2_data[i], activation_min, activation_max);
   }
 }
 
@@ -3813,6 +3813,7 @@ inline void LocalResponseNormalization(
   const int double_range = op_params.range * 2;
   Eigen::VectorXf padded_square(data_in.rows() + double_range);
   padded_square.setZero();
+  const float bias = op_params.bias;
   for (int r = 0; r < data_in.cols(); ++r) {
     // Do local response normalization for data_in(:, r)
     // first, compute the square and store them in buffer for repeated use
@@ -3825,7 +3826,7 @@ inline void LocalResponseNormalization(
     }
     for (int i = 0; i < data_in.rows(); ++i) {
       accumulated_scale += padded_square(i + double_range);
-      data_out(i, r) = op_params.bias + accumulated_scale;
+      data_out(i, r) = bias + accumulated_scale;
       accumulated_scale -= padded_square(i);
     }
   }
@@ -4261,8 +4262,6 @@ inline void SoftmaxInt8LUT(const SoftmaxParams& params,
   }
 }
 
-// TODO(myenik): This is the same as the reference implementation, not actually
-// optimized yet.
 inline void LogSoftmax(const SoftmaxParams& params,
                        const RuntimeShape& input_shape, const float* input_data,
                        const RuntimeShape& output_shape, float* output_data) {
@@ -4274,27 +4273,14 @@ inline void LogSoftmax(const SoftmaxParams& params,
       MatchingDim(input_shape, trailing_dim, output_shape, trailing_dim);
 
   for (int i = 0; i < outer_size; ++i) {
-    const float* block_input_data = input_data + i * depth;
-    float* block_output_data = output_data + i * depth;
+    VectorMap<const float> block_input(input_data + i * depth, depth, 1);
+    VectorMap<float> block_output(output_data + i * depth, depth, 1);
     // Find max element value which we'll use to ensure numerical stability
     // taking advantage of the following equality:
     // log(exp(x[i])/sum(exp(x[i]))) == log(exp(x[i]+C)/sum(exp(x[i]+C)))
-    float max = std::numeric_limits<float>::lowest();
-    for (int c = 0; c < depth; ++c) {
-      max = std::max(max, block_input_data[c]);
-    }
-
-    // Compute sum.
-    float sum = 0.f;
-    for (int c = 0; c < depth; ++c) {
-      sum += std::exp(block_input_data[c] - max);
-    }
-
-    // Compute result.
-    const float log_sum = std::log(sum);
-    for (int c = 0; c < depth; ++c) {
-      block_output_data[c] = block_input_data[c] - max - log_sum;
-    }
+    const float max = block_input.maxCoeff();
+    const float log_sum = std::log((block_input.array() - max).exp().sum());
+    block_output = block_input.array() - max - log_sum;
   }
 }
 
@@ -5556,7 +5542,8 @@ inline void PadImageStyle(const tflite::PadParams& op_params,
                           const RuntimeShape& input_shape, const T* input_data,
                           const P* pad_value_ptr,
                           const RuntimeShape& output_shape, T* output_data) {
-  TFLITE_ASSERT_FALSE;
+  reference_ops::PadImageStyle(op_params, input_shape, input_data,
+                               pad_value_ptr, output_shape, output_data);
 }
 
 template <typename P>

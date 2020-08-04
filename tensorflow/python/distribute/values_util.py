@@ -26,6 +26,8 @@ from tensorflow.python.framework import tensor_util
 from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import variable_scope as vs
+from tensorflow.python.saved_model import save_context
+from tensorflow.python.saved_model import save_options
 
 
 def on_write_assign(var, value, use_locking=False, name=None, read_value=True):
@@ -61,8 +63,14 @@ def on_write_assign_sub(var, value, use_locking=False, name=None,
 
 
 def assign_on_each_device(var, assign_func, value, read_value):
-  update = control_flow_ops.group(
-      tuple(assign_func(v.device, v, value) for v in var._values))  # pylint: disable=protected-access
+  """Update the variable on each replica with the given assign_func and value."""
+  if var._packed_variable is not None:  # pylint: disable=protected-access
+    update = control_flow_ops.group(
+        tuple(
+            assign_func(d, var._packed_variable, value) for d in var._devices))  # pylint: disable=protected-access
+  else:
+    update = control_flow_ops.group(
+        tuple(assign_func(v.device, v, value) for v in var._values))  # pylint: disable=protected-access
   if not read_value:
     return update
   with ops.control_dependencies([update] if update else []):
@@ -101,10 +109,10 @@ def on_read_assign_cross_replica(var, value, read_value=True):
       # total across all devices when restoring a variable that was summed
       # when saving.
       tensor = value
-      # TODO(anjs): Should this be over all the replicas in sync since we
-      # call `reduce` on the variable during read?
       if var.aggregation == vs.VariableAggregation.SUM:
-        tensor = math_ops.cast(tensor / len(var._values), var.dtype)  # pylint: disable=protected-access
+        strategy = var._distribute_strategy  # pylint: disable=protected-access
+        tensor = math_ops.cast(tensor / strategy.num_replicas_in_sync,
+                               var.dtype)
       return assign_on_each_device(var, assign_on_device, tensor,
                                    read_value)
 
@@ -241,3 +249,20 @@ scatter_error_msg = ("{op_name} is only supported for mirrored "
                      "variable (variable created within certain "
                      "`tf.distribute.Strategy` scope) with NONE or "
                      "`ONLY_FIRST_REPLICA` aggregation, got: {aggregation}.")
+
+
+def is_saving_non_distributed():
+  """Returns whether we're saving a non-distributed version of the model.
+
+  It returns True iff we are in saving context and are saving a non-distributed
+  version of the model. That is, SaveOptions.experimental_variable_policy is
+  NONE.
+
+  Returns:
+    A boolean.
+  """
+  if not save_context.in_save_context():
+    return False
+  options = save_context.get_save_options()
+  return (options is not None and options.experimental_variable_policy !=
+          save_options.VariablePolicy.EXPAND_DISTRIBUTED_VARIABLES)

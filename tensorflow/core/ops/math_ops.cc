@@ -131,7 +131,7 @@ REGISTER_OP("BatchMatMulV2")
     .Input("y: T")
     .Output("output: T")
     .Attr(
-        "T: {bfloat16, half, float, double, int32, int64, complex64, "
+        "T: {bfloat16, half, float, double, int16, int32, int64, complex64, "
         "complex128}")
     .Attr("adj_x: bool = false")
     .Attr("adj_y: bool = false")
@@ -201,12 +201,12 @@ REGISTER_OP("ComplexAbs")
     .SetShapeFn(shape_inference::UnchangedShape);
 
 // Declares cwise unary operations signature: 't -> 't
-#define UNARY()                                                          \
-  Input("x: T")                                                          \
-      .Output("y: T")                                                    \
-      .Attr(                                                             \
-          "T: {bfloat16, half, float, double, int32, int64, complex64, " \
-          "complex128}")                                                 \
+#define UNARY()                                                            \
+  Input("x: T")                                                            \
+      .Output("y: T")                                                      \
+      .Attr(                                                               \
+          "T: {bfloat16, half, float, double, int8, int16, int32, int64, " \
+          "complex64, complex128}")                                        \
       .SetShapeFn(shape_inference::UnchangedShape)
 
 #define UNARY_REAL()                              \
@@ -296,10 +296,6 @@ REGISTER_OP("Asin").UNARY();
 REGISTER_OP("Acos").UNARY();
 
 REGISTER_OP("Atan").UNARY();
-
-REGISTER_OP("BesselI0e").UNARY_REAL();
-
-REGISTER_OP("BesselI1e").UNARY_REAL();
 
 REGISTER_OP("_UnaryOpsComposition")
     .Input("x: T")
@@ -498,6 +494,7 @@ REGISTER_OP("TruncateDiv")
 REGISTER_OP("RealDiv").BINARY_MORE().SetShapeFn(
     shape_inference::BroadcastBinaryOpShapeFn);
 
+// Note SquaredDifference implements conj(x - y)*(x - y).
 REGISTER_OP("SquaredDifference")
     .BINARY_FEWER()
     .SetIsCommutative()
@@ -955,11 +952,7 @@ REGISTER_OP("_FusedMatMul")
     .Output("product: T")
     .Attr("transpose_a: bool = false")
     .Attr("transpose_b: bool = false")
-#if defined(INTEL_MKL) && defined(ENABLE_INTEL_MKL_BFLOAT16)
     .Attr("T: {bfloat16, float}")
-#else
-    .Attr("T: {float}")
-#endif
     .Attr("num_args: int >= 0")
     .Attr("fused_ops: list(string) = []")
     // Attributes for the FusedBatchNorm ----------- //
@@ -1450,9 +1443,11 @@ Status RangeSize(const Tensor* start_t, const Tensor* limit_t,
   }
 
   auto size = (std::is_integral<T>::value
-                   ? ((std::abs(limit - start) + std::abs(delta) - T(1)) /
-                      std::abs(delta))
-                   : (std::ceil(std::abs((limit - start) / delta))));
+                   ? ((Eigen::numext::abs(limit - start) +
+                       Eigen::numext::abs(delta) - T(1)) /
+                      Eigen::numext::abs(delta))
+                   : (Eigen::numext::ceil(
+                         Eigen::numext::abs((limit - start) / delta))));
   c->set_output(0, c->Vector(static_cast<int64>(size)));
   return Status::OK();
 }

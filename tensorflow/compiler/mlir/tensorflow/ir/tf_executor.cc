@@ -71,7 +71,7 @@ struct TensorFlowExecutorInlinerInterface : public DialectInlinerInterface {
     // Allow inlining into tf.island regions if the incoming region has a single
     // block.
     return llvm::isa<tf_executor::IslandOp>(dest->getParentOp()) &&
-           std::next(src->begin()) == src->end();
+           llvm::hasSingleElement(*src);
   }
 };
 
@@ -190,14 +190,15 @@ LogicalResult Verify(GraphOp graph) {
   for (int i : llvm::seq<int>(0, fetch.getNumOperands())) {
     Value operand = fetch.getOperand(i);
     // Break out of the loop at the first control operand encountered.
+    const int64_t num_results = graph.getNumResults();
     if (operand.getType().isa<ControlType>()) {
-      if (i != graph.getNumResults())
+      if (i != num_results)
         return fetch.emitOpError()
                << "operand #" << i
                << " is a control type, can't be bound to a graph result";
       break;
     }
-    if (i >= graph.getNumResults())
+    if (i >= num_results)
       return fetch.emitOpError()
              << "operand #" << i << " does not have a graph results to bind";
     if (graph.getResult(i).getType() != operand.getType())
@@ -220,12 +221,12 @@ ParseResult ParseGraphOp(OpAsmParser &parser, OperationState &result) {
   Region &body = *result.addRegion();
   if (parser.parseRegion(body, llvm::None, llvm::None)) return failure();
 
-  if (body.getBlocks().size() > 1)
-    return parser.emitError(loc) << "expects a single block region";
-
   // Ensure that the region is well formed: it contains at least a block with
   // a FetchOp terminator.
   GraphOp::ensureTerminator(body, parser.getBuilder(), result.location);
+
+  if (!llvm::hasSingleElement(body))
+    return parser.emitError(loc) << "expects a single block region";
 
   // Get the results type from the terminator type inside the graph.
   Operation &fetch = body.back().back();
@@ -301,8 +302,8 @@ bool IslandOp::WrapsSingleOp() {
 namespace {
 
 LogicalResult Verify(IslandOp island) {
-  if (island.GetBody().empty())
-    return island.emitOpError() << "expects a non-empty body";
+  if (!island.GetBody().args_empty())
+    return island.emitOpError() << "expects body without any arguments";
 
   Operation &yield = island.GetBody().back();
   if (!isa<YieldOp>(yield))
@@ -311,7 +312,8 @@ LogicalResult Verify(IslandOp island) {
 
   // Ensure that the yield terminator operands matches the island results type.
   int result_count = island.getNumResults() - 1;  // -1 for the control token
-  if (yield.getNumOperands() != result_count)
+  const int num_operands = yield.getNumOperands();
+  if (num_operands != result_count)
     return yield.emitOpError()
            << "has " << yield.getNumOperands()
            << " operand, but island returns " << result_count;

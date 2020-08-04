@@ -1,5 +1,5 @@
 load("//tensorflow/lite:build_def.bzl", "tflite_copts")
-load("//tensorflow/lite/micro:build_def.bzl", "cc_library", "micro_copts")
+load("//tensorflow/lite/micro:build_def.bzl", "micro_copts")
 load("//tensorflow/lite:special_rules.bzl", "tflite_portable_test_suite_combined")
 load("//tensorflow:tensorflow.bzl", "tf_opts_nortti_if_android")
 
@@ -14,8 +14,8 @@ package(
 # This will cause TFLite to build with ruy only, providing a smaller binary.
 # WARNING: This build flag is experimental and subject to change.
 config_setting(
-    name = "tflite_with_ruy_only_explicit_true",
-    define_values = {"TFLITE_WITH_RUY_ONLY": "true"},
+    name = "tflite_with_ruy_explicit_true",
+    define_values = {"tflite_with_ruy": "true"},
 )
 
 # Disables usage of ruy as the exclusive GEMM backend in TFLite kernels.
@@ -23,14 +23,14 @@ config_setting(
 # the default GEMM option at runtime.
 # WARNING: This build flag is experimental and subject to change.
 config_setting(
-    name = "tflite_with_ruy_only_explicit_false",
-    define_values = {"TFLITE_WITH_RUY_ONLY": "false"},
+    name = "tflite_with_ruy_explicit_false",
+    define_values = {"tflite_with_ruy": "false"},
 )
 
 ###### Beginning of config_setting's to match aarch64 ######
 #
 # We need to identify the aarch64 instruction set to decide whether to enable
-# TFLITE_WITH_RUY_ONLY by default. This is surprisingly hard to do because select()
+# TFLITE_WITH_RUY by default. This is surprisingly hard to do because select()
 # can only consume config_setting's, these config_settings are not centralized,
 # and the "cpu" value which they define are free-form strings and there is no
 # standardization of the strings that we need to match for the aarch64 architecture.
@@ -171,9 +171,9 @@ cc_library(
     deps = [
         ":acceleration_test_util",
         ":builtin_ops",
+        ":test_delegate_providers_lib",
         "//tensorflow/core/platform:logging",
         "//tensorflow/lite:framework",
-        "//tensorflow/lite:minimal_logging",
         "//tensorflow/lite:schema_fbs_version",
         "//tensorflow/lite:string",
         "//tensorflow/lite:string_util",
@@ -186,11 +186,50 @@ cc_library(
         "//tensorflow/lite/nnapi:nnapi_implementation",
         "//tensorflow/lite/schema:schema_fbs",
         "//tensorflow/lite/testing:util",
+        "//tensorflow/lite/tools:command_line_flags",
+        "//tensorflow/lite/tools:logging",
+        "//tensorflow/lite/tools:tool_params",
         "//tensorflow/lite/tools/optimize:quantization_utils",
         "//tensorflow/lite/tools/optimize/sparsity:format_converter",
         "//tensorflow/lite/tools/versioning",
         "@com_google_googletest//:gtest",
         "@flatbuffers",
+    ],
+)
+
+# A convenient library of tflite delegate execution providers for kernel tests
+# based on SingleOpModel or its derivatives defined in test_util.h/cc.
+cc_library(
+    name = "test_util_delegate_providers",
+    copts = tflite_copts(),
+    deps = [
+        "//tensorflow/lite/tools/delegates:coreml_delegate_provider",
+        "//tensorflow/lite/tools/delegates:default_execution_provider",
+        "//tensorflow/lite/tools/delegates:external_delegate_provider",
+        "//tensorflow/lite/tools/delegates:hexagon_delegate_provider",
+        "//tensorflow/lite/tools/delegates:nnapi_delegate_provider",
+        "//tensorflow/lite/tools/delegates:xnnpack_delegate_provider",
+    ] + select({
+        # Metal GPU delegate for iOS has its own setups for kernel tests, so
+        # skipping linking w/ the gpu_delegate_provider.
+        "//tensorflow:ios": [],
+        "//conditions:default": [
+            "//tensorflow/lite/tools/delegates:gpu_delegate_provider",
+        ],
+    }),
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "test_delegate_providers_lib",
+    srcs = ["test_delegate_providers.cc"],
+    hdrs = ["test_delegate_providers.h"],
+    copts = tflite_copts(),
+    deps = [
+        "//tensorflow/lite/tools:command_line_flags",
+        "//tensorflow/lite/tools:logging",
+        "//tensorflow/lite/tools:tool_params",
+        "//tensorflow/lite/tools/delegates:delegate_provider_hdr",
     ],
 )
 
@@ -200,7 +239,9 @@ cc_library(
     testonly = 1,
     srcs = ["test_main.cc"],
     deps = [
+        ":test_delegate_providers_lib",
         ":test_util",
+        ":test_util_delegate_providers",
         "//tensorflow/lite/testing:util",
         "//tensorflow/lite/tools:command_line_flags",
         "@com_google_googletest//:gtest",
@@ -239,46 +280,43 @@ cc_test(
 )
 
 cc_library(
-    name = "tflite_with_ruy_only_enabled",
-    build_for_embedded = True,
-    defines = ["TFLITE_WITH_RUY_ONLY"],
+    name = "tflite_with_ruy_enabled",
+    defines = ["TFLITE_WITH_RUY"],
     visibility = ["//visibility:private"],
 )
 
 cc_library(
-    name = "tflite_with_ruy_only_and_caching_enabled",
+    name = "tflite_with_ruy_and_caching_enabled",
     defines = [
-        "TFLITE_WITH_RUY_ONLY",
+        "TFLITE_WITH_RUY",
         "TFLITE_WITH_RUY_GEMV",
     ],
     visibility = ["//visibility:private"],
 )
 
 cc_library(
-    name = "tflite_with_ruy_only_default",
-    build_for_embedded = True,
-    select_deps = {
-        ":chromiumos_arm64": [":tflite_with_ruy_only_enabled"],
-        ":cpu_aarch64": [":tflite_with_ruy_only_enabled"],
-        ":cpu_arm64": [":tflite_with_ruy_only_enabled"],
-        ":cpu_arm64e": [":tflite_with_ruy_only_enabled"],
-        ":cpu_ios_arm64": [":tflite_with_ruy_only_enabled"],
-        ":cpu_ios_arm64e": [":tflite_with_ruy_only_enabled"],
-        ":cpu_arm64_v8a": [":tflite_with_ruy_only_enabled"],
-        "//tensorflow:android_arm": ["tflite_with_ruy_only_enabled"],
-        "//conditions:default": [],
-    },
+    name = "tflite_with_ruy_default",
     visibility = ["//visibility:private"],
+    deps = select({
+        ":chromiumos_arm64": [":tflite_with_ruy_enabled"],
+        ":cpu_aarch64": [":tflite_with_ruy_enabled"],
+        ":cpu_arm64": [":tflite_with_ruy_enabled"],
+        ":cpu_arm64e": [":tflite_with_ruy_enabled"],
+        ":cpu_ios_arm64": [":tflite_with_ruy_enabled"],
+        ":cpu_ios_arm64e": [":tflite_with_ruy_enabled"],
+        ":cpu_arm64_v8a": [":tflite_with_ruy_enabled"],
+        "//tensorflow:android_arm": ["tflite_with_ruy_enabled"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_library(
-    name = "tflite_with_ruy_only",
-    build_for_embedded = True,
-    select_deps = {
-        ":tflite_with_ruy_only_explicit_true": [":tflite_with_ruy_only_enabled"],
-        ":tflite_with_ruy_only_explicit_false": [],
-        "//conditions:default": [":tflite_with_ruy_only_default"],
-    },
+    name = "tflite_with_ruy",
+    deps = select({
+        ":tflite_with_ruy_explicit_true": [":tflite_with_ruy_enabled"],
+        ":tflite_with_ruy_explicit_false": [],
+        "//conditions:default": [":tflite_with_ruy_default"],
+    }),
 )
 
 cc_library(
@@ -291,7 +329,7 @@ cc_library(
     ],
     copts = tflite_copts(),
     deps = [
-        ":tflite_with_ruy_only",
+        ":tflite_with_ruy",
         ":op_macros",
         # For now this unconditionally depends on both ruy and gemmlowp.
         # See the comment inside class CpuBackendContext on the
@@ -311,11 +349,11 @@ cc_library(
     copts = tflite_copts(),
     deps = [
         ":cpu_backend_context",
-        ":tflite_with_ruy_only",
+        ":tflite_with_ruy",
         "//tensorflow/lite/kernels/internal:compatibility",
         "//tensorflow/lite/kernels/internal:types",
         # For now this unconditionally depends on both ruy and gemmlowp.
-        # We only need to depend on gemmlowp when tflite_with_ruy_only
+        # We only need to depend on gemmlowp when tflite_with_ruy
         # is false, but putting these dependencies in a select() seems to
         # defeat copybara's rewriting rules.
         "@ruy//ruy:context",
@@ -349,20 +387,21 @@ cc_library(
     ],
     copts = tflite_copts(),
     deps = [
-        ":tflite_with_ruy_only",
+        ":tflite_with_ruy",
         "//tensorflow/lite/kernels/internal:common",
         "//tensorflow/lite/kernels/internal:compatibility",
         "//tensorflow/lite/kernels/internal:cpu_check",
         "//tensorflow/lite/kernels/internal:types",
         ":cpu_backend_context",
         ":cpu_backend_threadpool",
-        # Depend on ruy regardless of `tflite_with_ruy_only`. See the comment in
+        # Depend on ruy regardless of `tflite_with_ruy`. See the comment in
         # cpu_backend_gemm.h about why ruy is the generic path.
         "@ruy//ruy",
         "@ruy//ruy:matrix",
         "@ruy//ruy:path",
+        "@ruy//ruy:mul_params",
         "@ruy//ruy/profiler:instrumentation",
-        # We only need to depend on gemmlowp and Eigen when tflite_with_ruy_only
+        # We only need to depend on gemmlowp and Eigen when tflite_with_ruy
         # is false, but putting these dependencies in a select() seems to
         # defeat copybara's rewriting rules.
         "@gemmlowp",
@@ -390,7 +429,6 @@ cc_library(
     hdrs = [
         "op_macros.h",
     ],
-    build_for_embedded = True,
     copts = tflite_copts(),
     deps = ["//tensorflow/lite/micro:debug_log"],
 )
@@ -403,7 +441,6 @@ cc_library(
     hdrs = [
         "kernel_util.h",
     ],
-    build_for_embedded = True,
     copts = tflite_copts() + micro_copts(),
     deps = [
         "//tensorflow/lite/c:common",
@@ -436,11 +473,29 @@ cc_test(
     ],
 )
 
+cc_test(
+    name = "test_delegate_providers_lib_test",
+    size = "small",
+    srcs = ["test_delegate_providers_test.cc"],
+    # See details in https://github.com/bazelbuild/bazel/issues/11552 to avoid
+    # lazy symbol binding failure on macOS.
+    linkstatic = select({
+        "//tensorflow:macos": True,
+        "//conditions:default": False,
+    }),
+    deps = [
+        ":test_delegate_providers_lib",
+        "//tensorflow/lite/tools/delegates:default_execution_provider",
+        "//tensorflow/lite/tools/delegates:nnapi_delegate_provider",
+        "//tensorflow/lite/tools/delegates:xnnpack_delegate_provider",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "padding",
     srcs = [],
     hdrs = ["padding.h"],
-    build_for_embedded = True,
     copts = tflite_copts(),
     deps = [
         "//tensorflow/lite/c:common",
@@ -605,7 +660,7 @@ cc_library(
         "//tensorflow/lite/kernels/internal:cppmath",
         "//tensorflow/lite:string",
         "@farmhash_archive//:farmhash",
-    ] + [":tflite_with_ruy_only_and_caching_enabled"],
+    ] + [":tflite_with_ruy_and_caching_enabled"],
 )
 
 cc_library(

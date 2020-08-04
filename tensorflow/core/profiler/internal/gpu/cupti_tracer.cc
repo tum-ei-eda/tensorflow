@@ -18,6 +18,7 @@ limitations under the License.
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/host_info.h"
@@ -683,7 +684,7 @@ Status CreateAndRecordEvent(CUevent *event, CUstream stream) {
 // Note: cuStreamGetCtx only available after CUDA 9.2.
 class ScopedCudaContext {
  public:
-  ScopedCudaContext(CUstream stream) : stream_(stream) {
+  explicit ScopedCudaContext(CUstream stream) : stream_(stream) {
     CuptiApiTracingDisabler disabler;  // don't trace cuda call in this func.
     CUcontext context;
     if (cuStreamGetCtx(stream, &context) != CUDA_SUCCESS) return;
@@ -1244,7 +1245,7 @@ class CuptiDriverApiHookWithCudaEvent : public CuptiDriverApiHook {
   // However there is no guarantee that we receive such callbacks in pairs, we
   // maintain a on-going API calls to make sure no memory leaks.
   struct CuptiApiCallbackContext {
-    CuptiApiCallbackContext(std::vector<uint32> &&r)
+    explicit CuptiApiCallbackContext(std::vector<uint32> &&r)
         : record_indices(std::move(r)) {}
     std::vector<uint32> record_indices;
   };
@@ -1252,7 +1253,7 @@ class CuptiDriverApiHookWithCudaEvent : public CuptiDriverApiHook {
   const CuptiTracerOptions option_;
   CuptiInterface *cupti_interface_;
   CuptiTraceCollector *collector_;
-  std::set<CuptiApiCallbackContext *> callback_contexts_;
+  absl::node_hash_set<CuptiApiCallbackContext *> callback_contexts_;
   std::vector<std::unique_ptr<CudaEventRecorder>> cuda_event_recorders_;
   TF_DISALLOW_COPY_AND_ASSIGN(CuptiDriverApiHookWithCudaEvent);
 };
@@ -1517,6 +1518,7 @@ Status CuptiTracer::DisableActivityTracing() {
 
 Status CuptiTracer::Finalize() {
   if (option_->cupti_finalize) {
+    VLOG(1) << "CuptiFinalize";
     RETURN_IF_CUPTI_ERROR(cupti_interface_->Finalize());
   }
   return Status::OK();
@@ -1562,8 +1564,18 @@ Status CuptiTracer::HandleCallback(CUpti_CallbackDomain domain,
     // Set up the map from correlation id to annotation string.
     const auto &annotation = AnnotationStack::Get();
     if (!annotation.empty()) {
-      collector_->annotation_map()->Add(device_id, cbdata->correlationId,
-                                        annotation);
+      if (cbid ==
+          CUPTI_DRIVER_TRACE_CBID_cuLaunchCooperativeKernelMultiDevice) {
+        // Kernels are launched on different devices by this API call, therefore
+        // we need to populate per device annotation map respectively.
+        for (int i = 0; i < num_gpus_; ++i) {
+          collector_->annotation_map()->Add(i, cbdata->correlationId,
+                                            annotation);
+        }
+      } else {
+        collector_->annotation_map()->Add(device_id, cbdata->correlationId,
+                                          annotation);
+      }
     }
 
     TF_RETURN_IF_ERROR(cupti_driver_api_hook_->OnDriverApiExit(

@@ -83,8 +83,9 @@ PyClient::GetDefaultDeviceAssignment1D(int num_replicas) {
   return result;
 }
 
-StatusOr<std::unique_ptr<PyBuffer>> PyClient::BufferFromPyal(
-    const pybind11::object& argument, Device* device, bool force_copy) {
+StatusOr<std::unique_ptr<PyBuffer>> PyClient::BufferFromPyval(
+    const pybind11::object& argument, Device* device, bool force_copy,
+    PjRtBuffer::HostBufferSemantics host_buffer_semantics) {
   if (device == nullptr) {
     TF_RET_CHECK(!pjrt_client_->local_devices().empty());
     device = pjrt_client_->local_devices().front();
@@ -111,9 +112,9 @@ StatusOr<std::unique_ptr<PyBuffer>> PyClient::BufferFromPyal(
   {
     py::gil_scoped_release gil_release;
     TF_ASSIGN_OR_RETURN(
-        buffer, PjRtBuffer::FromHostBuffer(c->buf_ptr, c->shape, force_copy,
-                                           std::move(py_buffer_ref),
-                                           pjrt_client_.get(), device));
+        buffer, PjRtBuffer::FromHostBuffer(
+                    c->buf_ptr, c->shape, host_buffer_semantics,
+                    std::move(py_buffer_ref), pjrt_client_.get(), device));
   }
   auto traceback = Traceback::Get();
   return std::make_unique<PyBuffer>(shared_from_this(), std::move(buffer),
@@ -123,15 +124,19 @@ StatusOr<std::unique_ptr<PyBuffer>> PyClient::BufferFromPyal(
 StatusOr<std::unique_ptr<PyExecutable>> PyClient::Compile(
     const XlaComputation& computation, CompileOptions options) {
   std::unique_ptr<PjRtExecutable> executable;
+  absl::optional<std::string> fingerprint;
   {
     py::gil_scoped_release gil_release;
     TF_ASSIGN_OR_RETURN(executable,
                         PjRtExecutable::Compile(computation, pjrt_client_.get(),
                                                 std::move(options)));
+    TF_ASSIGN_OR_RETURN(fingerprint,
+                        pjrt_client_->ExecutableFingerprint(*executable));
   }
   auto traceback = Traceback::Get();
   return std::make_unique<PyExecutable>(
-      shared_from_this(), std::move(executable), std::move(traceback));
+      shared_from_this(), std::move(executable), std::move(traceback),
+      std::move(fingerprint));
 }
 
 class ProfileBuilder {
@@ -274,7 +279,8 @@ py::bytes PyClient::HeapProfile() {
       kind_label->set_str(buffer_string_id);
       auto* device_label = sample->add_label();
       device_label->set_key(device_string_id);
-      device_label->set_num(entry.first.device->id());
+      device_label->set_str(
+          builder.StringId(entry.first.device->DebugString()));
     } else {
       kind_label->set_str(executable_string_id);
     }

@@ -18,8 +18,8 @@ limitations under the License.
 include "mlir/IR/OpBase.td"
 include "mlir/Dialect/StandardOps/IR/Ops.td"
 include "tensorflow/compiler/mlir/tensorflow/ir/tf_ops.td"
-include "tensorflow/compiler/mlir/xla/ir/chlo_ops.td"
-include "tensorflow/compiler/mlir/xla/ir/hlo_ops.td"
+include "tensorflow/compiler/mlir/hlo/include/mlir-hlo/Dialect/mhlo/IR/chlo_ops.td"
+include "tensorflow/compiler/mlir/hlo/include/mlir-hlo/Dialect/mhlo/IR/hlo_ops.td"
 
 def SignedIntTensor : TensorOf<[I1, I8, I16, I32, I64]>;
 
@@ -259,7 +259,7 @@ def : Pat<(TF_ConcatV2Op $inputs, (TF_ConstOp OneElementAttr:$axis)),
 //===----------------------------------------------------------------------===//
 
 def CastElementsToI64Elements : NativeCodeCall<
-  "xla::ConvertElementsAttr("
+  "hlo::ConvertElementsAttr("
     "$0, $_builder.getIntegerType(64)).cast<DenseIntElementsAttr>()">;
 
 def : Pat<(TF_CrossReplicaSumOp $input, (TF_ConstOp $group_assignment)),
@@ -321,7 +321,10 @@ def : Pat<(TF_PadV2Op $input, (TF_ConstOp $padding), $c),
 
 foreach src = [TF_IdentityOp, TF_StopGradientOp] in
   def : Pat<(src $op), (replaceWithValue $op)>;
-def : Pat<(TF_PreventGradientOp $op, $msg), (replaceWithValue $op)>;
+
+// TODO(b/32223192): Support CheckNumerics in HLO.
+foreach src = [TF_PreventGradientOp, TF_CheckNumericsOp] in
+  def : Pat<(src $op, $msg), (replaceWithValue $op)>;
 
 //===----------------------------------------------------------------------===//
 // MatMul op patterns.
@@ -335,18 +338,6 @@ def : Pat<(TF_MatMulOp $a, $b, $transpose_a, $transpose_b),
           (TF_TransposeOp $a, (TF_ConstOp (Get2DTransposePerm $transpose_a))),
           (TF_TransposeOp $b, (TF_ConstOp (Get2DTransposePerm $transpose_b))),
           /*precision_config=*/(NullArrayAttr))>;
-
-
-//===----------------------------------------------------------------------===//
-// SparseMatMul op patterns.
-//===----------------------------------------------------------------------===//
-
-// Ignores the sparseness hints and translates tf.SparseMatMul to tf.MatMul
-// until we will have an implementation that can use the information.
-def SparseMatMulToMatMul : Pat<(TF_SparseMatMulOp $a, $b, $a_sparse, $b_sparse,
-                                $transpose_a, $transpose_b),
-                               (TF_MatMulOp $a, $b, $transpose_a,
-                                $transpose_b)>;
 
 //===----------------------------------------------------------------------===//
 // MatrixBandPart op pattern.
@@ -363,7 +354,7 @@ class GetDimensionSizeFromEnd<string dimFromEnd>: NativeCodeCall<
 // For now, this op needs to be created in C++ because the expected output type
 // cannot be inferred.
 class createIotaOp<string dim>: NativeCodeCall<
-  "$_builder.create<xla_hlo::IotaOp>($0.getOwner()->getLoc(), "
+  "$_builder.create<mhlo::IotaOp>($0.getOwner()->getLoc(), "
   "Get2DTensorType($1), $_builder.getI64IntegerAttr(" # dim # "))">;
 
 // This op needs to be created in C++ because the generated Convert Op has no
@@ -498,7 +489,7 @@ def : Pat<(TF_SliceOp:$op HLO_Tensor:$input, HLO_Tensor:$starting_indices,
             $slice_sizes)]>;
 
 //===----------------------------------------------------------------------===//
-// PartitionedCall op patterns.
+// PartitionedCall and LegacyCall op patterns.
 //===----------------------------------------------------------------------===//
 
 def ArgTypesMatchCallee : Constraint<
@@ -510,6 +501,12 @@ foreach callOp = [TF_PartitionedCallOp, TF_StatefulPartitionedCallOp] in {
             (CallOp $f, $args),
           [(ArgTypesMatchCallee $op, $args, $f)]>;
 }
+
+// The extra attr on this op is _disable_call_shape_inference, which we ignore
+// in the bridge.
+def : Pat<(TF_LegacyCallOp:$op $args, FlatSymbolRefAttr:$f, $attr),
+          (CallOp $f, $args),
+        [(ArgTypesMatchCallee $op, $args, $f)]>;
 
 //===----------------------------------------------------------------------===//
 // Reverse op patterns.
@@ -527,6 +524,7 @@ def : Pat<(TF_ReverseV2Op AnyRankedTensor:$values, (TF_ConstOp $axis)),
 
 foreach Mapping = [
                    [TF_AbsOp, HLO_AbsOp],
+                   [TF_AcosOp, HLOClient_AcosOp],
                    [TF_CeilOp, HLO_CeilOp],
                    [TF_ComplexAbsOp, HLO_AbsOp],
                    [TF_CosOp, HLO_CosOp],
@@ -540,6 +538,7 @@ foreach Mapping = [
                    [TF_NegOp, HLO_NegOp],
                    [TF_RealOp, HLO_RealOp],
                    [TF_RsqrtOp, HLO_RsqrtOp],
+                   [TF_SigmoidOp, HLO_LogisticOp],
                    [TF_SinOp, HLO_SinOp],
                    [TF_SqrtOp, HLO_SqrtOp],
                    [TF_TanhOp, HLO_TanhOp],
@@ -547,6 +546,19 @@ foreach Mapping = [
  def : Pat<(Mapping[0] HLO_Tensor:$input),
            (Mapping[1] $input)>;
 }
+
+// Expand acos to MHLO dialect as follows:
+//   acos(x) = 2 * atan(sqrt(1 - x^2) / (1 + x)) if x != -1
+//           = pi                                if x == -1
+def : Pat<(HLOClient_AcosOp $input), (HLO_SelectOp
+  (HLO_CompareOp $input, (HLO_ConstOp (ConstantSplat<"0"> $input)),
+    HLO_COMPARISON_DIRECTION_NE),
+  (HLO_MulOp (HLO_ConstOp (ConstantSplat<"2"> $input)),
+    (HLO_Atan2Op (HLO_SqrtOp (HLO_SubOp
+                               (HLO_ConstOp (ConstantSplat<"1"> $input)),
+                               (HLO_MulOp $input, $input))),
+      (HLO_AddOp (HLO_ConstOp (ConstantSplat<"1"> $input)), $input))),
+  (HLO_ConstOp (ConstantSplat<"M_PI"> $input)))>;
 
 // TODO(bixia): Lower Cast with a Complex type source operand or with
 // Truncate=True for floating point value conversions.
@@ -565,17 +577,8 @@ foreach TfOp = [TF_ExpandDimsOp, TF_ReshapeOp, TF_SqueezeOp, ] in {
             (HLO_ReshapeOp $arg), [(AnyStaticShapeTensor $res)]>;
 }
 
-// Returns 0 if x is NaN, 0 if x is 0, -1 if x < 0 and 1 if x > 0.
-def : Pat<(TF_SignOp $x),
-          (HLO_SelectOp
-            (HLO_CompareOp
-              $x,
-              $x,
-              HLO_COMPARISON_DIRECTION_NE
-            ),
-            (HLO_ConstOp (ConstantSplat<"0"> $x)),
-            (HLO_SignOp $x)
-          )>;
+// Returns NaN if x is NaN, 0 if x is 0, -1 if x < 0 and 1 if x > 0.
+def : Pat<(TF_SignOp $x), (HLO_SignOp $x)>;
 
 def BothElementTypesSameWidthIntOrFloat : Constraint<CPred<
   "getElementTypeOrSelf($0.getType()).isSignlessIntOrFloat() && "

@@ -206,7 +206,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input2 = GetInput(context, node, kInputTensor2);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
-  TF_LITE_ENSURE_EQ(context, input1->type, input2->type);
+  TF_LITE_ENSURE_TYPES_EQ(context, input1->type, input2->type);
   output->type = input2->type;
 
   data->requires_broadcast = !HaveSameShapes(input1, input2);
@@ -286,9 +286,14 @@ void EvalSub(TfLiteContext* context, TfLiteNode* node, TfLiteSubParams* params,
       EvalSubImpl<kernel_type, float>(context, node, params, data, input1,
                                       input2, requires_broadcast, output);
       break;
+    case kTfLiteInt64:
+      EvalSubImpl<kernel_type, int64_t>(context, node, params, data, input1,
+                                        input2, requires_broadcast, output);
+      break;
+
     default:
-      TF_LITE_KERNEL_LOG(context, "output type %d is not supported.",
-                         output->type);
+      TF_LITE_KERNEL_LOG(context, "output type %s is not supported.",
+                         TfLiteTypeGetName(output->type));
   }
 }
 
@@ -371,7 +376,8 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input2 = GetInput(context, node, kInputTensor2);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
-  if (output->type == kTfLiteFloat32 || output->type == kTfLiteInt32) {
+  if (output->type == kTfLiteFloat32 || output->type == kTfLiteInt32 ||
+      output->type == kTfLiteInt64) {
     EvalSub<kernel_type>(context, node, params, data, input1, input2, output);
   } else if (output->type == kTfLiteUInt8 || output->type == kTfLiteInt8 ||
              output->type == kTfLiteInt16) {

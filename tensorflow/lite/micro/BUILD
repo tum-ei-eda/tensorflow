@@ -4,7 +4,6 @@ load(
 )
 load(
     "//tensorflow/lite/micro:build_def.bzl",
-    "cc_library",
     "micro_copts",
 )
 
@@ -13,34 +12,36 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+package_group(
+    name = "micro",
+    packages = ["//tensorflow/lite/micro/..."],
+)
+
 cc_library(
     name = "micro_compatibility",
     hdrs = [
         "compatibility.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
 )
 
 cc_library(
     name = "micro_framework",
     srcs = [
-        "memory_helpers.cc",
         "micro_allocator.cc",
         "micro_interpreter.cc",
         "micro_optional_debug_tools.cc",
         "simple_memory_allocator.cc",
     ],
     hdrs = [
-        "memory_helpers.h",
         "micro_allocator.h",
         "micro_interpreter.h",
         "micro_optional_debug_tools.h",
         "simple_memory_allocator.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
+        ":memory_helpers",
         ":micro_compatibility",
         ":op_resolvers",
         "//tensorflow/lite:type_to_tflitetype",
@@ -57,6 +58,19 @@ cc_library(
 )
 
 cc_library(
+    name = "memory_helpers",
+    srcs = ["memory_helpers.cc"],
+    hdrs = ["memory_helpers.h"],
+    deps = [
+        "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core/api",
+        "//tensorflow/lite/kernels/internal:reference",
+        "//tensorflow/lite/schema:schema_fbs",
+        "@flatbuffers",
+    ],
+)
+
+cc_library(
     name = "test_helpers",
     srcs = [
         "test_helpers.cc",
@@ -64,7 +78,6 @@ cc_library(
     hdrs = [
         "test_helpers.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         ":micro_utils",
@@ -89,7 +102,6 @@ cc_library(
         "micro_mutable_op_resolver.h",
         "micro_op_resolver.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         ":micro_compatibility",
@@ -102,30 +114,6 @@ cc_library(
     ],
 )
 
-# TODO(b/144176795): This target should really be handled differently so that we
-# do not have a fork in the build graph. The bug has some initial ideas.
-cc_library(
-    name = "portable_optimized_op_resolver",
-    srcs = [
-        "all_ops_resolver.cc",
-        "micro_mutable_op_resolver.h",
-        "micro_op_resolver.h",
-    ],
-    hdrs = [
-        "all_ops_resolver.h",
-    ],
-    copts = micro_copts(),
-    deps = [
-        ":micro_compatibility",
-        "//tensorflow/lite/c:common",
-        "//tensorflow/lite/core/api",
-        "//tensorflow/lite/kernels:op_macros",
-        "//tensorflow/lite/kernels/internal:compatibility",
-        "//tensorflow/lite/micro/kernels:portable_optimized_micro_ops",
-        "//tensorflow/lite/schema:schema_fbs",
-    ],
-)
-
 cc_library(
     name = "debug_log",
     srcs = [
@@ -134,7 +122,6 @@ cc_library(
     hdrs = [
         "debug_log.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
 )
 
@@ -146,7 +133,6 @@ cc_library(
     hdrs = [
         "micro_error_reporter.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         ":debug_log",
@@ -164,7 +150,6 @@ cc_library(
     hdrs = [
         "micro_string.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = ["//tensorflow/lite/c:common"],
 )
@@ -177,7 +162,6 @@ cc_library(
     hdrs = [
         "micro_time.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = ["//tensorflow/lite/c:common"],
 )
@@ -190,7 +174,6 @@ cc_library(
     hdrs = [
         "micro_profiler.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         ":micro_compatibility",
@@ -208,7 +191,6 @@ cc_library(
     hdrs = [
         "micro_utils.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         "//tensorflow/lite/c:common",
@@ -227,7 +209,6 @@ cc_library(
         "recording_micro_interpreter.h",
         "recording_simple_memory_allocator.h",
     ],
-    build_for_embedded = True,
     copts = micro_copts(),
     deps = [
         ":micro_compatibility",
@@ -268,6 +249,7 @@ tflite_micro_cc_test(
         ":micro_framework",
         ":micro_utils",
         ":op_resolvers",
+        ":recording_allocators",
         ":test_helpers",
         "//tensorflow/lite/core/api",
         "//tensorflow/lite/micro/testing:micro_test",
@@ -305,9 +287,11 @@ tflite_micro_cc_test(
         "micro_allocator_test.cc",
     ],
     deps = [
+        ":memory_helpers",
         ":micro_framework",
         ":test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
+        "//tensorflow/lite/micro/testing:test_conv_model",
     ],
 )
 
@@ -332,7 +316,7 @@ tflite_micro_cc_test(
         "memory_helpers_test.cc",
     ],
     deps = [
-        ":micro_framework",
+        ":memory_helpers",
         ":test_helpers",
         "//tensorflow/lite/micro/testing:micro_test",
     ],
