@@ -161,16 +161,6 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 
 void Free(TfLiteContext* context, void* buffer) {}
 
-/*
-template<TfLiteType TYPE, bool padding, bool packed, bool reference>
-TfLiteStatus EvalConv(TfLiteConvParams* params, OpData* data,
-              const TfLiteTensor* input, const TfLiteTensor* filter,
-              const TfLiteTensor* bias, TfLiteTensor* output, TfLiteContext* context) {
-  // This function should never be used, only its specializations
-  return kTfLiteError;
-}
-*/
-
 
 TfLiteStatus EvalConvUInt8Packed(
     TfLiteConvParams* params, OpData* data,
@@ -234,7 +224,6 @@ TfLiteStatus EvalConvUInt8Reference(
   return kTfLiteOk;
 }
 
-
 TfLiteStatus EvalConvInt8Reference(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -267,11 +256,11 @@ TfLiteStatus EvalConvInt8Reference(
   return kTfLiteOk;
 }
 
-
 TfLiteStatus EvalConvUInt8(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output, TfLiteContext* context) {
+
   const int32 filter_offset = -filter->params.zero_point;
   const int32 output_offset = output->params.zero_point;
 
@@ -456,11 +445,11 @@ TfLiteStatus EvalConvUInt8Padding(
   return kTfLiteOk;
 }
 
-
 TfLiteStatus EvalConvInt8(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output, TfLiteContext* context) {
+
   const int32 output_offset = output->params.zero_point;
 
   const int32* output_multiplier = data->per_channel_output_multiplier;
@@ -650,7 +639,6 @@ TfLiteStatus EvalConvInt8Padding(
   return kTfLiteOk;
 }
 
-
 TfLiteStatus EvalConvFloat(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -754,7 +742,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               context, node, params, input_width, input_height, filter_width,
               filter_height, output_width, output_height, input->type, data));
 
-
   // Determine which version to use
   bool use_reference = false, use_padding = false, use_packed = false;
   const int dilation_width_factor = params->dilation_width_factor;
@@ -790,7 +777,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     }
     case kTfLiteUInt8:
     {
-
       if (use_packed)  {
         data->eval_function = &EvalConvUInt8Packed;
       } else if (use_reference) {
