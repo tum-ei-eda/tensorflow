@@ -29,6 +29,10 @@ do
     "--no-tflite")
         NOTFLITE=1
         ;;
+    "--no-download-update")
+        NOINSTALL=1
+        NODOWNLOAD_UPDATE=1
+        ;;
     "--no-install")
         NOINSTALL=1
         ;;
@@ -50,11 +54,13 @@ do
     "--debug")
 	# includes workaround for mis-documented and buggy 
 	# per_object_debug_info feature.
+	# We use O1 because gcc has some bugs relating to constexpr
+	# defintions if optimization is off completely
 	BAZEL_CXX_BUILD_SETTINGS=(
                 --config=monolithic --config=dbg
                 --features=per_object_debug_info
                 --define='per_object_debug_info_file=yes'
-                --copt=-O0 --cxxopt=-O0 
+                --copt=-O1 --cxxopt=-O1 
                 --strip=never --fission=yes 
 	)
 	;;
@@ -232,7 +238,12 @@ fi
 
 if [ -z "$NOTFLITE" ] 
 then
-	make mrproper clean_downloads
+    if [ -z "$NODOWNLOAD_UPDATE"]
+    then
+	    make mrproper clean_downloads
+    else
+        make mrproper
+    fi
     make BUILD_TYPE=debug third_party_downloads
     echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
     make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
