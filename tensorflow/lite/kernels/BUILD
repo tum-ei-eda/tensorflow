@@ -258,6 +258,7 @@ cc_test(
     deps = [
         ":eigen_support",
         "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core/api:api", 
         "//tensorflow/lite/kernels/internal:optimized",
         "//third_party/eigen3",
         "@com_google_googletest//:gtest",
