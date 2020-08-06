@@ -28,15 +28,6 @@ namespace tensorflow {
 namespace data {
 namespace experimental {
 
-
-const char* const SaveDatasetOp::kCompression = "compression";
-const char* const SaveDatasetOp::kPath = "path";
-const char* const SaveDatasetOp::kShardFunc = "shard_func";
-const char* const SaveDatasetOp::kShardFuncOtherArgs =
-      "shard_func_other_args";
-const char* const SaveDatasetOp::kUseShardFunc = "use_shard_func";
-const int SaveDatasetOp::kFileFormatVersion = 2;
-
 SaveDatasetOp::SaveDatasetOp(OpKernelConstruction* ctx)
     : HybridAsyncOpKernel(ctx, "tf_data_save_dataset") {
   OP_REQUIRES_OK(ctx, ctx->GetAttr(kCompression, &compression_));

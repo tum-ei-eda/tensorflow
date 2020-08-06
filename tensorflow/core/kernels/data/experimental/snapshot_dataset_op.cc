@@ -93,21 +93,6 @@ namespace experimental {
  *       ...
  */
 
-const char* const SnapshotDatasetV2Op::kDatasetType = "Snapshot";
-const char* const SnapshotDatasetV2Op::kOutputTypes = "output_types";
-const char* const SnapshotDatasetV2Op::kOutputShapes = "output_shapes";
-const char* const SnapshotDatasetV2Op::kCompression = "compression";
-const char* const SnapshotDatasetV2Op::kReaderFunc = "reader_func";
-const char* const SnapshotDatasetV2Op::kShardFunc = "shard_func";
-const char* const SnapshotDatasetV2Op::kReaderFuncOtherArgs =
-      "reader_func_other_args";
-const char* const SnapshotDatasetV2Op::kShardFuncOtherArgs =
-      "shard_func_other_args";
-const char* const SnapshotDatasetV2Op::kReaderFuncTarguments =
-      "Treader_func_args";
-const char* const SnapshotDatasetV2Op::kShardFuncTarguments = "Tshard_func_args";
-const int SnapshotDatasetV2Op::kFileFormatVersion = 2;
-
 class SnapshotDatasetV2Op::Dataset : public DatasetBase {
  public:
   Dataset(OpKernelContext* ctx, const DatasetBase* input, uint64 hash,

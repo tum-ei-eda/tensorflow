@@ -199,7 +199,6 @@ static quant::UniformQuantizedPerAxisType ResetAxisAndBroadcast(
   SmallVector<int64_t, 4> zero_points(qtype.getZeroPoints().begin(),
                                       qtype.getZeroPoints().end());
 
-
   if (new_shape.size() == shape.size()) {  // same rank
     // Broadcast the scales and zero points to match the target size, which is
     // usually the axis-th dimension of the target type. Currently, it covers
