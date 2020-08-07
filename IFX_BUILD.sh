@@ -9,7 +9,11 @@ BAZEL_CXX_BUILD_SETTINGS=(
                 --config=monolithic
 )
 BAZEL_REPO_OVERRIDES=(  )
-TARGET_ARCH=native
+#
+# Defensive setting!  Some tflite tests turned out to fail when ńative'selected.
+# Both on a modern Ryzen2 and on R&D cluster machines.   
+#
+TARGET_ARCH=sandybridge
 LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
