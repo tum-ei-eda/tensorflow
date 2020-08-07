@@ -80,19 +80,13 @@ struct OpData {
   int32_t input_quantized_index;
   int32_t scaling_factors_index;
   int32_t input_offset_index;
-
-  // Some geometry/type specific variants need additional scatch space.
-  void *variants_data;
 };
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   // This is a builtin op, so we don't use the contents in 'buffer', if any.
   // Instead, we allocate a new object to carry information from Prepare() to
   // Eval().
-  auto op_data = new OpData;
-  op_data->variants_data = nullptr;
-  return op_data;
-
+  return new OpData;
 }
 
 void Free(TfLiteContext* context, void* buffer) {
@@ -351,8 +345,7 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.quantized_activation_max = data->output_activation_max;
   TF_LITE_ENSURE_STATUS(ComputeDepthMultiplier(context, input, filter,
                                                &op_params.depth_multiplier));
-  
- if (kernel_type == kReference) {
+  if (kernel_type == kReference) {
     reference_ops::DepthwiseConv(
         op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
         GetTensorShape(filter), GetTensorData<uint8_t>(filter),

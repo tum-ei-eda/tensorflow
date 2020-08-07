@@ -62,52 +62,6 @@ void TfLiteIntArrayFree(TfLiteIntArray* a) { free(a); }
 
 #endif  // TF_LITE_STATIC_MEMORY
 
-
-int TfLiteUInt8ArrayGetSizeInBytes(int size) {
-  static TfLiteUInt8Array dummy;
-  return sizeof(dummy) + sizeof(dummy.data[0]) * size;
-}
-
-int TfLiteUInt8ArrayEqual(const TfLiteUInt8Array* a, const TfLiteUInt8Array* b) {
-  if (a == b) return 1;
-  if (a == NULL || b == NULL) return 0;
-  return TfLiteUInt8ArrayEqualsArray(a, b->size, b->data);
-}
-
-int TfLiteUInt8ArrayEqualsArray(const TfLiteUInt8Array* a, int b_size,
-                                const uint8_t b_data[]) {
-  if (a == NULL) return (b_size == 0);
-  if (a->size != b_size) return 0;
-  int i = 0;
-  for (; i < a->size; i++)
-    if (a->data[i] != b_data[i]) return 0;
-  return 1;
-}
-
-
-#ifndef TF_LITE_STATIC_MEMORY
-
-TfLiteUInt8Array* TfLiteUInt8ArrayCreate(int size) {
-  TfLiteUInt8Array* ret =
-      (TfLiteUInt8Array*)malloc(TfLiteUInt8ArrayGetSizeInBytes(size));
-  ret->size = size;
-  return ret;
-}
-
-TfLiteUInt8Array* TfLiteUInt8ArrayCopy(const TfLiteUInt8Array* src) {
-  if (!src) return NULL;
-  TfLiteUInt8Array* ret = TfLiteUInt8ArrayCreate(src->size);
-  if (ret) {
-    memcpy(ret->data, src->data, src->size * sizeof(uint8_t));
-  }
-  return ret;
-}
-
-void TfLiteUInt8ArrayFree(TfLiteUInt8Array* a) { free(a); }
-
-#endif  // TF_LITE_STATIC_MEMORY
-
-
 int TfLiteFloatArrayGetSizeInBytes(int size) {
   static TfLiteFloatArray dummy;
   return sizeof(dummy) + sizeof(dummy.data[0]) * size;

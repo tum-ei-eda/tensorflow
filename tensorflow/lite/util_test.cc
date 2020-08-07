@@ -53,7 +53,6 @@ TEST(UtilTest, IsFlexOp) {
   EXPECT_FALSE(IsFlexOp(""));
 }
 
-
 TEST(EqualArrayAndTfLiteIntArray, TestWithTFLiteArrayEmpty) {
   int input[] = {1, 2, 3, 4};
   EXPECT_FALSE(EqualArrayAndTfLiteIntArray(nullptr, 4, input));
