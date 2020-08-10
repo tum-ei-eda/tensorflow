@@ -15,17 +15,26 @@ limitations under the License.
 
 // PORTABLE OPTIMIZED
 
-// Choose compilation mode (PRECOMPILE, EVAL, RUNTIME)
-#define RUNTIME
+// Choose compilation mode from (PRECOMPILE, EVAL, RUNTIME)
+// RUNTIME: Default mode, compiles all kernel implementations and chooses during runtime.
+// PRECOMPILE: When this mode is selected, the required kernel implementation is found and
+//             information to select it is stored in a file. No inference is done in this mode,
+//             only the kernel selection is performed in the Prepare phase.
+// EVAL: This mode compiles the kernel that was determined in the PRECOMPILE phase and
+//       all the other kernels are not compiled. The PRECOMPILE mode must be run before this mode,
+//       otherwise compilation errors will occur!
+// Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
+// Limitations: Two separate compilations need to be run
+#define EVAL
 #if !defined(PRECOMPILE) && !defined(EVAL)
 #define RUNTIME
 #endif
 
-#ifdef EVAL
-#include "tensorflow/lite/micro/kernels/portable_optimized/precompiler_info_conv.h"
-#endif
 #ifdef PRECOMPILE
-#include <fstream>
+#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/pointer_collector.h"
+static ConvPointerCollector conv_pointer_collector(
+    "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h",
+    "CONV");
 #endif
 
 #include "tensorflow/lite/c/builtin_op_data.h"
@@ -175,7 +184,7 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 
 void Free(TfLiteContext* context, void* buffer) {}
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 3 && USED_IMPLEMENTATION == 1)
+#if defined(RUNTIME) ||  defined(EVAL)
 TfLiteStatus EvalConvUInt8Packed(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -204,9 +213,7 @@ TfLiteStatus EvalConvUInt8Packed(
                   *filter->quantization.details.data.custom_sub8bit_packing);
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 3 && USED_IMPLEMENTATION == 2)
 TfLiteStatus EvalConvUInt8Reference(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -239,9 +246,7 @@ TfLiteStatus EvalConvUInt8Reference(
      GetTensorShape(im2col), GetTensorData<uint8_t>(im2col), nullptr);
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 9 && USED_IMPLEMENTATION == 1)
 TfLiteStatus EvalConvInt8Reference(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -273,9 +278,7 @@ TfLiteStatus EvalConvInt8Reference(
      GetTensorShape(output), GetTensorData<int8_t>(output));
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 3 && USED_IMPLEMENTATION == 4)
 TfLiteStatus EvalConvUInt8(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -366,9 +369,7 @@ TfLiteStatus EvalConvUInt8(
   }
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 3 && USED_IMPLEMENTATION == 3)
 TfLiteStatus EvalConvUInt8Padding(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -466,9 +467,7 @@ TfLiteStatus EvalConvUInt8Padding(
   }
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 9 && USED_IMPLEMENTATION == 4)
 TfLiteStatus EvalConvInt8(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -564,9 +563,7 @@ TfLiteStatus EvalConvInt8(
   }
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 9 && USED_IMPLEMENTATION == 3)
 TfLiteStatus EvalConvInt8Padding(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -664,9 +661,7 @@ TfLiteStatus EvalConvInt8Padding(
   }
   return kTfLiteOk;
 }
-#endif
 
-#if defined(RUNTIME) || (defined(EVAL) && CONV_DATA_TYPE == 1)
 TfLiteStatus EvalConvFloat(
     TfLiteConvParams* params, OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -695,6 +690,11 @@ TfLiteStatus EvalConvFloat(
                       GetTensorData<float>(im2col));
   return kTfLiteOk;
 }
+#endif
+
+#ifdef EVAL
+#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h"
+static unsigned int counter = 0;
 #endif
 
 
@@ -772,7 +772,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               filter_height, output_width, output_height, input->type, data));
 
   // Determine which version to use
-
+#if defined(RUNTIME) || defined(PRECOMPILE)
   bool use_reference = false, use_padding = false, use_packed = false;
   const int dilation_width_factor = params->dilation_width_factor;
   const int dilation_height_factor = params->dilation_height_factor;
@@ -786,6 +786,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
     use_packed = true;
   }
+#endif
 #ifdef RUNTIME
   // Set the function pointer that is used during inference here
   switch (filter->type) {
@@ -828,58 +829,48 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 #endif
 
 #ifdef PRECOMPILE
-  try {
-    std::ofstream myfile;
-    myfile.open ("tensorflow/lite/micro/kernels/portable_optimized/precompiler_info_conv.h", std::fstream::out);
-    myfile << "#define CONV_DATA_TYPE " << static_cast<int>(filter->type) << "\n";
-    if (use_packed) {
-      myfile << ("#define USED_IMPLEMENTATION 1 \n");
-    } else if (use_reference) {
-      myfile << ("#define USED_IMPLEMENTATION 2 \n");
-    } else if (use_padding) {
-      myfile << ("#define USED_IMPLEMENTATION 3 \n");
-    } else {
-      myfile << ("#define USED_IMPLEMENTATION 4 \n");
+  switch (filter->type) {
+    case kTfLiteFloat32:
+    {
+      conv_pointer_collector.add_pointer("EvalConvFloat");
+      break;
     }
-    myfile.close();
-  }
-  catch(...) {
-    return kTfLiteError;
+    case kTfLiteInt8:
+    {
+      if (use_reference) {
+        conv_pointer_collector.add_pointer("EvalConvInt8Reference");
+      } else if (use_padding) {
+        conv_pointer_collector.add_pointer("EvalConvInt8Padding");
+      } else {
+        conv_pointer_collector.add_pointer("EvalConvInt8");
+      }
+      break;
+    }
+    case kTfLiteUInt8:
+    {
+      if (use_packed)  {
+        conv_pointer_collector.add_pointer("EvalConvUInt8Packed");
+      } else if (use_reference) {
+        conv_pointer_collector.add_pointer("EvalConvUInt8Reference");
+      } else if (use_padding) {
+        conv_pointer_collector.add_pointer("EvalConvUInt8Padding");
+      } else {
+        conv_pointer_collector.add_pointer("EvalConvUInt8");
+      }
+      break;
+    }
+    default:
+    {
+      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                         TfLiteTypeGetName(input->type), input->type);
+      return kTfLiteError;
+    }
   }
 #endif
 
 #ifdef EVAL
-
-#if !defined(CONV_DATA_TYPE) || !defined(USED_IMPLEMENTATION)
-  return kTfLiteError;
-#endif
-
-#if CONV_DATA_TYPE == 1 // FLOAT32
-  data->eval_function = &EvalConvFloat;
-
-# elif CONV_DATA_TYPE == 9 // INT8
-#if USED_IMPLEMENTATION == 2
-  data->eval_function = &EvalConvInt8Reference;
-#elif USED_IMPLEMENTATION ==3
-  data->eval_function = &EvalConvInt8Padding;
-#else
-  data->eval_function = &EvalConvInt8;
-#endif
-
-# elif CONV_DATA_TYPE == 3 // UINT8
-#if USED_IMPLEMENTATION == 1
-  data->eval_function = &EvalConvUInt8Packed;
-#elif USED_IMPLEMENTATION == 2
-  data->eval_function = &EvalConvUInt8Reference;
-#elif USED_IMPLEMENTATION == 3
-  data->eval_function = &EvalConvUInt8Padding;
-#else
-  data->eval_function = &EvalConvUInt8;
-#endif
-
-# else // Wrong data type
-  return kTfLiteError;
-#endif
+  data->eval_function = *(eval_functions[counter]);
+  counter++;
 #endif
   return kTfLiteOk;
 }
