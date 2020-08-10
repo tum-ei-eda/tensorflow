@@ -39,7 +39,6 @@ constexpr int kInputTensor = 0;
 constexpr int kFilterTensor = 1;
 constexpr int kBiasTensor = 2;
 constexpr int kOutputTensor = 0;
-constexpr int kMaxChannels = 256;
 
 // Conv is quantized along dimension 0:
 // https://www.tensorflow.org/lite/performance/quantization_spec
@@ -181,7 +180,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
 
     const int output_depth = filter_shape.Dims(0);
-    TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
 
     void* raw;
     context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
