@@ -25,7 +25,7 @@ limitations under the License.
 //       otherwise compilation errors will occur!
 // Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
 // Limitations: Two separate compilations need to be run
-#define EVAL
+#define RUNTIME
 #if !defined(PRECOMPILE) && !defined(EVAL)
 #define RUNTIME
 #endif
@@ -236,7 +236,7 @@ TfLiteStatus EvalConvUInt8Reference(
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
 
-  TfLiteTensor* im2col;
+  TfLiteTensor* im2col = nullptr;
 
   reference_ops::Conv(
      op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
@@ -681,7 +681,7 @@ TfLiteStatus EvalConvFloat(
   op_params.float_activation_min = output_activation_min;
   op_params.float_activation_max = output_activation_max;
 
-  TfLiteTensor* im2col;
+  TfLiteTensor* im2col = nullptr;
   reference_ops::Conv(op_params, GetTensorShape(input),
                       GetTensorData<float>(input), GetTensorShape(filter),
                       GetTensorData<float>(filter), GetTensorShape(bias),
