@@ -21,12 +21,14 @@ ifneq ($(TFLITE_U_PATH),)
     PROJECT_DIR := .
     TESTING_DIR := $(TFLITE_U_PATH)tensorflow/lite/micro/testing
     EXAMPLES_DIR :=
+	GENROOT_DIR := gen
 else
     TFLITE_INCLUDE := .
     PROJECT_DIR :=  tensorflow/lite/micro
     MAKEFILE_DIR := $(PROJECT_DIR)/tools/make
     TESTING_DIR := $(PROJECT_DIR)/testing
     EXAMPLES_DIR := tensorflow/lite/micro/examples/
+	GENROOT_DIR := $(PROJECT_DIR)/tools/make/gen
 endif
 
 # Pull in some convenience functions.
@@ -309,7 +311,7 @@ ALL_SRCS := \
 
 # Where compiled objects are stored.
 
-GENDIR := $(PROJECT_DIR)/gen/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+GENDIR := $(GENROOT_DIR)/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
