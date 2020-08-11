@@ -433,10 +433,12 @@ TfLiteStatus FlatBufferVectorToTfLiteTypeArray(
 }
 
 // Returns a pointer to any buffer associated with the flatbuffer tensor. Can
-// return nullptr if no buffer is found.
+// return nullptr if no buffer is found.  Buffer size in bytes is stored to
+// size_t pointed to by  buffer_size if this is non-null
 void* GetFlatbufferTensorBuffer(
     const tflite::Tensor& flatbuffer_tensor,
-    const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers) {
+    const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers, 
+    size_t *buffer_size) {
   // We need to figure out where the actual contents of this tensor are stored
   // in memory. We'll check to see if there's a serialized buffer (pretty much
   // the same as a constant op in TensorFlow) associated with this tensor first,
@@ -449,10 +451,14 @@ void* GetFlatbufferTensorBuffer(
     // If we've found a buffer, does it have any data?
     if (auto* array = buffer->data()) {
       // If it has any data, is the data size larger than zero?
-      if (array->size()) {
+      auto buffer_size_in_bytes = array->size();
+      if (buffer_size_in_bytes) {
         // We've found a buffer with valid data, so update the runtime tensor
         // data structure to point to it.
         out_buffer = const_cast<void*>(static_cast<const void*>(array->data()));
+        if (buffer_size != nullptr) {
+          *buffer_size = buffer_size_in_bytes;
+        }
       }
     }
     // TODO(petewarden): It's not clear in what circumstances we could have a
@@ -463,6 +469,7 @@ void* GetFlatbufferTensorBuffer(
   }
   return out_buffer;
 }
+
 
 TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     SimpleMemoryAllocator* allocator, bool allocate_temp,
@@ -479,7 +486,17 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
   // Make sure we remember if the serialized tensor is designated as a variable.
   result->is_variable = flatbuffer_tensor.is_variable();
 
-  result->data.data = GetFlatbufferTensorBuffer(flatbuffer_tensor, buffers);
+  size_t data_size;
+  result->data.data =
+     GetFlatbufferTensorBuffer(flatbuffer_tensor, buffers, &data_size);
+
+  // Figure out what the size in bytes of the buffer require to allocated tensor
+  // would be.  For tensors with serialized buffer special packings for quantized
+  // values mean we taker the serialized buffer size in this case.
+  size_t type_size;
+  size_t tensor_allocation_size;
+  TF_LITE_ENSURE_STATUS(BytesRequiredForTensor(
+      flatbuffer_tensor, &tensor_allocation_size, &type_size, error_reporter));
 
   // TODO(petewarden): Some of these paths aren't getting enough testing
   // coverage, so we should figure out some tests that exercise them.
@@ -488,15 +505,14 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     // make a note that they will be allocated from memory. The actual
     // allocation won't happen until later.
     result->allocation_type = kTfLiteArenaRw;
+    result->bytes = tensor_allocation_size;
   } else {
     // We set the data from a serialized buffer, so record tha.
     result->allocation_type = kTfLiteMmapRo;
+    result->bytes = data_size;
   }
 
-  // Figure out what the size in bytes of the buffer is and store it.
-  size_t type_size;
-  TF_LITE_ENSURE_STATUS(BytesRequiredForTensor(
-      flatbuffer_tensor, &result->bytes, &type_size, error_reporter));
+
 
   if (flatbuffer_tensor.shape() == nullptr) {
     // flatbuffer_tensor.shape() can return a nullptr in the case of a scalar
@@ -582,7 +598,6 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
 
     const tflite::CustomQuantization* custom_quant =
         src_quantization->details_as_CustomQuantization();
-
     if (custom_quant) {
       auto status = tflite::custom_quant::ParseCustomQuantizationDetails(
           custom_quant, result->quantization, error_reporter);
@@ -606,7 +621,7 @@ TfLiteStatus InitializeTfLiteEvalTensorFromFlatbuffer(
   TF_LITE_ENSURE_STATUS(ConvertTensorType(flatbuffer_tensor.type(),
                                           &result->type, error_reporter));
 
-  result->data.data = GetFlatbufferTensorBuffer(flatbuffer_tensor, buffers);
+  result->data.data = GetFlatbufferTensorBuffer(flatbuffer_tensor, buffers, nullptr);
 
   if (flatbuffer_tensor.shape() == nullptr) {
     // flatbuffer_tensor.shape() can return a nullptr in the case of a scalar
