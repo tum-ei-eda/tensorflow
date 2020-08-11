@@ -205,7 +205,7 @@ void TestConvQuantizedPerLayer(
       FloatArrayFromFloats(filter_scales),
       IntArrayFromInts(filter_zero_points), 
       0};
-  // @IFX_PATCH@
+  // TF_LITE_PACKED_QUANTIZED_DATA support
   tensors[1].quantization = {kTfLiteAffineQuantization, &filter_quant, {}};
 
   if (packing) {

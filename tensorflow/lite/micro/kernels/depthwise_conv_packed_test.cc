@@ -99,7 +99,8 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
       bits_in_container += bits_per_item;
       // Flush container when insufficient space for another item
       // Start of each minor dimension to ensure CONTAINER_T aligned...
-      // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+      // TF_LITE_PACKED_QUANTIZED_DATA support
+      // TODO: probably more efficient to align on selected dimension
       // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
       if (bits_in_container + bits_per_item > container_bits ||
           (i % minor_dim_size == (minor_dim_size - 1))) {

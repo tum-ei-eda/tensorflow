@@ -44,6 +44,11 @@ limitations under the License.
 extern "C" {
 #endif  // __cplusplus
 
+// Set this macro to forward/backward compatible
+// implementation of code dependent on additional fields
+// for holding packing information.
+#define TF_LITE_PACKED_QUANTIZED_DATA_VERSION 100
+
 typedef enum TfLiteStatus {
   kTfLiteOk = 0,
   kTfLiteError = 1,
@@ -280,10 +285,8 @@ typedef enum TfLiteQuantizationType {
   kTfLiteAffineQuantization = 1,
 } TfLiteQuantizationType;
 
-//
-// @IFX+PATCH@
-//
 
+// Support for TF_LITE_PACKED_QUANTIZED_DATA_VERSION
 
 // Supported Quantization Detials.  This fuses
 // details with sub-types.  In this case a 
@@ -298,7 +301,6 @@ typedef enum TfLiteQuantizationDetailsType {
   kTfLiteSub8BitPackedUniformDetail,      // TODO Temporary scaffolding while packing in converter.
 
 } TfLiteQuantizationDetailsType;
-
 
 
 //
@@ -331,6 +333,11 @@ typedef enum TfLiteQuantizationDetailsType {
 // entirely filled.   
 //
 
+// Support for TF_LITE_PACKED_QUANTIZED_DATA_VERSION
+
+// TODO Wasteful.   Switch to pointer to flatbuffer data
+// with magic number for recognition.
+
 typedef struct TfLiteCustomSub8BitPackingDetails
 {
   uint8_t    bits_per_item;  
@@ -342,7 +349,6 @@ typedef struct TfLiteCustomSub8BitPackingDetails
   uint8_t     packed_minor_dims;
   uint8_t     _reserved[5];
 } TfLiteCustomSub8BitPackingDetails;
-
 
 
 typedef struct TfLiteQuantizationDetails {
@@ -366,10 +372,6 @@ typedef struct TfLiteQuantization {
   // Holds a reference to one of the quantization param structures specified
   // below.
   void* params;
-
-  //@IFX_PATCH@
-  // Pointer to fruther quantization details  if present (i.e. not QuantizationDetails_NONE)
-  // InterpreterBuilder::ParseQuantization checks for and populates for supported/recognized variants
 
   TfLiteQuantizationDetails details;
 } TfLiteQuantization;

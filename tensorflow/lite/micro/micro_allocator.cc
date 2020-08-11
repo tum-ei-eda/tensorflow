@@ -31,8 +31,13 @@ limitations under the License.
 #include "tensorflow/lite/micro/memory_planner/memory_planner.h"
 #include "tensorflow/lite/micro/micro_op_resolver.h"
 #include "tensorflow/lite/micro/simple_memory_allocator.h"
-#include "tensorflow/lite/experimental/custom_quantization_util.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+
+// TF_LITE_PACKED_QUANTIZED_DATA support
+// TODO move to micro once packing is done as post-prcoessing
+// after translation.
+#include "tensorflow/lite/experimental/custom_quantization_util.h"
+
 
 namespace tflite {
 
@@ -592,7 +597,7 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     result->quantization.type = kTfLiteAffineQuantization;
     result->quantization.params = quantization;
 
-    // @IFX_PATCH@
+    // TF_LITE_PACKED_QUANTIZED_DATA support
     // add support for custom quantization details.  Specifically
     // packed sub 8-bit quantized constants...
 

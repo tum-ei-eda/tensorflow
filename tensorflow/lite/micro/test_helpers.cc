@@ -944,7 +944,8 @@ static void AsymmetricQuantizePacked(const float* input, uint8_t* output,
     bits_in_container += bits_per_item;
     // Flush container when insufficient space for another item
     // Start of each minor dimension to ensure CONTAINER_T aligned...
-    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+    // TF_LITE_PACKED_QUANTIZED_DATA support
+    // TODO probably more efficient to align on selected dimension
     // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
     if (bits_in_container + bits_per_item > container_bits ||
         (i % packed_dims_elts == (packed_dims_elts - 1))) {
