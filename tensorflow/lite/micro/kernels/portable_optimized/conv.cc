@@ -25,7 +25,7 @@ limitations under the License.
 //       otherwise compilation errors will occur!
 // Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
 // Limitations: Two separate compilations need to be run
-#define RUNTIME
+
 #if !defined(PRECOMPILE) && !defined(EVAL)
 #define RUNTIME
 #endif
@@ -33,8 +33,7 @@ limitations under the License.
 #ifdef PRECOMPILE
 #include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/pointer_collector.h"
 static ConvPointerCollector conv_pointer_collector(
-    "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h",
-    "CONV");
+    "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h");
 #endif
 
 #include "tensorflow/lite/c/builtin_op_data.h"

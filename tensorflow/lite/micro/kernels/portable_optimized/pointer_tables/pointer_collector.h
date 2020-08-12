@@ -26,9 +26,8 @@ class PointerCollector  {
   /*
    * Constructor that initializes the path
    */
-  PointerCollector(std::string _path, std::string _kernel_name) {
+  PointerCollector(std::string _path) {
     this->path = _path;
-    this->kernel_name = _kernel_name;
   }
 
   /*
@@ -42,22 +41,20 @@ class PointerCollector  {
   unsigned int counter = 0;
   // Vector that stores all the pointers to the used kernels
   std::vector<std::string> pointers;
-  // The kernel name
-  std::string kernel_name;
   // Path to the output file
   std::string path;
 };
 
 class ConvPointerCollector: public PointerCollector {
  public:
-  ConvPointerCollector(std::string _path, std::string _kernel_name): PointerCollector(_path, _kernel_name) {}
+  ConvPointerCollector(std::string _path): PointerCollector(_path) {}
 
   ~ConvPointerCollector() {
     //Store everything in the output file here
     std::ofstream myfile;
     myfile.open(path, std::fstream::out);
-    myfile << "#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_" << kernel_name << "_POINTER_TABLE_H_\n";
-    myfile << "#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_" << kernel_name << "_POINTER_TABLE_H_\n\n";
+    myfile << "#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_CONV_POINTER_TABLE_H_\n";
+    myfile << "#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_CONV_POINTER_TABLE_H_\n\n";
 
     myfile << "TfLiteStatus (*eval_functions[" << counter << "])(TfLiteConvParams* params, OpData* data,\n" <<
         "    const TfLiteTensor* input, const TfLiteTensor* filter, \n" <<
@@ -66,7 +63,30 @@ class ConvPointerCollector: public PointerCollector {
     for (size_t i = 0; i < pointers.size(); i++) {
       myfile << pointers[i] << ",\n";
     }
-    myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_" << kernel_name << "_POINTER_TABLE_H_ */\n";
+    myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_CONV_POINTER_TABLE_H_ */\n";
+    myfile.close();
+  }
+};
+
+class DepthwiseConvPointerCollector: public PointerCollector {
+ public:
+  DepthwiseConvPointerCollector(std::string _path): PointerCollector(_path) {}
+
+  ~DepthwiseConvPointerCollector() {
+    //Store everything in the output file here
+    std::ofstream myfile;
+    myfile.open(path, std::fstream::out);
+    myfile << "#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_DEPTHWISE_CONV_POINTER_TABLE_H_\n";
+    myfile << "#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_DEPTHWISE_CONV_POINTER_TABLE_H_\n\n";
+
+    myfile << "TfLiteStatus (*eval_functions[" << counter << "])(TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n" <<
+        "    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter, \n" <<
+        "    const TfLiteTensor* bias, TfLiteTensor* output) = {\n";
+
+    for (size_t i = 0; i < pointers.size(); i++) {
+      myfile << pointers[i] << ",\n";
+    }
+    myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_DEPTHWISE_CONV_POINTER_TABLE_H_ */\n";
     myfile.close();
   }
 };
