@@ -10,7 +10,7 @@ BAZEL_CXX_BUILD_SETTINGS=(
 )
 BAZEL_REPO_OVERRIDES=(  )
 #
-# Defensive setting!  Some tflite tests turned out to fail when ńative'selected.
+# Defensive setting!  Some tflite tests turned out to fail when '-mnative'selected.
 # Both on a modern Ryzen2 and on R&D cluster machines.   
 #
 TARGET_ARCH=sandybridge

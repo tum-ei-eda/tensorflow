@@ -491,7 +491,7 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
   // Make sure we remember if the serialized tensor is designated as a variable.
   result->is_variable = flatbuffer_tensor.is_variable();
 
-  size_t data_size;
+  size_t data_size = 0; // Avoid uninit warning...
   result->data.data =
      GetFlatbufferTensorBuffer(flatbuffer_tensor, buffers, &data_size);
 
