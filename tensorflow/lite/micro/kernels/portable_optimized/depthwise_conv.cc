@@ -922,13 +922,13 @@ inline TfLiteStatus EvalInt8Padding(
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
   const RuntimeShape& input_shape = GetTensorShape(input);
-  const uint8_t* input_data = GetTensorData<uint8_t>(input);
+  const int8_t* input_data = GetTensorData<int8_t>(input);
   const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const uint8_t* filter_data = GetTensorData<uint8_t>(filter);
+  const int8_t* filter_data = GetTensorData<int8_t>(filter);
   const RuntimeShape& bias_shape = GetTensorShape(bias);
   const int32_t* bias_data = GetTensorData<int32_t>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
-  uint8* output_data = GetTensorData<uint8_t>(output);
+  int8* output_data = GetTensorData<int8_t>(output);
   const int32* output_multiplier = data->per_channel_output_multiplier;
   const int32* output_shift = data->per_channel_output_shift;
 

@@ -52,3 +52,6 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+
+#IFX Specific
+tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/*pointer_table.h

@@ -24,7 +24,7 @@ limitations under the License.
 // We need different values for portable_optimized as different ScratchBuffer /
 // PersistentBuffer are allocated result in different Head/Tail usage.
 
-const unsigned int TfLiteTensor_size_measured = 64u;
+const unsigned int TfLiteTensor_size_measured = 80u;
 const int kKeywordModelTensorCount = 54;
 const int kKeywordModelHeadSize = 672;
 #ifdef TF_LITE_STATIC_MEMORY
