@@ -299,6 +299,7 @@ include $(wildcard $(MAKEFILE_DIR)/ext_libs/*.inc)
 
 CXXFLAGS += $(LOCAL_CXXFLAGS) $(LOCAL_CPPFLAGS)
 CCFLAGS  += $(LOCAL_CCFLAGS)  $(LOCAL_CPPFLAGS)
+LDFLAGS  += $(LOCAL_LDFLAGS)
 
 # Call specialize here so that platform-specific tags can be taken into account.
 MICROLITE_CC_SRCS := $(call specialize,$(MICROLITE_CC_SRCS))
@@ -425,7 +426,7 @@ endif
 
 # Gets rid of all generated files.
 clean:
-	rm -rf $(GENDIR)
+	rm -rf $(GENDIR) $(LOCAL_CLEANS)
 
 
 $(DEPDIR)/%.d: ;
