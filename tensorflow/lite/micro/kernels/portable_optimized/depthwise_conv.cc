@@ -502,7 +502,7 @@ struct DepthwiseConvPacked {
     const int32 filter_offset = -filter->params.zero_point;
     const int32 output_offset = output->params.zero_point;
     const int32 output_multiplier = data->output_multiplier;
-    const int output_shift = data->output_shift;
+    const int output_shift = -data->output_shift;
     TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
     TFLITE_DCHECK_EQ(output_shape.DimensionsCount(), 4);
@@ -1333,16 +1333,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         } else if (use_padding) {
           // Use the version that can handle padding
           data->eval_function = &EvalInt8Padding;
-          need_acc_buf = true;
         } else {
           data->eval_function = &EvalInt8;
-          need_acc_buf = true;
         }
         break;
       }
       case kTfLiteUInt8: {
         if (use_packed) {
-          need_acc_buf = true;
           if (use_padding) {
             data->eval_function = &DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>;
           } else {
@@ -1353,10 +1350,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         } else if (use_optimized_size) {
           data->eval_function = &DepthwiseConvOptimizedForFilterWidthEight;
         } else if (use_padding) {
-          need_acc_buf = true;
           data->eval_function = &EvalUInt8Padding;
         } else {
-          need_acc_buf = true;
           data->eval_function = &EvalUInt8;
         }
         break;
