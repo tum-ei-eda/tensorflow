@@ -91,6 +91,29 @@ class DepthwiseConvPointerCollector: public PointerCollector {
   }
 };
 
+class FullyConnectedPointerCollector: public PointerCollector {
+ public:
+  FullyConnectedPointerCollector(std::string _path): PointerCollector(_path) {}
+
+  ~FullyConnectedPointerCollector() {
+    //Store everything in the output file here
+    std::ofstream myfile;
+    myfile.open(path, std::fstream::out);
+    myfile << "#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_FULLY_CONNECTED_POINTER_TABLE_H_\n";
+    myfile << "#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_FULLY_CONNECTED_POINTER_TABLE_H_\n\n";
+
+    myfile << "TfLiteStatus (*eval_functions[" << counter << "])(TfLiteContext* context, TfLiteFullyConnectedParams* params,\n" <<
+      "OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,\n" <<
+      "const TfLiteTensor* bias, TfLiteTensor* output) = {\n";
+
+    for (size_t i = 0; i < pointers.size(); i++) {
+      myfile << pointers[i] << ",\n";
+    }
+    myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_FULLY_CONNECTED_POINTER_TABLE_H_ */\n";
+    myfile.close();
+  }
+};
+
 
 
 #endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_POINTER_COLLECTOR_H_ */
