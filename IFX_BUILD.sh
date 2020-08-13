@@ -249,11 +249,11 @@ then
         make mrproper
     fi
     make BUILD_TYPE=debug third_party_downloads
-    echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
-    echo make -j 4 BUILD_TYPE=debug test_executables
-    make -j 4 BUILD_TYPE=debug test_executables
+    #echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
+    #echo make -j 4 BUILD_TYPE=debug test_executables
+    #make -j 4 BUILD_TYPE=debug test_executables
 
 
     if [ -z "$NOINSTALL" ]
