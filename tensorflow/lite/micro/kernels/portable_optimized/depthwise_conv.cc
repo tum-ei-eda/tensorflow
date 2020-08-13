@@ -25,7 +25,7 @@ limitations under the License.
 //       otherwise compilation errors will occur!
 // Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
 // Limitations: Two separate compilations need to be run
-#define EVAL
+
 #if !defined(PRECOMPILE) && !defined(EVAL)
 #define RUNTIME
 #endif
