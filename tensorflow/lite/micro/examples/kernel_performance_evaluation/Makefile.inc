@@ -7,6 +7,11 @@ tensorflow/lite/micro/examples/kernel_performance_evaluation/depthwise_conv_perf
 FC_PERFORMANCE_TEST_SRC := \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/fully_connected_performance_eval.cc
 
+PACKED_WEIGHTS_TEST_SRCS := \
+tensorflow/lite/micro/examples/kernel_performance_evaluation/packed_ops_performance_eval.cc
+
+PACKED_WEIGHTS_TEST_HDRS :=
+
 #Find any platform - specific rules for the examples.
 include $(wildcard tensorflow/lite/micro/examples/kernel_performance_evaluation/*/Makefile.inc)
 
@@ -21,3 +26,7 @@ $(DCONV_PERFORMANCE_TEST_SRC)))
 # Tests loading and running the fully connected performance test.
 $(eval $(call microlite_test,fully_connected_performance_eval,\
 $(FC_PERFORMANCE_TEST_SRC)))
+
+# Tests loading and running the packed ops performance test.
+$(eval $(call microlite_test,test_packed_ops_performance_eval,\
+$(PACKED_WEIGHTS_TEST_SRCS),$(PACKED_WEIGHTS_TEST_HDRS)))

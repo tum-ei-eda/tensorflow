@@ -17,7 +17,3 @@ include $(wildcard tensorflow/lite/micro/examples/packed_weights/*/Makefile.inc)
 # Tests loading and running the sine model.
 $(eval $(call microlite_test,packed_weights_test,\
 $(PACKED_WEIGHTS_TEST_SRCS),$(PACKED_WEIGHTS_TEST_HDRS)))
-
-
-
-
