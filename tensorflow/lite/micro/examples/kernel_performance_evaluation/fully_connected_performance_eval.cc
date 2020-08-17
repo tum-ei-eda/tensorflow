@@ -129,7 +129,7 @@ void TestFullyConnectedQuantized(
 
   TfLiteFullyConnectedParams builtin_data = {
       activation,
-      kTfLiteFullyConnectedWeightsFormatDefault,
+      kTfLiteFullyConnectedWeightsFormatDefault, false, false
   };
   const char* init_data = reinterpret_cast<const char*>(&builtin_data);
   size_t init_data_size = 0;
@@ -142,18 +142,18 @@ void TestFullyConnectedQuantized(
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
+  //int temporaries_array_data[] = {0};
+  //TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
+  //node.temporaries = temporaries_array;
   node.user_data = user_data;
   node.builtin_data = reinterpret_cast<void*>(&builtin_data);
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
+  //node.delegate = nullptr;
 
   auto start = std::chrono::high_resolution_clock::now();
 
@@ -221,7 +221,6 @@ TF_LITE_MICRO_TEST(PerformanceTestQuantizedInt8) {
 		  expected_output_data, output_min, output_max);
 
   int8_t output_data[output_dims_count];
-  const int number_of_invocations = 1000;
   tflite::testing::TestFullyConnectedQuantized<int8_t>(
       input_dims_data, input_data, input_min, input_max, weights_dims_data,
       weights_data, weights_min, weights_max, bias_dims_data, bias_data,
@@ -266,7 +265,6 @@ TF_LITE_MICRO_TEST(PerformanceTestQuantizedUint8) {
 		  expected_output_data, output_min, output_max);
 
   uint8_t output_data[output_dims_count];
-  const int number_of_invocations = 100;
   tflite::testing::TestFullyConnectedQuantized<uint8_t>(
       input_dims_data, input_data, input_min, input_max, weights_dims_data,
       weights_data, weights_min, weights_max, bias_dims_data, bias_data,
