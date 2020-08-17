@@ -1091,20 +1091,11 @@ TfLiteStatus Subgraph::SetTensorParametersReadOnly(
   // For most tensors we know exactly how much memory is necessary so we can
   // ensure the buffer is large enough. However, we need to skip string tensors
   // and sparse tensors because their sizes change with the contents.
-  // For packed tensors 
   // TODO(b/145615516): Extend BytesRequired to check sparse tensors.
-  // @IFX_PATCH@
-  // TODO extend to invoke size checker for recognised quantization detail types.
-   
-  if (type != kTfLiteString && sparsity == nullptr && quantization.details.type != kTfLiteSub8BitPackedUniformDetail) {
+  if (type != kTfLiteString && sparsity == nullptr) {
     size_t required_bytes;
     TF_LITE_ENSURE_OK(&context_,
                       BytesRequired(type, dims, rank, &required_bytes));
-    if (required_bytes != bytes)
-    {
-      TF_LITE_KERNEL_LOG(&context_, "unexpected size quant type %d details type %d",
-                         quantization.type, quantization.details.type);
-    }
     TF_LITE_ENSURE_EQ(&context_, required_bytes, bytes);
   }
 

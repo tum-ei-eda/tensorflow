@@ -586,6 +586,7 @@ cc_test(
     deps = [
         ":util",
         "//tensorflow/lite/c:common",
+        "//tensorflow/lite/core/api:api",
         "//tensorflow/lite/schema:schema_fbs",
         "@com_google_googletest//:gtest",
     ],

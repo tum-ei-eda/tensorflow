@@ -27,7 +27,6 @@ limitations under the License.
 #include "tensorflow/lite/core/api/error_reporter.h"
 #include "tensorflow/lite/core/api/flatbuffer_conversions.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
-#include "tensorflow/lite/experimental/custom_quantization_util.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 #include "tensorflow/lite/shared_library.h"
 #include "tensorflow/lite/tflite_with_xnnpack_optional.h"
@@ -370,11 +369,7 @@ TfLiteStatus InterpreterBuilder::ParseQuantization(
   affine_quantization->quantized_dimension =
       src_quantization->quantized_dimension();
   quantization->params = reinterpret_cast<void*>(affine_quantization);
-
-  // @IFX_PATCH@
-  auto cq_details = src_quantization->details_as_CustomQuantization();
-  return tflite::custom_quant::ParseCustomQuantizationDetails(
-      cq_details, *quantization, error_reporter_);
+  return kTfLiteOk;
 }
 
 TfLiteStatus InterpreterBuilder::ParseSparsity(

@@ -44,6 +44,11 @@ limitations under the License.
 extern "C" {
 #endif  // __cplusplus
 
+// Set this macro to forward/backward compatible
+// implementation of code dependent on additional fields
+// for holding packing information.
+#define TF_LITE_PACKED_QUANTIZED_DATA_VERSION 100
+
 typedef enum TfLiteStatus {
   kTfLiteOk = 0,
   kTfLiteError = 1,
@@ -120,49 +125,6 @@ TfLiteIntArray* TfLiteIntArrayCopy(const TfLiteIntArray* src);
 // Free memory of array `a`.
 void TfLiteIntArrayFree(TfLiteIntArray* a);
 #endif  // TF_LITE_STATIC_MEMORY
-
-// @IFX_PATCH@
-// Fixed size list of integers. Used for dimensions and inputs/outputs tensor
-// indices
-typedef struct TfLiteUInt8Array {
-  int size;
-// gcc 6.1+ have a bug where flexible members aren't properly handled
-// https://github.com/google/re2/commit/b94b7cd42e9f02673cd748c1ac1d16db4052514c
-#if !defined(__clang__) && defined(__GNUC__) && __GNUC__ == 6 && \
-    __GNUC_MINOR__ >= 1
-  uint8_t data[0];
-#else
-  uint8_t data[];
-#endif
-} TfLiteUInt8Array;
-
-
-
-// Given the size (number of elements) in a TfLiteIntArray, calculate its size
-// in bytes.
-int TfLiteUInt8ArrayGetSizeInBytes(int size);
-
-#ifndef TF_LITE_STATIC_MEMORY
-// Create a array of a given `size` (uninitialized entries).
-// This returns a pointer, that you must free using TfLiteIntArrayFree().
-TfLiteUInt8Array* TfLiteUInt8ArrayCreate(int size);
-#endif // TF_LITE_STATIC_MEMORY
-
-// Check if two intarrays are equal. Returns 1 if they are equal, 0 otherwise.
-int TfLiteUInt8ArrayEqual(const TfLiteUInt8Array* a, const TfLiteUInt8Array* b);
-
-// Check if an intarray equals an array. Returns 1 if equals, 0 otherwise.
-int TfLiteUInt8ArrayEqualsArray(const TfLiteUInt8Array* a, int b_size,
-                                const uint8_t b_data[]);
-
-#ifndef TF_LITE_STATIC_MEMORY
-// Create a copy of an array passed as `src`.
-// You are expected to free memory with TfLiteIntArrayFree
-TfLiteUInt8Array* TfLiteUInt8ArrayCopy(const TfLiteUInt8Array* src);
-
-// Free memory of array `a`.
-void TfLiteUInt8ArrayFree(TfLiteUInt8Array* a);
-#endif // TF_LITE_STATIC_MEMORY
 
 // Fixed size list of floats. Used for per-channel quantization.
 typedef struct TfLiteFloatArray {
@@ -323,10 +285,8 @@ typedef enum TfLiteQuantizationType {
   kTfLiteAffineQuantization = 1,
 } TfLiteQuantizationType;
 
-//
-// @IFX+PATCH@
-//
 
+// Support for TF_LITE_PACKED_QUANTIZED_DATA_VERSION
 
 // Supported Quantization Detials.  This fuses
 // details with sub-types.  In this case a 
@@ -341,7 +301,6 @@ typedef enum TfLiteQuantizationDetailsType {
   kTfLiteSub8BitPackedUniformDetail,      // TODO Temporary scaffolding while packing in converter.
 
 } TfLiteQuantizationDetailsType;
-
 
 
 //
@@ -374,6 +333,11 @@ typedef enum TfLiteQuantizationDetailsType {
 // entirely filled.   
 //
 
+// Support for TF_LITE_PACKED_QUANTIZED_DATA_VERSION
+
+// TODO Wasteful.   Switch to pointer to flatbuffer data
+// with magic number for recognition.
+
 typedef struct TfLiteCustomSub8BitPackingDetails
 {
   uint8_t    bits_per_item;  
@@ -385,7 +349,6 @@ typedef struct TfLiteCustomSub8BitPackingDetails
   uint8_t     packed_minor_dims;
   uint8_t     _reserved[5];
 } TfLiteCustomSub8BitPackingDetails;
-
 
 
 typedef struct TfLiteQuantizationDetails {
@@ -409,10 +372,6 @@ typedef struct TfLiteQuantization {
   // Holds a reference to one of the quantization param structures specified
   // below.
   void* params;
-
-  //@IFX_PATCH@
-  // Pointer to fruther quantization details  if present (i.e. not QuantizationDetails_NONE)
-  // InterpreterBuilder::ParseQuantization checks for and populates for supported/recognized variants
 
   TfLiteQuantizationDetails details;
 } TfLiteQuantization;

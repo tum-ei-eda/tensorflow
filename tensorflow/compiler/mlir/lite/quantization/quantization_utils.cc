@@ -211,8 +211,9 @@ static quant::UniformQuantizedPerAxisType ResetAxisAndBroadcast(
     //
     // TODO(b/141709944): after the fix, the `scales` can be for dim[2], thus we
     // have to repeat each elements in the `scales` locally dim[3] times.
-    if (BroadcastVector<double>(shaped.getDimSize(quant_dim), scales) ||
-        BroadcastVector<int64_t>(shaped.getDimSize(quant_dim), zero_points)) {
+    unsigned quant_dim_idx =  quant_dim < 0 ? quant_dim = shape.size() + quant_dim  : quant_dim;
+    if (BroadcastVector<double>(shaped.getDimSize(quant_dim_idx), scales) ||
+        BroadcastVector<int64_t>(shaped.getDimSize(quant_dim_idx), zero_points)) {
       return {};
     }
   } else if ((new_shape.size() == shape.size() + 1) && new_shape.back() == 1) {

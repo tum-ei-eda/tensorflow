@@ -21,12 +21,14 @@ ifneq ($(TFLITE_U_PATH),)
     PROJECT_DIR := .
     TESTING_DIR := $(TFLITE_U_PATH)tensorflow/lite/micro/testing
     EXAMPLES_DIR :=
+	GENROOT_DIR := gen
 else
     TFLITE_INCLUDE := .
     PROJECT_DIR :=  tensorflow/lite/micro
     MAKEFILE_DIR := $(PROJECT_DIR)/tools/make
     TESTING_DIR := $(PROJECT_DIR)/testing
     EXAMPLES_DIR := tensorflow/lite/micro/examples/
+	GENROOT_DIR := $(PROJECT_DIR)/tools/make/gen
 endif
 
 # Pull in some convenience functions.
@@ -297,6 +299,7 @@ include $(wildcard $(MAKEFILE_DIR)/ext_libs/*.inc)
 
 CXXFLAGS += $(LOCAL_CXXFLAGS) $(LOCAL_CPPFLAGS)
 CCFLAGS  += $(LOCAL_CCFLAGS)  $(LOCAL_CPPFLAGS)
+LDFLAGS  += $(LOCAL_LDFLAGS)
 
 # Call specialize here so that platform-specific tags can be taken into account.
 MICROLITE_CC_SRCS := $(call specialize,$(MICROLITE_CC_SRCS))
@@ -309,7 +312,7 @@ ALL_SRCS := \
 
 # Where compiled objects are stored.
 
-GENDIR := $(PROJECT_DIR)/gen/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+GENDIR := $(GENROOT_DIR)/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
@@ -423,7 +426,7 @@ endif
 
 # Gets rid of all generated files.
 clean:
-	rm -rf $(GENDIR)
+	rm -rf $(GENDIR) $(LOCAL_CLEANS)
 
 
 $(DEPDIR)/%.d: ;

@@ -53,14 +53,6 @@ TEST(UtilTest, IsFlexOp) {
   EXPECT_FALSE(IsFlexOp(""));
 }
 
-TEST(ConvertVectorToTfLiteIntArray, TestWithEmptyVector) {
-  std::vector<int> input;
-  TfLiteIntArray* output = ConvertVectorToTfLiteIntArray(input);
-  ASSERT_NE(output, nullptr);
-  EXPECT_EQ(output->size, 0);
-  TfLiteIntArrayFree(output);
-}
-
 TEST(EqualArrayAndTfLiteIntArray, TestWithTFLiteArrayEmpty) {
   int input[] = {1, 2, 3, 4};
   EXPECT_FALSE(EqualArrayAndTfLiteIntArray(nullptr, 4, input));

@@ -814,11 +814,13 @@ int TestStrcmp(const char* a, const char* b) {
 
 // Wrapper to forward kernel errors to the interpreter's error reporter.
 void ReportOpError(struct TfLiteContext* context, const char* format, ...) {
+#ifndef TF_LITE_STRIP_ERROR_STRINGS
   ErrorReporter* error_reporter = static_cast<ErrorReporter*>(context->impl_);
   va_list args;
   va_start(args, format);
   TF_LITE_REPORT_ERROR(error_reporter, format, args);
   va_end(args);
+#endif
 }
 
 // Create a TfLiteIntArray from an array of ints.  The first element in the
@@ -942,7 +944,8 @@ static void AsymmetricQuantizePacked(const float* input, uint8_t* output,
     bits_in_container += bits_per_item;
     // Flush container when insufficient space for another item
     // Start of each minor dimension to ensure CONTAINER_T aligned...
-    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+    // TF_LITE_PACKED_QUANTIZED_DATA support
+    // TODO probably more efficient to align on selected dimension
     // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
     if (bits_in_container + bits_per_item > container_bits ||
         (i % packed_dims_elts == (packed_dims_elts - 1))) {
