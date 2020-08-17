@@ -123,7 +123,7 @@ TfLiteStatus EvalConvQuantizedPacked(
         TfLiteContext* context,
         const TfLiteCustomSub8BitPackingDetails &custom) {
 
-  TF_LITE_KERNEL_LOG(context, "Using packed implementation of convolutional layer with %d bit.", custom.bits_per_item);
+  //TF_LITE_KERNEL_LOG(context, "Using packed implementation of convolutional layer with %d bit.", custom.bits_per_item);
 
   unsigned int bits_per_item = custom.bits_per_item;
   unsigned int container_bits = custom.container_bits;
