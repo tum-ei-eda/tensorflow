@@ -308,9 +308,9 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8Relu) {
       F2Q32(3, bias_scale),
   };
   const int8_t expected_output_data[] = {
-      F2QS(24, output_min, output_max), F2QS(25, output_min, output_max),
+      F2QS(24, output_min, output_max), F2QS(0, output_min, output_max),
       F2QS(26, output_min, output_max), F2QS(58, output_min, output_max),
-      F2QS(59, output_min, output_max),  F2QS(60, output_min, output_max),
+      F2QS(0, output_min, output_max),  F2QS(60, output_min, output_max),
   };
   const int output_dims_data[] = {2, 2, 3};
 
@@ -324,7 +324,6 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8Relu) {
           output_max, kTfLiteActRelu, output_data),
       kTfLiteOk);
 }
-
 
 TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8OutputMultiplierGreaterThan1) {
   using tflite::testing::F2Q32;
@@ -392,6 +391,7 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedInt8OutputMultiplierGreaterThan1) {
           output_max, kTfLiteActNone, output_data),
       kTfLiteOk);
 }
+
 
 
 TF_LITE_MICRO_TEST(SimpleTest4DInputQuantizedInt8) {
@@ -527,4 +527,5 @@ TF_LITE_MICRO_TEST(SimpleTest4DInputQuantizedInt8OutputMultiplierGreaterThan1) {
           output_max, kTfLiteActNone, output_data),
       kTfLiteOk);
 }
+
 TF_LITE_MICRO_TESTS_END
