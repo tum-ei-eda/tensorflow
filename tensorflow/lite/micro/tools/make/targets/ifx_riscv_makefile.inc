@@ -42,7 +42,7 @@ endif
     -Wno-sign-compare \
     -fno-delete-null-pointer-checks \
     -fomit-frame-pointer \
-    $(PLATFORM_OPT_FLAGS) 
+    $(PLATFORM_OPT_FLAGS)
 
 
   BUILD_TYPE := micro
@@ -67,11 +67,69 @@ ifeq ($(TARGET), ifx_riscv32_mcu)
   THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
   
   CXXFLAGS += $(PLATFORM_FLAGS) 
-
   CCFLAGS += -std=gnu99 $(PLATFORM_FLAGS)
   
   
 endif
+
+#
+# ----------------------------------------------------------------------
+# Settings for RISCV 32-bit MCU on FPGA.
+# -----------------------------------------------------------------------
+#
+
+
+
+ifeq ($(TARGET), ifx_riscv32_fpga)
+   PLATFORM_FLAGS = \
+    -march=rv32im \
+    -mabi=ilp32 \
+    -mcmodel=medany \
+    -mexplicit-relocs \
+    -fno-builtin-printf \
+    -fno-exceptions \
+    -DTF_LITE_MCU_DEBUG_LOG \
+    -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
+    -DTF_LITE_USE_GLOBAL_MAX \
+    -DTF_LITE_USE_GLOBAL_MIN \
+    -fno-unwind-tables \
+    -ffunction-sections \
+    -fdata-sections \
+    -funsigned-char \
+    -Wvla \
+    -Wall \
+    -Wextra \
+    -Wsign-compare \
+    -Wdouble-promotion \
+    -Wshadow \
+    -Wno-unused-variable \
+    -Wno-missing-field-initializers \
+    -Wno-unused-parameter \
+    -Wno-write-strings \
+    -Wunused-function \
+    -fno-delete-null-pointer-checks \
+    -fno-threadsafe-statics \
+    -fomit-frame-pointer \
+    -fno-use-cxa-atexit \
+    -O3
+
+  LDFLAGS +=  -nostartfiles 
+  LDFLAGS +=  -lm 
+   
+
+  IFX_RISCV32_RECOGNIZED=1
+
+  THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
+  
+  CXXFLAGS += $(PLATFORM_FLAGS) 
+
+  CCFLAGS += $(PLATFORM_FLAGS)
+
+  BUILD_TYPE := micro
+  
+  
+endif
+
 
 #
 # ----------------------------------------------------------------------
@@ -119,7 +177,7 @@ ifeq ($(TARGET), ifx_riscv32_pulpino)
 
   PLATFORM_FLAGS += \
     -fno-builtin \
-	-ffreestanding \
+    -ffreestanding \
     -fno-builtin-printf 
 
   INCLUDES += -I$(PULPINO_CRT)/pulpino/sw/libs/sys_lib/inc -I$(PULPINO_CRT)/pulpino/sw/libs/string_lib/inc
