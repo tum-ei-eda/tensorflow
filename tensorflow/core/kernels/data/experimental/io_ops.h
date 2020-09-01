@@ -65,16 +65,14 @@ class SaveDatasetOp : public HybridAsyncOpKernel {
 // An operation that can load a dataset from one or more files.
 class LoadDatasetOp : public DatasetOpKernel {
  public:
-  static constexpr const char* const kCompression = "compression";
-  static constexpr const char* const kDatasetType = "Load";
-  static constexpr const char* const kOutputTypes = "output_types";
-  static constexpr const char* const kOutputShapes = "output_shapes";
-  static constexpr const char* const kPath = "path";
-  static constexpr const char* const kReaderFunc = "reader_func";
-  static constexpr const char* const kReaderFuncOtherArgs =
-      "reader_func_other_args";
-  static constexpr const char* const kReaderFuncTarguments =
-      "Treader_func_args";
+  static const char* const kCompression;
+  static const char* const kDatasetType;
+  static const char* const kOutputTypes;
+  static const char* const kOutputShapes;
+  static const char* const kPath; 
+  static const char* const kReaderFunc;
+  static const char* const kReaderFuncOtherArgs;
+  static const char* const kReaderFuncTarguments;
 
   explicit LoadDatasetOp(OpKernelConstruction* ctx);
 

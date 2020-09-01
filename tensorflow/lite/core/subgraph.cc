@@ -189,6 +189,7 @@ Subgraph::Subgraph(ErrorReporter* error_reporter,
       next_execution_plan_index_to_plan_allocation_(0),
       subgraphs_(subgraphs),
       resources_(resources) {
+  // TODO(b/161272052): Consider a better TfLiteContext initialization pattern:
   context_.impl_ = static_cast<void*>(this);
   context_.ResizeTensor = ResizeTensor;
   context_.ReportError = ReportErrorC;
@@ -200,6 +201,8 @@ Subgraph::Subgraph(ErrorReporter* error_reporter,
   context_.GetExternalContext = GetExternalContext;
   context_.SetExternalContext = SetExternalContext;
   context_.profiler = nullptr;
+  context_.GetTensor = nullptr;
+  context_.GetEvalTensor = nullptr;
 
   // Reserve some space for the tensors to avoid excessive resizing.
   tensors_.reserve(kTensorsReservedCapacity);
@@ -859,7 +862,8 @@ TfLiteStatus Subgraph::PrepareOpsAndTensors() {
   if (!memory_planner_) {
     memory_planner_.reset(new ArenaPlanner(
         &context_, std::unique_ptr<GraphInfo>(new InterpreterInfo(this)),
-        /*preserve_inputs=*/true, /*preserve_intermediates*/ false));
+        /*preserve_inputs=*/true, /*preserve_intermediates*/ false,
+        kDefaultTensorAlignment));
     memory_planner_->PlanAllocations();
   }
 
@@ -1087,20 +1091,11 @@ TfLiteStatus Subgraph::SetTensorParametersReadOnly(
   // For most tensors we know exactly how much memory is necessary so we can
   // ensure the buffer is large enough. However, we need to skip string tensors
   // and sparse tensors because their sizes change with the contents.
-  // For packed tensors 
   // TODO(b/145615516): Extend BytesRequired to check sparse tensors.
-  // @IFX_PATCH@
-  // TODO extend to invoke size checker for recognised quantization detail types.
-   
-  if (type != kTfLiteString && sparsity == nullptr && quantization.details.type != kTfLiteSub8BitPackedUniformDetail) {
+  if (type != kTfLiteString && sparsity == nullptr) {
     size_t required_bytes;
     TF_LITE_ENSURE_OK(&context_,
                       BytesRequired(type, dims, rank, &required_bytes));
-    if (required_bytes != bytes)
-    {
-      TF_LITE_KERNEL_LOG(&context_, "unexpected size quant type %d details type %d",
-                         quantization.type, quantization.details.type);
-    }
     TF_LITE_ENSURE_EQ(&context_, required_bytes, bytes);
   }
 

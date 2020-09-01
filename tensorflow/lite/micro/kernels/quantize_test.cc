@@ -50,18 +50,14 @@ void ValidateQuantizeGoldens(TfLiteTensor* tensors, int tensors_size,
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 1};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
   node.user_data = user_data;
   node.builtin_data = nullptr;
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
 
   if (registration->prepare) {
     TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, registration->prepare(&context, &node));
@@ -97,7 +93,7 @@ void TestQuantizeFloat(const int* input_dims_data, const float* input_data,
   int zero_points[] = {1, zero_point};
   quant.scale = FloatArrayFromFloats(scales);
   quant.zero_point = IntArrayFromInts(zero_points);
-  output_tensor.quantization = {kTfLiteAffineQuantization, &quant};
+  output_tensor.quantization = {kTfLiteAffineQuantization, &quant, {kTfLiteNoDetails, {}}};
 
   // 1 input, 1 output.
   constexpr int tensors_size = 2;
@@ -129,7 +125,7 @@ void TestRequantize(const int* input_dims_data, const float* input_data,
   int zero_points[] = {1, output_zero_point};
   quant.scale = FloatArrayFromFloats(scales);
   quant.zero_point = IntArrayFromInts(zero_points);
-  output_tensor.quantization = {kTfLiteAffineQuantization, &quant};
+  output_tensor.quantization = {kTfLiteAffineQuantization, &quant, {kTfLiteNoDetails, {}}};
 
   // 1 input, 1 output.
   constexpr int tensors_size = 2;

@@ -5,6 +5,8 @@ SWERV_ISS_HOME:=$(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION)
 ETISS_HOME:=$(IFX_TOOLSPREFIX)/etiss-$(IFX_ETISS_VERSION)
 PREFIX:=$(IFX_TOOLSPREFIX)/tflite_u-${IFX_TFLITE_MICRO_VERSION}
 
+LOCAL_CPPFLAGS += -DTF_LITE_PACKED_QUANTIZED_DATA
+
 #
 # Here's the real Makefile....
 include tensorflow/lite/micro/tools/make/Makefile

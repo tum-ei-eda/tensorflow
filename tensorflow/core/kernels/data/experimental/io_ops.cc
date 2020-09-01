@@ -170,6 +170,18 @@ Status SaveDatasetOp::WriteMetadataFile(Env* env, const std::string& path,
   return snapshot_util::WriteMetadataFile(env, path, &metadata);
 }
 
+
+ const char* const LoadDatasetOp::kCompression = "compression";
+ const char* const LoadDatasetOp::kDatasetType = "Load";
+ const char* const LoadDatasetOp::kOutputTypes = "output_types";
+ const char* const LoadDatasetOp::kOutputShapes = "output_shapes";
+ const char* const LoadDatasetOp::kPath = "path";
+ const char* const LoadDatasetOp::kReaderFunc = "reader_func";
+ const char* const LoadDatasetOp::kReaderFuncOtherArgs =
+      "reader_func_other_args";
+ const char* const LoadDatasetOp::kReaderFuncTarguments =
+      "Treader_func_args";
+
 class LoadDatasetOp::Dataset : public DatasetBase {
  public:
   Dataset(OpKernelContext* ctx, const tstring& path,

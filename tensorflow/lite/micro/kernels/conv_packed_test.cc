@@ -53,6 +53,7 @@ static TfLiteConvParams common_conv_params = {
     1,                    // dilation_height_factor
 };
 
+// TODO Factor into shared support library
 template <typename CONTAINER_T>
 static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
     const uint8_t* data, size_t elts, size_t minor_dim_size,
@@ -83,7 +84,7 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
       if (bits_in_container + bits_per_item > container_bits ||
           (i % minor_dim_size == (minor_dim_size - 1))) {
         // Flatbuffers are stored little-endian
-        for (size_t i = 0; i < container_bits; i += 8) {
+        for (size_t bits = 0; bits < container_bits; bits += 8) {
           uint8_t byte = (container_buf & 0xff);
           *packed_data_byte = byte;
           ++packed_data_byte;
@@ -136,18 +137,14 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
   node.user_data = user_data;
   node.builtin_data = reinterpret_cast<void*>(conv_params);
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
 
   if (registration->prepare) {
     TfLiteStatus return_val = registration->prepare(&context, &node);
@@ -206,9 +203,10 @@ void TestConvQuantizedPerLayer(
   int filter_zero_points[] = {1, filter_zero_point};
   TfLiteAffineQuantization filter_quant = {
       FloatArrayFromFloats(filter_scales),
-      IntArrayFromInts(filter_zero_points)};
-  // @IFX_PATCH@
-  tensors[1].quantization = {kTfLiteAffineQuantization, &filter_quant}, nullptr;
+      IntArrayFromInts(filter_zero_points), 
+      0};
+  // TF_LITE_PACKED_QUANTIZED_DATA support
+  tensors[1].quantization = {kTfLiteAffineQuantization, &filter_quant, {}};
 
   if (packing) {
         SetPackingParams(tensors[1], weights_min, weights_max, packing);
@@ -234,19 +232,15 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPackedWeights4Bit) {
   const int output_dims_count = 12;
   uint8_t output_data[output_dims_count];
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -3.5f;
   const float weights_max = 4.0f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */, {}};
 
   const float input_scale = 0.5f;
   const float output_scale = 1.0f;
@@ -284,20 +278,16 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPackedWeights5Bit) {
 
   const int output_dims_count = 12;
   uint8_t output_data[output_dims_count];
-
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
+  
   const float weights_min = -8.f;
   const float weights_max = 7.5f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
 
-  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 3 /* Packed dimension needs to be 3 */, {}};
 
   const float input_scale = 0.5f;
   const float output_scale = 1.0f;
@@ -336,19 +326,15 @@ TF_LITE_MICRO_TEST(SimpleTestQuantizedPackedWeights6Bit) {
   const int output_dims_count = 12;
   uint8_t output_data[output_dims_count];
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -16.f;
   const float weights_max = 15.5f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
 
-  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 3 /* Packed dimension needs to be 3 */, {}};
 
   const float input_scale = 0.5f;
   const float output_scale = 1.0f;
@@ -384,19 +370,15 @@ TF_LITE_MICRO_TEST(TestConv4BitWithPadding) {
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -3.5f;
   const float weights_max = 4.0f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */, {}};
 
   TfLiteConvParams padding_conv_params = {
         kTfLitePaddingSame,   // padding
@@ -454,19 +436,15 @@ TF_LITE_MICRO_TEST(TestConv5BitWithPadding) {
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -1.5f;
   const float weights_max = 14.0f;  // Test weird values here
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
 
-  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 3 /* Packed dimension needs to be 3 */, {}};
 
   TfLiteConvParams padding_conv_params = {
         kTfLitePaddingSame,   // padding
@@ -524,19 +502,15 @@ TF_LITE_MICRO_TEST(TestConv6BitWithPadding) {
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -15.5f;
   const float weights_max = 16.0f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
 
-  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 3 /* Packed dimension needs to be 3 */, {}};
 
   TfLiteConvParams padding_conv_params = {
         kTfLitePaddingSame,   // padding
@@ -594,19 +568,15 @@ TF_LITE_MICRO_TEST(TestConv4BitWithReluActivation) {
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -4.0f;
   const float weights_max = 3.5f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */, {}};
 
   TfLiteConvParams relu_conv_params = {
         kTfLitePaddingValid,   // padding
@@ -666,19 +636,15 @@ TF_LITE_MICRO_TEST(TestConv4BitWithDilation) {
   using tflite::testing::ScaleFromMinMaxPacked;
   using tflite::testing::ZeroPointFromMinMaxPacked;
 
-  const float input_min = -128.0f;
-  const float input_max = 127.0f;
   const float weights_min = -4.0f;
   const float weights_max = 3.5f;
 
-  const int input_zero_point =
-        ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weight_zero_point =
         ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
 
   const float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3 /* Packed dimension needs to be 3 */, {}};
 
   TfLiteConvParams relu_conv_params = {
         kTfLitePaddingValid,   // padding

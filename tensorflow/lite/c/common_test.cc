@@ -14,7 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/lite/c/common.h"
-#include "flatbuffers/flatbuffers.h"
+
 #include <gtest/gtest.h>
 
 namespace tflite {
@@ -66,73 +66,6 @@ TEST(IntArray, TestIntArrayEqual) {
   TfLiteIntArrayFree(d);
 }
 
-// @IFX_PATCH@
-TEST(UInt8Array, TestUInt8ArrayCreate) {
-  TfLiteUInt8Array* a = TfLiteUInt8ArrayCreate(0);
-  TfLiteUInt8Array* b = TfLiteUInt8ArrayCreate(3);
-  TfLiteUInt8ArrayFree(a);
-  TfLiteUInt8ArrayFree(b);
-}
-
-TEST(UInt8Array, TestMatchesFlatBuffer) {
-  struct testbuf {
-    TfLiteUInt8Array tfl;
-    uint8_t _a_data[4];
-  } a;
-
-  flatbuffers::Vector<uint8_t> *fb = reinterpret_cast<tflite::flatbuffers::Vector<uint8_t> *>(&tfl);
-
-  // Check we have same-size size fields so reinterpret_cast of 
-  a.tfl.size = static_cast<unit64_t>(0xdeadbeff)<<1;
-  a.tfl.data[0] = 0xff;
-  a.tfl.data[1] = 17;
-  a.tfl.data[2] = 99;
-  a.tfl.data[3] = 11111;
-  ASSERT_EQ(tfl.a->size, fb->size());
-
-  a.tfl.size = 4;
-  ASSERT_EQ(a.tfl.data[3], (uint8_t)11111);
-  for( int i = 0; i < 4; ++i ) {
-    ASSERT_EQ(fb->Get(i), a.tfl.data[i]);
-  }
-
-}
-
-TEST(UInt8Array, TestUInt8ArrayCopy) {
-  TfLiteUInt8Array* a = TfLiteUInt8ArrayCreate(2);
-  a->data[0] = 22;
-  a->data[1] = 24;
-  TfLiteUInt8Array* b = TfLiteUInt8ArrayCopy(a);
-  ASSERT_NE(a, b);
-  ASSERT_EQ(a->size, b->size);
-  ASSERT_EQ(a->data[0], b->data[0]);
-  ASSERT_EQ(a->data[1], b->data[1]);
-  TfLiteUInt8ArrayFree(a);
-  TfLiteUInt8ArrayFree(b);
-}
-
-TEST(UInt8Array, TestUInt8ArrayEqual) {
-  TfLiteUInt8Array* a = TfLiteUInt8ArrayCreate(1);
-  a->data[0] = 1;
-  TfLiteUInt8Array* b = TfLiteUInt8ArrayCreate(2);
-  b->data[0] = 5;
-  b->data[1] = 6;
-  TfLiteUInt8Array* c = TfLiteUInt8ArrayCreate(2);
-  c->data[0] = 5;
-  c->data[1] = 6;
-  TfLiteUInt8Array* d = TfLiteUInt8ArrayCreate(2);
-  d->data[0] = 6;
-  d->data[1] = 6;
-  ASSERT_FALSE(TfLiteUInt8ArrayEqual(a, b));
-  ASSERT_TRUE(TfLiteUInt8ArrayEqual(b, c));
-  ASSERT_TRUE(TfLiteUInt8ArrayEqual(b, b));
-  ASSERT_FALSE(TfLiteUInt8ArrayEqual(c, d));
-  TfLiteUInt8ArrayFree(a);
-  TfLiteUInt8ArrayFree(b);
-  TfLiteUInt8ArrayFree(c);
-  TfLiteUInt8ArrayFree(d);
-}
-
 TEST(FloatArray, TestFloatArrayCreate) {
   TfLiteFloatArray* a = TfLiteFloatArrayCreate(0);
   TfLiteFloatArray* b = TfLiteFloatArrayCreate(3);
@@ -145,6 +78,7 @@ TEST(Types, TestTypeNames) {
     return std::string(TfLiteTypeGetName(t));
   };
   EXPECT_EQ(type_name(kTfLiteNoType), "NOTYPE");
+  EXPECT_EQ(type_name(kTfLiteFloat64), "FLOAT64");
   EXPECT_EQ(type_name(kTfLiteFloat32), "FLOAT32");
   EXPECT_EQ(type_name(kTfLiteFloat16), "FLOAT16");
   EXPECT_EQ(type_name(kTfLiteInt16), "INT16");
@@ -154,6 +88,7 @@ TEST(Types, TestTypeNames) {
   EXPECT_EQ(type_name(kTfLiteInt64), "INT64");
   EXPECT_EQ(type_name(kTfLiteBool), "BOOL");
   EXPECT_EQ(type_name(kTfLiteComplex64), "COMPLEX64");
+  EXPECT_EQ(type_name(kTfLiteComplex128), "COMPLEX128");
   EXPECT_EQ(type_name(kTfLiteString), "STRING");
 }
 

@@ -9,7 +9,11 @@ BAZEL_CXX_BUILD_SETTINGS=(
                 --config=monolithic
 )
 BAZEL_REPO_OVERRIDES=(  )
-TARGET_ARCH=native
+#
+# Defensive setting!  Some tflite tests turned out to fail when '-mnative'selected.
+# Both on a modern Ryzen2 and on R&D cluster machines.   
+#
+TARGET_ARCH=sandybridge
 LOCALJOBS=HOST_CPUS*0.7
 while [[ "$1" != "" && "$1" != "--" ]]
 do
@@ -28,6 +32,10 @@ do
         ;;
     "--no-tflite")
         NOTFLITE=1
+        ;;
+    "--no-download-update")
+        NOINSTALL=1
+        NODOWNLOAD_UPDATE=1
         ;;
     "--no-install")
         NOINSTALL=1
@@ -50,11 +58,13 @@ do
     "--debug")
 	# includes workaround for mis-documented and buggy 
 	# per_object_debug_info feature.
+	# We use O1 because gcc has some bugs relating to constexpr
+	# defintions if optimization is off completely
 	BAZEL_CXX_BUILD_SETTINGS=(
                 --config=monolithic --config=dbg
                 --features=per_object_debug_info
                 --define='per_object_debug_info_file=yes'
-                --copt=-O0 --cxxopt=-O0 
+                --copt=-O1 --cxxopt=-O1 
                 --strip=never --fission=yes 
 	)
 	;;
@@ -232,13 +242,18 @@ fi
 
 if [ -z "$NOTFLITE" ] 
 then
-	make mrproper clean_downloads
+    if [ -z "$NODOWNLOAD_UPDATE" ]
+    then
+	    make mrproper clean_downloads
+    else
+        make mrproper
+    fi
     make BUILD_TYPE=debug third_party_downloads
-    echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
-    echo make -j 4 BUILD_TYPE=debug test_executables
-    make -j 4 BUILD_TYPE=debug test_executables
+    #echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
+    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
+    #echo make -j 4 BUILD_TYPE=debug test_executables
+    #make -j 4 BUILD_TYPE=debug test_executables
 
 
     if [ -z "$NOINSTALL" ]

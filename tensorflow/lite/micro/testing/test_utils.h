@@ -33,48 +33,47 @@ namespace testing {
 class MockAllocator {
 public:
 	MockAllocator(uint8_t* tensor_arena, size_t arena_size, size_t alignment) {
-		this->alignment = alignment;
+		alignment_ = alignment;
 		std::uintptr_t data_as_uintptr_t = reinterpret_cast<std::uintptr_t>(tensor_arena);
 		uint8_t* aligned_buffer = reinterpret_cast<uint8_t*>(
 		      ((data_as_uintptr_t + (alignment - 1)) / alignment) * alignment);
-		this->tensor_arena = aligned_buffer;
-		next_buffer_index = 0;
-		this->arena_size = arena_size - (aligned_buffer - tensor_arena);
+		tensor_arena_ = aligned_buffer;
+		next_buffer_index_ = 0;
+		arena_size_ = arena_size - (aligned_buffer - tensor_arena);
 	};
 	TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes, void** ptr) {
-		(*ptr) = &tensor_arena[next_buffer_index];
-		size_t aligned_size = (((bytes + (alignment - 1)) / alignment) * alignment);
-		if (&tensor_arena[next_buffer_index] + aligned_size > tensor_arena + arena_size ) {
+		(*ptr) = &tensor_arena_[next_buffer_index_];
+		size_t aligned_size = (((bytes + (alignment_ - 1)) / alignment_) * alignment_);
+		if (&tensor_arena_[next_buffer_index_] + aligned_size > tensor_arena_ + arena_size_ ) {
 			ctx->ReportError(ctx, "Error in memory allocation. Buffer is too small.");
 			return kTfLiteError;
 		}
-		next_buffer_index += aligned_size;
+		next_buffer_index_ += aligned_size;
 		return kTfLiteOk;
 	};
 	TfLiteStatus RequestScratchBufferInArena(struct TfLiteContext* ctx, size_t bytes, int* buffer_idx)
 	{
-		*buffer_idx = next_buffer_index;
+		*buffer_idx = next_buffer_index_;
 		return kTfLiteOk;
 	};
 	void* GetScratchBuffer(struct TfLiteContext* ctx, int buffer_idx)
 	{
-		return &tensor_arena[buffer_idx];
+		return &tensor_arena_[buffer_idx];
 	};
 
 private:
-	int next_buffer_index;
-	uint8_t* tensor_arena;
-	size_t arena_size;
-	size_t alignment;
+	int next_buffer_index_;
+	uint8_t* tensor_arena_;
+	size_t arena_size_;
+	size_t alignment_;
 };
 
 // Note: These methods are deprecated, do not use.  See b/141332970.
 // USE WITH CARE!! Returns pointer to data member of argument
 // so this object's lifetime must outlive any access to its underlying
 // data via this pointer.
-// Pass-by lvalue ref of argument protects against simply programmer
+// Pass-by lvalue ref of argument protects against simple programmer
 // oops but is by no means foolproof.
-
 inline TfLiteIntArray* IntArrayFromInitializer(
     std::initializer_list<int> &int_initializer) {
   return IntArrayFromInts(int_initializer.begin());
@@ -95,7 +94,8 @@ inline float MinFromZeroPointScale(const int zero_point, const float scale) {
 // Derives the quantization scaling factor from a min and max range.
 template <typename T>
 inline float ScaleFromMinMax(const float min, const float max) {
-  return (max - min) / ((std::numeric_limits<T>::max() * 1.0) -
+  return (max - min) /
+         static_cast<float>((std::numeric_limits<T>::max() * 1.0) -
                         std::numeric_limits<T>::min());
 }
 
@@ -133,15 +133,15 @@ template<uint32_t NUM_BITS>
 inline uint8_t F2QB(const float value, const float min, const float max) {
   int32_t result = ZeroPointFromMinMaxPacked(min, max, NUM_BITS) +
                    (value / ScaleFromMinMaxPacked(min, max, NUM_BITS)) + 0.5f;
-  const uint32_t min_code = 0;
-  const uint32_t max_code = (1u<<NUM_BITS)-1u;
+  const int32_t min_code = 0;
+  const int32_t max_code = (1<<NUM_BITS)-1;
   if (result < min_code) {
     result = min_code;
   }
   if (result > max_code) {
     result = max_code;
   }
-  return result;
+  return static_cast<uint8_t>(result);
 }
 
 // Converts a quantized value to coded float

@@ -179,6 +179,10 @@ ifeq ($(TARGET), ifx_riscv32_pulpino)
     -fno-builtin \
     -ffreestanding \
     -fno-builtin-printf 
+    -fno-delete-null-pointer-checks \
+    -fno-threadsafe-statics \
+    -fomit-frame-pointer \
+    -fno-use-cxa-atexit
 
   INCLUDES += -I$(PULPINO_CRT)/pulpino/sw/libs/sys_lib/inc -I$(PULPINO_CRT)/pulpino/sw/libs/string_lib/inc
 

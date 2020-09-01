@@ -56,6 +56,10 @@ struct OpData {
   // uint8_t these would be 0 and 255.
   int32_t output_activation_min;
   int32_t output_activation_max;
+
+  // Scratch buffer for per-channel accumulators used to enable
+  // efficient "channel-minor" implementation.
+  int acc_buf_idx;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
@@ -82,7 +86,13 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
         GetOptionalInputTensor(context, node, kBiasTensor);
     TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
     int num_channels = filter->dims->data[kDepthwiseConvQuantizedDimension];
-
+    // @IFX_PATCH@
+    if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+        TF_LITE_ENSURE_STATUS(
+          context->RequestScratchBufferInArena(
+            context, num_channels*sizeof(int32_t), &data->acc_buf_idx)
+        );
+    }
     return tflite::PopulateConvolutionQuantizationParams(
         context, input, filter, bias, output, params->activation,
         &data->output_multiplier, &data->output_shift,
@@ -243,12 +253,17 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
 
   // @IFX_PATCH@
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+      int32_t *acc_buf = 
+        static_cast<int32_t *>(context->GetScratchBuffer(context, data->acc_buf_idx));
       ::tflite::ops::micro::DepthwiseConvPackedFilter( 
-          op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
+          op_params, 
+          GetTensorShape(input), GetTensorData<uint8_t>(input),
           GetTensorShape(filter), GetTensorData<void>(filter),
           GetTensorShape(bias), GetTensorData<int32_t>(bias),
           GetTensorShape(output), GetTensorData<uint8_t>(output),
-          *filter->quantization.details.data.custom_sub8bit_packing);
+          *filter->quantization.details.data.custom_sub8bit_packing,
+          acc_buf
+          );
   } else {
     tflite::reference_ops::DepthwiseConv(
         op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
@@ -296,16 +311,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace depthwise_conv
 
-TfLiteRegistration* Register_DEPTHWISE_CONV_2D() {
-  static TfLiteRegistration r = {/*init=*/depthwise_conv::Init,
-                                 /*free=*/nullptr,
-                                 /*prepare=*/depthwise_conv::Prepare,
-                                 /*invoke=*/depthwise_conv::Eval,
-                                 /*profiling_string=*/nullptr,
-                                 /*builtin_code=*/0,
-                                 /*custom_name=*/nullptr,
-                                 /*version=*/0};
-  return &r;
+TfLiteRegistration Register_DEPTHWISE_CONV_2D() {
+  return {/*init=*/depthwise_conv::Init,
+          /*free=*/nullptr,
+          /*prepare=*/depthwise_conv::Prepare,
+          /*invoke=*/depthwise_conv::Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace micro

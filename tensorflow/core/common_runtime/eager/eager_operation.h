@@ -20,6 +20,7 @@ limitations under the License.
 #include "absl/types/span.h"
 #include "absl/types/variant.h"
 #include "tensorflow/c/eager/abstract_tensor_handle.h"
+#include "tensorflow/c/eager/immediate_execution_operation.h"
 #include "tensorflow/core/common_runtime/eager/attr_builder.h"
 #include "tensorflow/core/common_runtime/eager/context.h"
 #include "tensorflow/core/common_runtime/eager/eager_executor.h"
@@ -28,13 +29,15 @@ limitations under the License.
 #include "tensorflow/core/framework/cancellation.h"
 #include "tensorflow/core/framework/device_attributes.pb.h"
 #include "tensorflow/core/framework/op_def.pb.h"
+#include "tensorflow/core/util/abstract_stack_trace.h"
 #include "tensorflow/core/util/device_name_utils.h"
 
 namespace tensorflow {
 
 class EagerOperation : public ImmediateExecutionOperation {
  public:
-  explicit EagerOperation(tensorflow::EagerContext* ctx) : ctx_(*ctx) {}
+  explicit EagerOperation(tensorflow::EagerContext* ctx)
+      : ImmediateExecutionOperation(kEager), ctx_(*ctx) {}
   ~EagerOperation() override {
     for (TensorHandle* h : inputs_) {
       h->Unref();
@@ -78,7 +81,7 @@ class EagerOperation : public ImmediateExecutionOperation {
   Status SetAttrValue(const char* attr_name, const AttrValue& value);
 
   Status AddInput(AbstractTensorHandle* input) override;
-  Status AddInputList(absl::Span<AbstractTensorHandle*> inputs) override;
+  Status AddInputList(absl::Span<AbstractTensorHandle* const> inputs) override;
   Status Execute(absl::Span<AbstractTensorHandle*> retvals,
                  int* num_retvals) override;
   const tensorflow::OpDef* OpDef() const override { return op_def_; };
@@ -118,6 +121,14 @@ class EagerOperation : public ImmediateExecutionOperation {
 
   Status SetUseXla(bool enable) override;
 
+  void SetStackTrace(AbstractStackTrace stack_trace) override {
+    stack_trace_ = stack_trace;
+  }
+
+  absl::optional<AbstractStackTrace> GetStackTrace() override {
+    return stack_trace_;
+  }
+
   Status Reset(const char* op, const char* device_name, bool remote,
                EagerExecutor* executor,
                const absl::optional<EagerRemoteFunctionParams>
@@ -126,7 +137,7 @@ class EagerOperation : public ImmediateExecutionOperation {
   bool is_function() const { return is_function_; }
   bool colocation_exempt() const { return colocation_exempt_; }
 
-  tensorflow::EagerContext& EagerContext() { return ctx_; }
+  tensorflow::EagerContext& EagerContext() const { return ctx_; }
 
   AttrBuilder* MutableAttrs() { return &attrs_; }
   const AttrBuilder& Attrs() const { return attrs_; }
@@ -163,6 +174,11 @@ class EagerOperation : public ImmediateExecutionOperation {
 
   // Op name recorded for memory debugging purpose.
   const char* op_name() const { return op_name_; }
+
+  // For LLVM style RTTI.
+  static bool classof(const AbstractOperation* ptr) {
+    return ptr->getKind() == kEager;
+  }
 
  private:
   void AddTensorHandle(TensorHandle* h);
@@ -211,6 +227,7 @@ class EagerOperation : public ImmediateExecutionOperation {
   VariantDevice device_;
 
   bool use_xla_ = false;
+  absl::optional<AbstractStackTrace> stack_trace_;
   bool is_function_;  // Conceptually const, but can't be because of Reset
   bool colocation_exempt_;
   CancellationManager* cancellation_manager_ = nullptr;  // Not owned.

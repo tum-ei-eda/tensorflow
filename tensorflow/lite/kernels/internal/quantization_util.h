@@ -287,10 +287,6 @@ void QuantizeMultiplierArray(const double* effective_scales, size_t size,
                              int32_t* effective_scale_significand,
                              int* effective_shift);
 
-// Predicate to check packed quantized filter format is supported.
-//
-bool SupportedPackedQuantizationFormat(uint8_t );
-
 }  // namespace tflite
 
 #endif  // TENSORFLOW_LITE_KERNELS_INTERNAL_QUANTIZATION_UTIL_H_

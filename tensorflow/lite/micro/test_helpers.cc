@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/all_ops_resolver.h"
 #include "tensorflow/lite/micro/micro_utils.h"
 #include "tensorflow/lite/schema/schema_generated.h"
 
@@ -556,6 +557,10 @@ const Model* BuildComplexMockModel() {
 }  // namespace
 
 const TfLiteRegistration* SimpleStatefulOp::getRegistration() {
+  return GetMutableRegistration();
+}
+
+TfLiteRegistration* SimpleStatefulOp::GetMutableRegistration() {
   static TfLiteRegistration r;
   r.init = Init;
   r.prepare = Prepare;
@@ -628,6 +633,10 @@ TfLiteStatus SimpleStatefulOp::Invoke(TfLiteContext* context,
 }
 
 const TfLiteRegistration* MockCustom::getRegistration() {
+  return GetMutableRegistration();
+}
+
+TfLiteRegistration* MockCustom::GetMutableRegistration() {
   static TfLiteRegistration r;
   r.init = Init;
   r.prepare = Prepare;
@@ -667,27 +676,13 @@ TfLiteStatus MockCustom::Invoke(TfLiteContext* context, TfLiteNode* node) {
 
 bool MockCustom::freed_ = false;
 
-const TfLiteRegistration* MockOpResolver::FindOp(BuiltinOperator op) const {
-  return nullptr;
-}
+AllOpsResolver GetOpResolver() {
+  AllOpsResolver op_resolver;
+  op_resolver.AddCustom("mock_custom", MockCustom::GetMutableRegistration());
+  op_resolver.AddCustom("simple_stateful_op",
+                        SimpleStatefulOp::GetMutableRegistration());
 
-const TfLiteRegistration* MockOpResolver::FindOp(const char* op) const {
-  if (strcmp(op, "mock_custom") == 0) {
-    return MockCustom::getRegistration();
-  } else if (strcmp(op, "simple_stateful_op") == 0) {
-    return SimpleStatefulOp::getRegistration();
-  } else {
-    return nullptr;
-  }
-}
-
-MicroOpResolver::BuiltinParseFunction MockOpResolver::GetOpDataParser(
-    tflite::BuiltinOperator) const {
-  // TODO(b/149408647): Figure out an alternative so that we do not have any
-  // references to ParseOpData in the micro code and the signature for
-  // MicroOpResolver::BuiltinParseFunction can be changed to be different from
-  // ParseOpData.
-  return ParseOpData;
+  return op_resolver;
 }
 
 const Model* GetSimpleMockModel() {
@@ -819,11 +814,13 @@ int TestStrcmp(const char* a, const char* b) {
 
 // Wrapper to forward kernel errors to the interpreter's error reporter.
 void ReportOpError(struct TfLiteContext* context, const char* format, ...) {
+#ifndef TF_LITE_STRIP_ERROR_STRINGS
   ErrorReporter* error_reporter = static_cast<ErrorReporter*>(context->impl_);
   va_list args;
   va_start(args, format);
   TF_LITE_REPORT_ERROR(error_reporter, format, args);
   va_end(args);
+#endif
 }
 
 // Create a TfLiteIntArray from an array of ints.  The first element in the
@@ -847,7 +844,7 @@ TfLiteTensor CreateTensor(TfLiteIntArray* dims, bool is_variable) {
   TfLiteTensor result;
   result.dims = dims;
   result.params = {};
-  result.quantization = {kTfLiteNoQuantization, nullptr};
+  result.quantization = {kTfLiteNoQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.is_variable = is_variable;
   result.allocation_type = kTfLiteMemNone;
   return result;
@@ -895,7 +892,7 @@ TfLiteTensor CreateQuantizedTensor(const uint8_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteUInt8;
   result.data.uint8 = const_cast<uint8_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(uint8_t);
   return result;
 }
@@ -907,7 +904,7 @@ TfLiteTensor CreateQuantizedTensor(const int8_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteInt8;
   result.data.int8 = const_cast<int8_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   return result;
 }
@@ -919,7 +916,7 @@ TfLiteTensor CreateQuantizedTensor(const int16_t* data, TfLiteIntArray* dims,
   result.type = kTfLiteInt16;
   result.data.i16 = const_cast<int16_t*>(data);
   result.params = {scale, zero_point};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int16_t);
   return result;
 }
@@ -947,12 +944,13 @@ static void AsymmetricQuantizePacked(const float* input, uint8_t* output,
     bits_in_container += bits_per_item;
     // Flush container when insufficient space for another item
     // Start of each minor dimension to ensure CONTAINER_T aligned...
-    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+    // TF_LITE_PACKED_QUANTIZED_DATA support
+    // TODO probably more efficient to align on selected dimension
     // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
     if (bits_in_container + bits_per_item > container_bits ||
         (i % packed_dims_elts == (packed_dims_elts - 1))) {
       // Flatbuffers are stored little-endian
-      for (size_t i = 0; i < container_bits; i += 8) {
+      for (size_t bits = 0; bits < container_bits; bits += 8) {
         uint8_t byte = (container_buf & 0xff);
         *packed_data_byte = byte;
         ++packed_data_byte;
@@ -1002,7 +1000,7 @@ TfLiteTensor CreateQuantizedBiasTensor(const float* data, int32_t* quantized,
   // int32 values is large, and because zero point costs extra cycles during
   // processing.
   result.params = {bias_scale, 0};
-  result.quantization = {kTfLiteAffineQuantization, nullptr};
+  result.quantization = {kTfLiteAffineQuantization, nullptr, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   return result;
 }
@@ -1035,7 +1033,7 @@ TfLiteTensor CreatePerChannelQuantizedBiasTensor(
   TfLiteTensor result = CreateTensor(dims, is_variable);
   result.type = kTfLiteInt32;
   result.data.i32 = const_cast<int32_t*>(quantized);
-  result.quantization = {kTfLiteAffineQuantization, affine_quant};
+  result.quantization = {kTfLiteAffineQuantization, affine_quant, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int32_t);
   return result;
 }
@@ -1062,13 +1060,18 @@ TfLiteTensor CreateSymmetricPerChannelQuantizedTensor(
   TfLiteTensor result = CreateTensor(dims, is_variable);
   result.type = kTfLiteInt8;
   result.data.int8 = const_cast<int8_t*>(quantized);
-  result.quantization = {kTfLiteAffineQuantization, affine_quant};
+  result.quantization = {kTfLiteAffineQuantization, affine_quant, {kTfLiteNoDetails, nullptr}};
   result.bytes = ElementCount(*dims) * sizeof(int8_t);
   return result;
 }
 
-
-
+size_t GetModelTensorCount(const Model* model) {
+  auto* subgraphs = model->subgraphs();
+  if (subgraphs) {
+    return (*subgraphs)[0]->tensors()->size();
+  }
+  return 0;
+}
 
 }  // namespace testing
 }  // namespace tflite
