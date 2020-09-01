@@ -68,6 +68,10 @@ class SubBytePacking {
     value_buffer_packing_s = value_buffer_packing;
   }
 
+  static void SetLogging( bool logging ) {
+    value_buffer_packing_log_s = logging;
+  }
+
  protected:
   // Create buffer holding  data coding sub-8-bit uniform quantized
   // tensor values packed into `container_bits` container values.
@@ -101,6 +105,8 @@ class SubBytePacking {
   // TODO Temporary scaffolding pending post-processing based
   // packing
   static bool value_buffer_packing_s;
+
+  static bool value_buffer_packing_log_s;
 };
 
 #endif  // TENSORFLOW_COMPILER_MLIR_LITE_EXPERIMENTAL_SUB_BYTE_PACKING_H_

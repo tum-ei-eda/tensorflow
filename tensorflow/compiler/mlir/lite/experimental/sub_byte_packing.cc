@@ -112,7 +112,9 @@ using xla::StatusOr;
 namespace tfl = mlir::TFL;
 
 bool SubBytePacking::value_buffer_packing_s = false;
-  
+
+bool SubBytePacking::value_buffer_packing_log_s = false;
+
 SubBytePacking::SubBytePacking(Value value)
     : container_bits_(0u),
       bits_per_item_(0u),
@@ -147,7 +149,9 @@ SubBytePacking::SubBytePacking(Value value)
   //
 
 #if IFX_PATCH_LOGGING
-  qcst_op.emitRemark("CANDIDATE FOR PACKING!");
+  if(value_buffer_packing_log_s) {
+    qcst_op.emitRemark("CANDIDATE FOR PACKING!");
+  }
 #endif
 
   bool consistent_usage = true;
@@ -237,7 +241,9 @@ SubBytePacking::SubBytePacking(Value value)
       return;
   }
 #if IFX_PATCH_LOGGING
-  qcst_op.emitRemark("Weights need to be packed!");
+  if(value_buffer_packing_log_s) {
+    qcst_op.emitRemark("Weights need to be packed!");
+  }
 #endif
 }
 
@@ -348,27 +354,29 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreatePackedValueBuffer(
   auto buffer_data = builder.CreateVector(packed_data);
 
 #if IFX_PATCH_LOGGING
-  std::ostringstream msg;
-  msg << "Packing ";
-  for (size_t i = 0; i < tensor_data_size; ++i) {
-    msg << " " << std::hex << (uint32_t)(tensor_data[i] & mask);
-  }
-  msg << " into";
-  unsigned int i = 0;
-  const size_t container_bytes = (container_bits / 8);
-  for (size_t i = 0; i < packed_data.size(); ++i) {
-    // TFlite flatbuffers are little-endian
-    if (i % container_bytes == 0) {
-      msg << "|";
+
+  if(value_buffer_packing_log_s) {
+    std::ostringstream msg;
+    msg << "Packing ";
+    for (size_t i = 0; i < tensor_data_size; ++i) {
+      msg << " " << std::hex << (uint32_t)(tensor_data[i] & mask);
     }
-    size_t j = (i / container_bytes) * container_bytes + container_bytes - 1u -
-               (i % container_bytes);
-    uint32_t v = packed_data[j];
-    msg << " " << std::hex << v;
+    msg << " into";
+    unsigned int i = 0;
+    const size_t container_bytes = (container_bits / 8);
+    for (size_t i = 0; i < packed_data.size(); ++i) {
+      // TFlite flatbuffers are little-endian
+      if (i % container_bytes == 0) {
+        msg << "|";
+      }
+      size_t j = (i / container_bytes) * container_bytes + container_bytes - 1u -
+                (i % container_bytes);
+      uint32_t v = packed_data[j];
+      msg << " " << std::hex << v;
+    }
+
+    inst->emitRemark(msg.str());
   }
-
-  inst->emitRemark(msg.str());
-
 #endif
 
   return tflite::CreateBuffer(builder, buffer_data);
@@ -392,8 +400,10 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
       switch (container_bits_) {
         case 8: {
 #ifdef IFX_PATCH_LOGGING
-          inst->emitRemark("Actually Packing 8-bit container with " +
-                           Twine(bits_per_item_) + " bit weights!!");
+          if(value_buffer_packing_log_s) {
+            inst->emitRemark("Actually Packing 8-bit container with " +
+                            Twine(bits_per_item_) + " bit weights!!");
+          }
 #endif
           return CreatePackedValueBuffer<uint8_t, 8>(
               builder, inst, raw_tensor_data, tensor_data.size());
@@ -401,8 +411,10 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
 
         case 16: {
 #ifdef IFX_PATCH_LOGGING
-          inst->emitRemark("Actually Packing 16-bit container with " +
-                           Twine(bits_per_item_) + " bit weights!!");
+          if(value_buffer_packing_log_s) {
+            inst->emitRemark("Actually Packing 16-bit container with " +
+                            Twine(bits_per_item_) + " bit weights!!");
+          }
 #endif
           return CreatePackedValueBuffer<int16_t, 16>(
               builder, inst, raw_tensor_data, tensor_data.size());
@@ -410,8 +422,10 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
 
         case 32: {
 #ifdef IFX_PATCH_LOGGING
-          inst->emitRemark("Actually Packing 32-bit container with " +
-                           Twine(bits_per_item_) + " bit weights!!");
+          if(value_buffer_packing_log_s) {
+            inst->emitRemark("Actually Packing 32-bit container with " +
+                            Twine(bits_per_item_) + " bit weights!!");
+          }
 #endif
           return CreatePackedValueBuffer<uint32_t, 32>(
               builder, inst, raw_tensor_data, tensor_data.size());
@@ -427,10 +441,12 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
     }
 
 #ifdef IFX_PATCH_LOGGING
-          inst->emitRemark("Leaving " + Twine(bits_per_item_) +
-                           " unpacked but enforcing " +
-                           Twine(bits_per_item_) +
-                           " bit width");
+    if(value_buffer_packing_log_s) {
+      inst->emitRemark("Leaving " + Twine(bits_per_item_) +
+                        " unpacked but enforcing " +
+                        Twine(bits_per_item_) +
+                        " bit width");
+    }
 #endif
     // Fall-through to here if format not supported or packing disabled.
     // Enforce specified item bit-width so  bugs in bitwidth inference
@@ -442,19 +458,24 @@ flatbuffers::Offset<tflite::Buffer> SubBytePacking::CreateQuantizedValuesBuffer(
         narrowed_data.push_back(raw_tensor_data[i] & mask);
       }
 #ifdef IFX_PATCH_LOGGING
-      std::ostringstream msg;
-      msg << "Enforced values ";
-      for (size_t i = 0; i < tensor_data.size(); ++i) {
-        msg << " " << (uint32_t)(narrowed_data[i]);
+
+      if(value_buffer_packing_log_s) {
+        std::ostringstream msg;
+        msg << "Enforced values ";
+        for (size_t i = 0; i < tensor_data.size(); ++i) {
+          msg << " " << (uint32_t)(narrowed_data[i]);
+        }
+        inst->emitRemark(msg.str());
       }
 
-      inst->emitRemark(msg.str());
 #endif
       auto buffer_data = builder.CreateVector(narrowed_data);
       return tflite::CreateBuffer(builder, buffer_data);
   } else {
 #ifdef IFX_PATCH_LOGGING
-          inst->emitRemark("Not packable!");
+      if(value_buffer_packing_log_s) {
+        inst->emitRemark("Not packable!");
+      }
 #endif
     // Not Packable - leave as-is
     auto buffer_data = builder.CreateVector(raw_tensor_data, tensor_data.size());

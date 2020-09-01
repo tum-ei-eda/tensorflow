@@ -190,7 +190,7 @@ int main(int argc, char **argv) {
   mlir::PassManager pm(&context);
   mlir::applyPassManagerCLOptions(pm);
   SubBytePacking::SetValueBufferPacking(experimental_pack_packable_quantized_constants);
-
+  SubBytePacking::SetLogging(experimental_log_packing);
   // Set the quantization specifications from the command line flags.
   mlir::TFL::QuantizationSpecs quant_specs;
   if (mlir::TFL::ParseInputNodeQuantSpecs(input_arrays, min_values, max_values,
