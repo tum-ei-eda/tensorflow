@@ -429,19 +429,11 @@ $(1)_LOCAL_HDRS := $(3)
 $(1)_LOCAL_OBJS := $$(addprefix $$(OBJDIR), \
 $$(patsubst %.S,%.o,$$(patsubst %.cc,%.o,$$(patsubst %.c,%.o,$$($(1)_LOCAL_SRCS)))))
 $(1)_BINARY := $$(BINDIR)$(1)
-
 $$($(1)_BINARY): $$($(1)_LOCAL_OBJS) $$(MICROLITE_LIB_PATH)
 	@mkdir -p $$(dir $$@)
 	$$(CXX) $$(CXXFLAGS) $$(INCLUDES) \
-	-T $(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_rv32_link.ld \
-	$(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_rv32_startup.c \
-	-o $$($(1)_BINARY).elf $$($(1)_LOCAL_OBJS) \
-	$$(LIBFLAGS) $$(MICROLITE_LIB_PATH) $$(LDFLAGS)  
-	$$(OBJDUMP)  -S --line-numbers --full-contents -D -EL   $$($(1)_BINARY).elf > $$($(1)_BINARY).disasm
-	$$(OBJCOPY)  -O binary $$($(1)_BINARY).elf  $$($(1)_BINARY).bin
-	$$(READELF)  -a -I $$($(1)_BINARY).elf > $$($(1)_BINARY).txt
-
-	
+	-o $$($(1)_BINARY) $$($(1)_LOCAL_OBJS) \
+	$$(LIBFLAGS) $$(MICROLITE_LIB_PATH) $$(LDFLAGS) $$(MICROLITE_LIBS)
 $(1): $$($(1)_BINARY)
 $(1)_bin: $$($(1)_BINARY).bin
 test_$(1): $$($(1)_BINARY) generated_test_scripts

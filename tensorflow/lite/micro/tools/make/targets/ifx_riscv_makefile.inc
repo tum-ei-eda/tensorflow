@@ -1,12 +1,18 @@
 # Settings for RISCV 32-bit MCU toolchain target Variants
 
+
+
 #
 # Common settings (derived from pulpine via TUM / ETISSS examples
 #
 
 ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
 
-  IFX_RV_TARGET_ARCH ?= rv32imac
+  ifeq ($(TARGET), ifx_riscv32_fpga)
+    IFX_RV_TARGET_ARCH ?= rv32im
+  else
+    IFX_RV_TARGET_ARCH ?= rv32imac
+  endif
   IFX_RV_TARGET_ABI ?= ilp32
   TARGET_ARCH := $(IFX_RV_TARGET_ARCH)
   TARGET_ABI := $(IFX_RV_TARGET_ABI)
@@ -81,52 +87,38 @@ endif
 
 
 ifeq ($(TARGET), ifx_riscv32_fpga)
-   PLATFORM_FLAGS = \
-    -march=rv32im \
-    -mabi=ilp32 \
+
+  IFX_RISCV32_RECOGNIZED=1
+
+
+  ADDITIONAL_PLATFORM_FLAGS = \
     -mcmodel=medany \
     -mexplicit-relocs \
     -fno-builtin-printf \
-    -fno-exceptions \
-    -DTF_LITE_MCU_DEBUG_LOG \
-    -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
-    -DTF_LITE_USE_GLOBAL_MAX \
-    -DTF_LITE_USE_GLOBAL_MIN \
-    -fno-unwind-tables \
-    -ffunction-sections \
-    -fdata-sections \
-    -funsigned-char \
-    -Wvla \
-    -Wall \
-    -Wextra \
     -Wsign-compare \
     -Wdouble-promotion \
     -Wshadow \
     -Wno-unused-variable \
-    -Wno-missing-field-initializers \
-    -Wno-unused-parameter \
-    -Wno-write-strings \
     -Wunused-function \
-    -fno-delete-null-pointer-checks \
     -fno-threadsafe-statics \
-    -fomit-frame-pointer \
-    -fno-use-cxa-atexit \
-    -O3
+    -fno-use-cxa-atexit
 
   LDFLAGS +=  -nostartfiles 
-  LDFLAGS +=  -lm 
-   
+  LDFLAGS +=	-T $(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_riscv/ifx_rv32_link.ld \
+	   $(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_riscv/ifx_rv32_startup.c 
 
-  IFX_RISCV32_RECOGNIZED=1
 
   THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
   
-  CXXFLAGS += $(PLATFORM_FLAGS) 
+  CXXFLAGS += $(PLATFORM_FLAGS) $(ADDITIONAL_PLATFORM_FLAGS)
 
-  CCFLAGS += $(PLATFORM_FLAGS)
-
-  BUILD_TYPE := micro
+  CCFLAGS += $(PLATFORM_FLAGS)  $(ADDITIONAL_PLATFORM_FLAGS)
   
+$(BINDIR)%.bin: $(BINDIR)%.elf
+	@mkdir -p $(dir $@)
+	$(OBJDUMP)  -S --line-numbers --full-contents -D -EL  "$<" > "$(BINDIR)$*.disasm"
+	$(OBJCOPY) "$<" "$@" -O binary
+	$(READELF) -a -I "$<" > "$(BINDIR)$*.txt"
   
 endif
 
