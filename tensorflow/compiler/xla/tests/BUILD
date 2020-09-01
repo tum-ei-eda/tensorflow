@@ -339,6 +339,7 @@ xla_test(
     deps = [
         ":hlo_test_base",
         ":literal_test_util",
+        ":verified_hlo_module",
         ":xla_internal_test_main",
         "//tensorflow/compiler/xla:literal",
         "//tensorflow/compiler/xla:status_macros",
@@ -380,7 +381,7 @@ xla_test(
     timeout = "long",
     srcs = ["conv_depthwise_backprop_filter_test.cc"],
     # these backends do not natively handle batch group counts.
-    blacklisted_backends = [
+    disabled_backends = [
         "gpu",
         "cpu",
     ],
@@ -404,7 +405,7 @@ xla_test(
     name = "grouped_convolution_test",
     timeout = "long",
     srcs = ["grouped_convolution_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # disabled because it times out.
         "cpu",
     ],
@@ -489,7 +490,7 @@ xla_test(
 xla_test(
     name = "xla_hlo_profile_test",
     srcs = ["xla_hlo_profile_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # Hlo profiles are not supported on the interpreter backend.
         "interpreter",
     ],
@@ -1114,10 +1115,53 @@ xla_test(
     name = "convolution_test",
     timeout = "long",
     srcs = ["convolution_test.cc"],
-    shard_count = 40,
+    shard_count = 50,
     tags = [
         "no_rocm",
+        "optonly",
+        # Timed out on 2020-07-18
         "nozapfhahn",
+    ],
+    deps = CONVOLUTION_TEST_DEPS + [
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "convolution_test_1d",
+    timeout = "long",
+    srcs = ["convolution_test_1d.cc"],
+    # Turn on logging so that VLOG statements don't appear uncovered to zapfhahn.
+    args = ["--vmodule=convolution_emitter=7"],
+    # In the open source build, convolution_test_1d_gpu fails because it doesn't
+    # recognize --vmodule.
+    disabled_backends = [
+        "cpu",
+        "gpu",
+    ],
+    shard_count = 50,
+    tags = [
+        "no_rocm",
+        "optonly",
+    ],
+    deps = CONVOLUTION_TEST_DEPS + [
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "convolution_test_1d_no_vmodule",
+    timeout = "long",
+    srcs = ["convolution_test_1d.cc"],
+    backends = [
+        "cpu",
+        "gpu",
+    ],
+    shard_count = 50,
+    tags = [
+        "no_rocm",
         "optonly",
     ],
     deps = CONVOLUTION_TEST_DEPS + [
@@ -1147,9 +1191,42 @@ xla_test(
 )
 
 xla_test(
+    name = "convolution_test_1d_autotune_disabled",
+    timeout = "long",
+    srcs = ["convolution_test_1d.cc"],
+    args = ["--xla_gpu_autotune_level=0"],
+    backends = ["gpu"],
+    shard_count = 40,
+    tags = [
+        "no_rocm",
+        "optonly",
+    ],
+    deps = CONVOLUTION_TEST_DEPS + [
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
     name = "convolution_test_gpu_alternative_layout",
     timeout = "long",
     srcs = ["convolution_test.cc"],
+    backend_args = {"gpu": ["--xla_backend_extra_options=xla_gpu_experimental_conv_disable_layout_heuristic"]},
+    backends = ["gpu"],
+    shard_count = 25,
+    tags = [
+        "no_rocm",
+    ],
+    deps = CONVOLUTION_TEST_DEPS + [
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+xla_test(
+    name = "convolution_test_1d_gpu_alternative_layout",
+    timeout = "long",
+    srcs = ["convolution_test_1d.cc"],
     backend_args = {"gpu": ["--xla_backend_extra_options=xla_gpu_experimental_conv_disable_layout_heuristic"]},
     backends = ["gpu"],
     shard_count = 25,
@@ -1219,7 +1296,7 @@ xla_test(
 xla_test(
     name = "batch_normalization_test",
     srcs = ["batch_normalization_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # BatchNorm HLOs are not handled by the interpreter backend, and the
         # BatchNorm expander is not run on the interpreter.
         "interpreter",
@@ -1885,7 +1962,7 @@ xla_test(
 xla_test(
     name = "all_reduce_test",
     srcs = ["all_reduce_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # All reduce is not supported on the interpreter backend.
         "interpreter",
     ],
@@ -2061,7 +2138,7 @@ xla_test(
 xla_test(
     name = "execution_profile_test",
     srcs = ["execution_profile_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # Execution profiles are not supported on the interpreter backend.
         "interpreter",
     ],
@@ -2080,7 +2157,7 @@ xla_test(
     name = "execution_profile_test_with_xla_hlo_profile",
     srcs = ["execution_profile_test.cc"],
     args = ["--xla_hlo_profile"],
-    blacklisted_backends = [
+    disabled_backends = [
         # Hlo profiles are not supported on the interpreter backend.
         "interpreter",
     ],
@@ -2305,7 +2382,7 @@ xla_test(
 xla_test(
     name = "outfeed_in_nested_computation_test",
     srcs = ["outfeed_in_nested_computation_test.cc"],
-    blacklisted_backends = [
+    disabled_backends = [
         # Outfeed ops are not supported on the interpreter backend.
         "interpreter",
     ],

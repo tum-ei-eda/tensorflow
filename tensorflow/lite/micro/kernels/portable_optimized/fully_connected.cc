@@ -291,7 +291,6 @@ TfLiteStatus EvalQuantizedPacked(
 
   unsigned int bits_per_item = custom.bits_per_item;
   unsigned int container_bits = custom.container_bits;
-  unsigned int packed_minor_dims = custom.packed_minor_dims;
   switch (bits_per_item) {
     case 4: {
       if (container_bits != 8) break;
@@ -323,51 +322,6 @@ TfLiteStatus EvalQuantizedPacked(
   return kTfLiteError;
 }
 
-TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
-                           OpData* data, const TfLiteTensor* input,
-                           const TfLiteTensor* filter, const TfLiteTensor* bias,
-                           TfLiteTensor* output) {
-  const int32_t input_offset = -input->params.zero_point;
-  const int32_t filter_offset = -filter->params.zero_point;
-  const int32_t output_offset = output->params.zero_point;
-
-  tflite::FullyConnectedParams op_params;
-  op_params.input_offset = input_offset;
-  op_params.weights_offset = filter_offset;
-  op_params.output_offset = output_offset;
-  op_params.output_multiplier = data->output_multiplier;
-  // Legacy ops used mixed left and right shifts. Now all are +ve-means-left.
-  op_params.output_shift = -data->output_shift;
-  op_params.quantized_activation_min = data->output_activation_min;
-  op_params.quantized_activation_max = data->output_activation_max;
-
-#define TF_LITE_FULLY_CONNECTED(func, output_data_type)                 \
-  func(op_params, GetTensorShape(input), GetTensorData<uint8_t>(input), \
-       GetTensorShape(filter), GetTensorData<uint8_t>(filter),          \
-       GetTensorShape(bias), GetTensorData<int32_t>(bias),              \
-       GetTensorShape(output), GetTensorData<output_data_type>(output))
-  switch (output->type) {
-    case kTfLiteUInt8:
-      if (filter->quantization.details.type ==
-          kTfLiteSub8BitPackedUniformDetail) {
-        return EvalQuantizedPacked(
-            data, input, filter, bias, output, context,
-            *filter->quantization.details.data.custom_sub8bit_packing);
-      } else {
-        EvalQuantized<uint8_t>(data, input, filter, bias, output);
-      }
-      break;
-    case kTfLiteInt16:
-      TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, int16_t);
-      break;
-    default:
-      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
-                         TfLiteTypeGetName(output->type), output->type);
-      return kTfLiteError;
-  }
-
-  return kTfLiteOk;
-}
 
 void EvalFloat(TfLiteFullyConnectedParams* params, const TfLiteTensor* input,
                const TfLiteTensor* weights, const TfLiteTensor* bias,
@@ -442,13 +396,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace fully_connected
 
-TfLiteRegistration* Register_FULLY_CONNECTED() {
-  static TfLiteRegistration r = {};
-  r.init = fully_connected::Init;
-  r.free = fully_connected::Free;
-  r.prepare = fully_connected::Prepare;
-  r.invoke = fully_connected::Eval;
-  return &r;
+TfLiteRegistration Register_FULLY_CONNECTED() {
+  return {/*init=*/fully_connected::Init,
+          /*free=*/fully_connected::Free,
+          /*prepare=*/fully_connected::Prepare,
+          /*invoke=*/fully_connected::Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace micro

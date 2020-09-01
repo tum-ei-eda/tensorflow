@@ -39,7 +39,6 @@ constexpr int kInputTensor = 0;
 constexpr int kFilterTensor = 1;
 constexpr int kBiasTensor = 2;
 constexpr int kOutputTensor = 0;
-constexpr int kMaxChannels = 256;
 
 // Conv is quantized along dimension 0:
 // https://www.tensorflow.org/lite/performance/quantization_spec
@@ -180,9 +179,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     RuntimeShape filter_shape = GetTensorShape(filters);
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
 
-    const int input_depth = filter_shape.Dims(3);
     const int output_depth = filter_shape.Dims(0);
-    TF_LITE_ENSURE(context, output_depth <= kMaxChannels);
 
     void* raw;
     context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth, &raw);
@@ -201,8 +198,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         PrecomputeSumOfFiltersFactor<uint8_t>(bias_data, filters, data->sum_of_filters_factor,
           filter_shape, input_offset, filter_offset);
       }
-    }
-    else {
+    } else {
       PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filters, data->sum_of_filters_factor,
         filter_shape, input_offset, 0);
     }
@@ -220,7 +216,6 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                    const TfLiteTensor* input, const TfLiteTensor* filter,
                    const TfLiteTensor* bias, TfLiteTensor* im2col,
                    TfLiteTensor* hwcn_weights, TfLiteTensor* output) {
-  const int32 input_offset = -input->params.zero_point;
   const int32 filter_offset = -filter->params.zero_point;
   const int32 output_offset = output->params.zero_point;
 
@@ -411,8 +406,6 @@ void EvalQuantizedPerChannel(TfLiteContext* context, TfLiteNode* node,
                              const TfLiteTensor* filter,
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              TfLiteTensor* im2col) {
-  const int32 input_offset = -input->params.zero_point;
-  const int32 filter_offset = 0;
   const int32 output_offset = output->params.zero_point;
 
   const RuntimeShape& input_shape = GetTensorShape(input);
@@ -508,7 +501,6 @@ void EvalQuantizedPerChannelWithPadding(TfLiteContext* context, TfLiteNode* node
                              const TfLiteTensor* bias, TfLiteTensor* output,
                              TfLiteTensor* im2col) {
   const int32 input_offset = -input->params.zero_point;
-  const int32 filter_offset = 0;
   const int32 output_offset = output->params.zero_point;
 
   const RuntimeShape& input_shape = GetTensorShape(input);
@@ -598,10 +590,6 @@ void EvalQuantizedPerChannelWithPadding(TfLiteContext* context, TfLiteNode* node
   }
 }
 
-
-
-
-
 void EvalFloat(TfLiteContext* context, TfLiteNode* node,
                TfLiteConvParams* params, OpData* data,
                const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -676,7 +664,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
 
-  TfLiteTensor* im2col;
+  TfLiteTensor* im2col = nullptr;
 #define TF_LITE_CONV_2D_PER_CHANNEL(func_c, data_type)                                  \
   func_c(                                                                               \
       op_params, data->per_channel_output_multiplier, data->per_channel_output_shift, \
@@ -724,7 +712,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       const int dilation_height_factor = params->dilation_height_factor;
 
       if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
-        return reference_ops::EvalConvQuantizedPacked(
+        return EvalConvQuantizedPacked(
                 op_params,
                 input, filter, bias, output, context,
                 *filter->quantization.details.data.custom_sub8bit_packing);
@@ -752,13 +740,15 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace conv
 
-TfLiteRegistration* Register_CONV_2D() {
-  static TfLiteRegistration r = {};
-  r.prepare = conv::Prepare;
-  r.init = conv::Init;
-  r.free = conv::Free;
-  r.invoke = conv::Eval;
-  return &r;
+TfLiteRegistration Register_CONV_2D() {
+  return {/*init=*/conv::Init,
+          /*free=*/conv::Free,
+          /*prepare=*/conv::Prepare,
+          /*invoke=*/conv::Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
 }  // namespace micro

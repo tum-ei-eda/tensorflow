@@ -21,12 +21,14 @@ ifneq ($(TFLITE_U_PATH),)
     PROJECT_DIR := .
     TESTING_DIR := $(TFLITE_U_PATH)tensorflow/lite/micro/testing
     EXAMPLES_DIR :=
+	GENROOT_DIR := gen
 else
     TFLITE_INCLUDE := .
     PROJECT_DIR :=  tensorflow/lite/micro
     MAKEFILE_DIR := $(PROJECT_DIR)/tools/make
     TESTING_DIR := $(PROJECT_DIR)/testing
     EXAMPLES_DIR := tensorflow/lite/micro/examples/
+	GENROOT_DIR := $(PROJECT_DIR)/tools/make/gen
 endif
 
 # Pull in some convenience functions.
@@ -99,9 +101,14 @@ TEST_SCRIPT := $(TESTING_DIR)/test_linux_binary.sh
 
 MICROLITE_LIBS := -lm
 
+CC_WARNINGS := -Werror -Wsign-compare -Wdouble-promotion \
+               -Wshadow -Wunused-variable -Wmissing-field-initializers \
+               -Wunused-function
 # TODO(b/150240249): Add in -fno-rtti once that works for the Xtensa toolchain.
-CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY  
-CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY
+# TODO(b/159155203): Consider TF_LITE_STATIC_MEMORY to align more with the fact
+# this flag is for an optimized micro runtime.
+CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
+CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
 ARFLAGS := -r
 
 # override these in the makefile.inc for specific compiler targets
@@ -197,6 +204,7 @@ tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h \
 tensorflow/lite/kernels/internal/reference/dequantize.h \
 tensorflow/lite/kernels/internal/reference/floor.h \
 tensorflow/lite/kernels/internal/reference/fully_connected.h \
+tensorflow/lite/kernels/internal/reference/hard_swish.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/add.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h \
@@ -298,6 +306,7 @@ include $(wildcard $(MAKEFILE_DIR)/ext_libs/*.inc)
 
 CXXFLAGS += $(LOCAL_CXXFLAGS) $(LOCAL_CPPFLAGS)
 CCFLAGS  += $(LOCAL_CCFLAGS)  $(LOCAL_CPPFLAGS)
+LDFLAGS  += $(LOCAL_LDFLAGS)
 
 # Call specialize here so that platform-specific tags can be taken into account.
 MICROLITE_CC_SRCS := $(call specialize,$(MICROLITE_CC_SRCS))
@@ -310,7 +319,7 @@ ALL_SRCS := \
 
 # Where compiled objects are stored.
 
-GENDIR := $(PROJECT_DIR)/gen/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+GENDIR := $(GENROOT_DIR)/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
@@ -325,6 +334,10 @@ LD := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${LD_TOOL}
 OBJDUMP := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJDUMP_TOOL}
 OBJCOPY := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJCOPY_TOOL}
 READELF := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${READELF_TOOL}
+
+# The default Makefile target(all) must appear before any target,
+# which is compiled if there's no command-line arguments.
+all: $(MICROLITE_LIB_PATH)
 
 # Load the examples.
 include $(MICRO_LITE_EXAMPLE_TESTS)
@@ -357,9 +370,6 @@ $(OBJDIR)%.o: %.c $(THIRD_PARTY_TARGETS)
 $(OBJDIR)%.o: %.S $(THIRD_PARTY_TARGETS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CCFLAGS) $(INCLUDES) -c $(abspath $<) -o $@
-
-# The target that's compiled if there's no command-line arguments.
-all: $(MICROLITE_LIB_PATH)
 
 microlite: $(MICROLITE_LIB_PATH)
 
@@ -427,7 +437,7 @@ endif
 
 # Gets rid of all generated files.
 clean:
-	rm -rf $(GENDIR)
+	rm -rf $(GENDIR) $(LOCAL_CLEANS)
 
 
 $(DEPDIR)/%.d: ;

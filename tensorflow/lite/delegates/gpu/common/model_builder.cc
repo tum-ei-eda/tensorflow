@@ -109,7 +109,7 @@ absl::Status IsActivationSupported(TfLiteFusedActivation fused_activation) {
   switch (fused_activation) {
     case kTfLiteActNone:
     case kTfLiteActRelu:
-    case kTfLiteActRelu1:
+    case kTfLiteActReluN1To1:
     case kTfLiteActRelu6:
     case kTfLiteActTanh:
       return absl::OkStatus();
@@ -140,12 +140,12 @@ absl::Status MaybeFuseActivation(TfLiteFusedActivation fused_activation,
   }
   switch (fused_activation) {
     case kTfLiteActRelu:
-    case kTfLiteActRelu1:
+    case kTfLiteActReluN1To1:
     case kTfLiteActRelu6: {
       ReLUAttributes attr;
       attr.clip = fused_activation == kTfLiteActRelu
                       ? 0.0f
-                      : (fused_activation == kTfLiteActRelu1 ? 1.0f : 6.0f);
+                      : (fused_activation == kTfLiteActReluN1To1 ? 1.0f : 6.0f);
       for (auto index : output_indices) {
         Node* activation_node;
         RETURN_IF_ERROR(
@@ -525,8 +525,7 @@ class Conv2DOperationParser : public TFLiteOperationParser {
           absl::StrCat("Expected 1 or 2 input tensor(s), but node has ",
                        runtime_inputs, " runtime inputs."));
     }
-    const int runtime_outputs =
-        GetNumberOfRuntimeOutputsForNode(context, tflite_node);
+    const int runtime_outputs = NumOutputs(tflite_node);
     if (runtime_outputs != 1) {
       return absl::InternalError(
           absl::StrCat("Expected 1 output tensor(s), but node has ",
@@ -2104,12 +2103,36 @@ class TransposeOperationParser : public TFLiteOperationParser {
     TransposeAttributes attr;
     Tensor<Linear, DataType::INT32> perm;
     RETURN_IF_ERROR(reader->ReadTensor(1, &perm));
+    std::map<Axis, int> axis_to_index = {{Axis::BATCH, 0},
+                                         {Axis::HEIGHT, 1},
+                                         {Axis::WIDTH, 2},
+                                         {Axis::CHANNELS, 3}};
     if (perm.data.size() == 4) {
       attr.perm = BHWC(perm.data[0], perm.data[1], perm.data[2], perm.data[3]);
     } else if (perm.data.size() == 3) {
-      attr.perm = BHWC(0, perm.data[0] + 1, perm.data[1] + 1, perm.data[2] + 1);
+      std::vector<Axis> index_to_axis = {Axis::CHANNELS, Axis::WIDTH,
+                                         Axis::BATCH};
+      std::map<Axis, Axis> remap = {
+          {Axis::HEIGHT, Axis::HEIGHT},
+          {index_to_axis[perm.data[2]], Axis::BATCH},
+          {index_to_axis[perm.data[1]], Axis::WIDTH},
+          {index_to_axis[perm.data[0]], Axis::CHANNELS}};
+      attr.perm.b = axis_to_index[remap[Axis::BATCH]];
+      attr.perm.h = axis_to_index[remap[Axis::HEIGHT]];
+      attr.perm.w = axis_to_index[remap[Axis::WIDTH]];
+      attr.perm.c = axis_to_index[remap[Axis::CHANNELS]];
+
     } else if (perm.data.size() == 2) {
-      attr.perm = BHWC(0, 1, perm.data[0] + 2, perm.data[1] + 2);
+      std::vector<Axis> index_to_axis = {Axis::CHANNELS, Axis::BATCH};
+      std::map<Axis, Axis> remap = {
+          {Axis::HEIGHT, Axis::HEIGHT},
+          {Axis::WIDTH, Axis::WIDTH},
+          {index_to_axis[perm.data[1]], Axis::BATCH},
+          {index_to_axis[perm.data[0]], Axis::CHANNELS}};
+      attr.perm.b = axis_to_index[remap[Axis::BATCH]];
+      attr.perm.h = axis_to_index[remap[Axis::HEIGHT]];
+      attr.perm.w = axis_to_index[remap[Axis::WIDTH]];
+      attr.perm.c = axis_to_index[remap[Axis::CHANNELS]];
     } else {
       return absl::InvalidArgumentError(
           "Permutation for transpose is invalid.");

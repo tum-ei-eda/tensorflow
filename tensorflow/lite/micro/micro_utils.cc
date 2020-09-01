@@ -137,7 +137,8 @@ void AsymmetricQuantize(const float* input, int16_t* output, int num_elements,
 
 void SymmetricQuantize(const float* input, int32_t* output, int num_elements,
                        float scale) {
-  for (int i = 0; i < num_elements; i++) {
+  int foo = num_elements;
+  for (int i = 0; i < foo; i++) {
     output[i] = FloatToSymmetricQuantizedInt32(input[i], scale);
   }
 }

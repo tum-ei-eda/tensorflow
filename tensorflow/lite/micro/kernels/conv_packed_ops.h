@@ -15,7 +15,9 @@
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 
 namespace tflite {
-namespace reference_ops {
+namespace ops {
+namespace micro {
+namespace conv {
 
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 void ConvUint8PackedWeights(
@@ -125,13 +127,12 @@ TfLiteStatus EvalConvQuantizedPacked(
 
   unsigned int bits_per_item = custom.bits_per_item;
   unsigned int container_bits = custom.container_bits;
-  unsigned int packed_minor_dims =  custom.packed_minor_dims;
   switch (bits_per_item) {
 
       case 4: {
           if(container_bits != 8)
             break;
-          reference_ops::ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
+          ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
               params,
               GetTensorShape(input), GetTensorData<uint8_t>(input),
               GetTensorShape(filter), GetTensorData<uint8_t>(filter),
@@ -143,7 +144,7 @@ TfLiteStatus EvalConvQuantizedPacked(
       case 5: {
           if(container_bits != 16)
             break;
-          reference_ops::ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
+          ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
               params,
               GetTensorShape(input), GetTensorData<uint8_t>(input),
               GetTensorShape(filter), GetTensorData<uint16_t>(filter),
@@ -155,7 +156,7 @@ TfLiteStatus EvalConvQuantizedPacked(
       case 6: {
           if(container_bits != 32)
             break;
-          reference_ops::ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
+          ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
                           params,
                           GetTensorShape(input), GetTensorData<uint8_t>(input),
                           GetTensorShape(filter), GetTensorData<uint32_t>(filter),
@@ -168,6 +169,7 @@ TfLiteStatus EvalConvQuantizedPacked(
           TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
                              bits_per_item);
           return kTfLiteError;
+          
       }
   }
   TF_LITE_KERNEL_LOG(context, "Container bitwidth %d not supported for %d bit packed values",
@@ -175,8 +177,11 @@ TfLiteStatus EvalConvQuantizedPacked(
   return kTfLiteError;
 }
 
-}  // namespace reference_ops
-}  // namespace tflite
+
+} // namespace conv
+} // namespace micro
+} // namespace ops
+} // namespace tflite
 
 
 #endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_CONV_PACKED_OPS_H_ */

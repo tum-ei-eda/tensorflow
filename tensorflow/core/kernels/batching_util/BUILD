@@ -49,6 +49,19 @@ cc_library(
     hdrs = ["batch_scheduler.h"],
     deps = [
         "//tensorflow/core:lib",
+        "//tensorflow/core/profiler/lib:traceme",
+    ],
+)
+
+cc_library(
+    name = "threadsafe_status",
+    srcs = ["threadsafe_status.cc"],
+    hdrs = ["threadsafe_status.h"],
+    deps = [
+        "//tensorflow/core:lib",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/synchronization",
     ],
 )
 
@@ -183,6 +196,18 @@ tf_cc_test(
         "//tensorflow/core:lib",
         "//tensorflow/core:tensorflow",
         "//tensorflow/core:test",
+    ],
+)
+
+tf_cc_test(
+    name = "threadsafe_status_test",
+    srcs = ["threadsafe_status_test.cc"],
+    deps = [
+        ":threadsafe_status",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
     ],
 )
 

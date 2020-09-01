@@ -35,6 +35,7 @@ TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes,
   return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
 }
 
+// TODO Factor into shared support library
 template <typename CONTAINER_T>
 static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
     const uint8_t* data, size_t elts, size_t minor_dim_size,
@@ -61,7 +62,7 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
     if (bits_in_container + bits_per_item > container_bits ||
         (i % minor_dim_size == (minor_dim_size - 1))) {
       // Flatbuffers are stored little-endian
-      for (size_t i = 0; i < container_bits; i += 8) {
+      for (size_t bits = 0; bits < container_bits; bits += 8) {
         uint8_t byte = (container_buf & 0xff);
         *packed_data_byte = byte;
         ++packed_data_byte;
@@ -124,9 +125,8 @@ TfLiteStatus TestFullyConnectedFloat(
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
 
   TfLiteFullyConnectedParams builtin_data = {
-      activation,
-      kTfLiteFullyConnectedWeightsFormatDefault,
-  };
+      activation, kTfLiteFullyConnectedWeightsFormatDefault, false, false};
+
   const char* init_data = reinterpret_cast<const char*>(&builtin_data);
   size_t init_data_size = 0;
   void* user_data = nullptr;
@@ -137,18 +137,14 @@ TfLiteStatus TestFullyConnectedFloat(
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {outputs_size, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
   node.user_data = user_data;
   node.builtin_data = reinterpret_cast<void*>(&builtin_data);
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
   if (registration->prepare) {
     TF_LITE_ENSURE_OK(&context, registration->prepare(&context, &node));
   }
@@ -213,9 +209,7 @@ TfLiteStatus TestFullyConnectedQuantized(
   TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
 
   TfLiteFullyConnectedParams builtin_data = {
-      activation,
-      kTfLiteFullyConnectedWeightsFormatDefault,
-  };
+      activation, kTfLiteFullyConnectedWeightsFormatDefault, false, false};
   const char* init_data = reinterpret_cast<const char*>(&builtin_data);
   size_t init_data_size = 0;
   void* user_data = nullptr;
@@ -227,18 +221,14 @@ TfLiteStatus TestFullyConnectedQuantized(
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
-  int temporaries_array_data[] = {0};
-  TfLiteIntArray* temporaries_array = IntArrayFromInts(temporaries_array_data);
 
   TfLiteNode node;
   node.inputs = inputs_array;
   node.outputs = outputs_array;
-  node.temporaries = temporaries_array;
   node.user_data = user_data;
   node.builtin_data = reinterpret_cast<void*>(&builtin_data);
   node.custom_initial_data = nullptr;
   node.custom_initial_data_size = 0;
-  node.delegate = nullptr;
 
   if (registration->prepare) {
     TF_LITE_ENSURE_OK(&context, registration->prepare(&context, &node));
@@ -435,8 +425,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_4) {
   const float weights_min = -8.0f / weights_sf;
   const float weights_max = 7.0f / weights_sf;
   const float bias_scale = 1.0f / (input_sf * weights_sf);
-  const float output_min = -128.0f / 32.0;
-  const float output_max = 127.0f / 32.0;
+  const float output_min = -128.0f / 32.0f;
+  const float output_max = 127.0f / 32.0f;
 
   const size_t num_weights = 8;
   const int input_dims_data[] = {1, 1, num_weights};
@@ -452,8 +442,7 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_4) {
 
   };
 
-  const int input_zero_point =
-      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
+
   const int weights_dims_data[] = {2, 1, num_weights};
   const uint8_t weights_data[] = {
       F2QB<4>(1 / weights_sf, weights_min, weights_max),
@@ -465,10 +454,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_4) {
       F2QB<4>(7 / weights_sf, weights_min, weights_max),
       F2QB<4>(7 / weights_sf, weights_min, weights_max),
   };
-  const int weight_zero_point =
-      ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
 
-  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1};
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1, {}};
 
   auto packed_weights =
       tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
@@ -514,8 +501,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_5) {
   const float weights_min = -16.0f / weights_sf;
   const float weights_max = 15.0f / weights_sf;
   const float bias_scale = 1.0f / (input_sf * weights_sf);
-  const float output_min = -128.0f / 32.0;
-  const float output_max = 127.0f / 32.0;
+  const float output_min = -128.0f / 32.0f;
+  const float output_max = 127.0f / 32.0f;
 
   const size_t num_weights = 8;
   const int input_dims_data[] = {1, 1, num_weights};
@@ -531,8 +518,6 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_5) {
 
   };
 
-  const int input_zero_point =
-      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weights_dims_data[] = {2, 1, num_weights};
   const uint8_t weights_data[] = {
       F2QB<5>(1 / weights_sf, weights_min, weights_max),
@@ -544,9 +529,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_5) {
       F2QB<5>(7 / weights_sf, weights_min, weights_max),
       F2QB<5>(7 / weights_sf, weights_min, weights_max),
   };
-  const int weight_zero_point =
-      ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
-  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 1};
+
+  TfLiteCustomSub8BitPackingDetails packing = {5, 16, 1, {}};
 
   auto packed_weights =
       tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
@@ -603,8 +587,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_6) {
   const float weights_min = -32.0f / weights_sf;
   const float weights_max = 31.0f / weights_sf;
   const float bias_scale = 1.0f / (input_sf * weights_sf);
-  const float output_min = -128.0f / 32.0;
-  const float output_max = 127.0f / 32.0;
+  const float output_min = -128.0f / 32.0f;
+  const float output_max = 127.0f / 32.0f;
 
   const size_t num_weights = 8;
   const int input_dims_data[] = {1, 1, num_weights};
@@ -620,8 +604,6 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_6) {
 
   };
 
-  const int input_zero_point =
-      ZeroPointFromMinMax<uint8_t>(input_min, input_max);
   const int weights_dims_data[] = {2, 1, num_weights};
   const uint8_t weights_data[] = {
       F2QB<6>(1 / weights_sf, weights_min, weights_max),
@@ -633,9 +615,8 @@ TF_LITE_MICRO_TEST(SmokeTestPackedQuantizedUInt8_6) {
       F2QB<6>(7 / weights_sf, weights_min, weights_max),
       F2QB<6>(7 / weights_sf, weights_min, weights_max),
   };
-  const int weight_zero_point =
-      ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
-  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 1};
+
+  TfLiteCustomSub8BitPackingDetails packing = {6, 32, 1, {}};
 
   auto packed_weights =
       tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
