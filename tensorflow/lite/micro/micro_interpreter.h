@@ -30,6 +30,7 @@ limitations under the License.
 
 namespace tflite {
 
+
 namespace internal {
 
 // A helper class to encapsulate the implementation of APIs in Context.
@@ -55,6 +56,9 @@ class ContextHelper {
   static TfLiteEvalTensor* GetEvalTensor(const struct TfLiteContext* context,
                                          int tensor_idx);
 
+  static void SetNodeIndexHooked(const struct TfLiteContext* context,
+                                    int idx);
+
   // Sets the current node index to assist with scratch buffer allocations:
   void SetNodeIndex(int idx);
 
@@ -71,8 +75,23 @@ class ContextHelper {
 
 }  // namespace internal
 
+
+
 class MicroInterpreter {
  public:
+
+  struct TfLiteContextHooks {
+
+    decltype(TfLiteContext::AllocatePersistentBuffer)  AllocatePersistentBuffer;
+
+    decltype(TfLiteContext::RequestScratchBufferInArena) RequestScratchBufferInArena;
+
+    decltype(TfLiteContext::GetScratchBuffer) GetScratchBuffer;
+
+    void (*SetNodeIndex)(const struct TfLiteContext* context,
+                             int idx);
+  };
+
   // The lifetime of the model, op resolver, tensor arena, error reporter and
   // profiler must be at least as long as that of the interpreter object, since
   // the interpreter may need to access them at any time. This means that you
@@ -169,6 +188,23 @@ class MicroInterpreter {
   // arena_used_bytes() + 16.
   size_t arena_used_bytes() const { return allocator_.used_bytes(); }
 
+  //
+  // Provides entry-pointer for intercepting allocation etc for
+  // off-line pre-interpretation/instrumentation and similar.
+  //
+  inline TfLiteContext *getTFLContext()  {
+    return &context_;
+  }
+ 
+  inline TfLiteContextHooks *getHooks() const {
+    return hooks_;
+  }
+
+   
+  inline void setHooks( TfLiteContextHooks *hooks) {
+    hooks_ = hooks;
+  }
+
  protected:
   const MicroAllocator& allocator() const { return allocator_; }
   const TfLiteContext& context() const { return context_; }
@@ -202,6 +238,9 @@ class MicroInterpreter {
   // TfLiteEvalTensor buffers.
   TfLiteTensor* input_tensor_;
   TfLiteTensor* output_tensor_;
+
+  TfLiteContextHooks *hooks_;
+  static TfLiteContextHooks default_hooks_;
 };
 
 }  // namespace tflite

@@ -92,11 +92,25 @@ TfLiteEvalTensor* ContextHelper::GetEvalTensor(
 
 void ContextHelper::SetNodeIndex(int idx) { current_node_idx_ = idx; }
 
+void ContextHelper::SetNodeIndexHooked(const struct TfLiteContext* context,
+                                       int idx) {
+  ContextHelper* helper = static_cast<ContextHelper*>(context->impl_);
+  helper->SetNodeIndex(idx);
+}
+
 void ContextHelper::SetTfLiteEvalTensors(TfLiteEvalTensor* eval_tensors) {
   eval_tensors_ = eval_tensors;
 }
 
 }  // namespace internal
+
+
+MicroInterpreter::TfLiteContextHooks MicroInterpreter::default_hooks_ = {
+  internal::ContextHelper::AllocatePersistentBuffer,
+  internal::ContextHelper::RequestScratchBufferInArena,
+  internal::ContextHelper::GetScratchBuffer,
+  internal::ContextHelper::SetNodeIndexHooked
+};
 
 MicroInterpreter::MicroInterpreter(const Model* model,
                                    const MicroOpResolver& op_resolver,
@@ -114,7 +128,8 @@ MicroInterpreter::MicroInterpreter(const Model* model,
       eval_tensors_(nullptr),
       context_helper_(error_reporter_, &allocator_, model),
       input_tensor_(nullptr),
-      output_tensor_(nullptr) {
+      output_tensor_(nullptr),
+      hooks_(&default_hooks_) {
   Init(profiler);
 }
 
@@ -132,7 +147,8 @@ MicroInterpreter::MicroInterpreter(const Model* model,
       eval_tensors_(nullptr),
       context_helper_(error_reporter_, &allocator_, model),
       input_tensor_(nullptr),
-      output_tensor_(nullptr) {
+      output_tensor_(nullptr),
+      hooks_(&default_hooks_) {
   Init(profiler);
 }
 
@@ -150,6 +166,7 @@ MicroInterpreter::~MicroInterpreter() {
     }
   }
 }
+
 
 void MicroInterpreter::Init(tflite::Profiler* profiler) {
   const flatbuffers::Vector<flatbuffers::Offset<SubGraph>>* subgraphs =
@@ -250,13 +267,14 @@ TfLiteStatus MicroInterpreter::AllocateTensors() {
     }
   }
 
+
   // Only allow AllocatePersistentBuffer in Init stage.
-  context_.AllocatePersistentBuffer = context_helper_.AllocatePersistentBuffer;
+  context_.AllocatePersistentBuffer = hooks_->AllocatePersistentBuffer;
   context_.RequestScratchBufferInArena = nullptr;
   context_.GetScratchBuffer = nullptr;
 
   for (size_t i = 0; i < subgraph_->operators()->size(); ++i) {
-    context_helper_.SetNodeIndex(i);
+    hooks_->SetNodeIndex(&context_, i);
     auto* node = &(node_and_registrations_[i].node);
     auto* registration = node_and_registrations_[i].registration;
     size_t init_data_size;
@@ -273,15 +291,15 @@ TfLiteStatus MicroInterpreter::AllocateTensors() {
           registration->init(&context_, init_data, init_data_size);
     }
   }
-  context_helper_.SetNodeIndex(-1);
+  hooks_->SetNodeIndex(&context_, -1);
 
   // Both AllocatePersistentBuffer and RequestScratchBufferInArena is
   // available in Prepare stage.
   context_.RequestScratchBufferInArena =
-      context_helper_.RequestScratchBufferInArena;
+      hooks_->RequestScratchBufferInArena;
   for (size_t i = 0; i < subgraph_->operators()->size(); ++i) {
     // Set node idx to annotate the lifetime for scratch buffers.
-    context_helper_.SetNodeIndex(i);
+    hooks_->SetNodeIndex(&context_, i);
     auto* node = &(node_and_registrations_[i].node);
     auto* registration = node_and_registrations_[i].registration;
     if (registration->prepare) {
@@ -296,13 +314,13 @@ TfLiteStatus MicroInterpreter::AllocateTensors() {
     }
     allocator_.ResetTempAllocations();
   }
-  context_helper_.SetNodeIndex(-1);
+ hooks_->SetNodeIndex(&context_, -1);
 
   // Prepare is done, we're ready for Invoke. Memory allocation is no longer
   // allowed. Kernels can only fetch scratch buffers via GetScratchBuffer.
   context_.AllocatePersistentBuffer = nullptr;
   context_.RequestScratchBufferInArena = nullptr;
-  context_.GetScratchBuffer = context_helper_.GetScratchBuffer;
+  context_.GetScratchBuffer = hooks_->GetScratchBuffer;
 
   TF_LITE_ENSURE_OK(&context_,
                     allocator_.FinishModelAllocation(model_, eval_tensors_));
