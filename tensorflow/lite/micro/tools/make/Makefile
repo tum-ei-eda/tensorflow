@@ -114,7 +114,7 @@ ARFLAGS := -r
 # override these in the makefile.inc for specific compiler targets
 TARGET_TOOLCHAIN_PREFIX :=
 TARGET_TOOLCHAIN_ROOT :=
-$(info build type : $(BUILD_TYPE) )
+
 ifeq ($(BUILD_TYPE), debug)
 	CXXFLAGS += -DDEBUG -g
 	CCFLAGS  += -DDEBUG -g
@@ -123,10 +123,9 @@ else ifeq ($(BUILD_TYPE), release)
 	CXXFLAGS += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
     BUILD_SUFFIX := _release
-
 else  
-	CXXFLAGS += -DDEBUG -g
-	CCFLAGS  += -DDEBUG -g
+	CXXFLAGS += -DNDEBUG -O3
+	CCFLAGS  += -DNDEBUG -O3
     BUILD_SUFFIX :=
 endif
 
@@ -158,6 +157,7 @@ $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/*model_data.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/*.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/memory_planner/*.cc) \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*model.cc) \
+$(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/testing/*_supp.cc) \
 $(TFLITE_U_PATH)tensorflow/lite/c/common.c \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/error_reporter.cc \
 $(TFLITE_U_PATH)tensorflow/lite/core/api/flatbuffer_conversions.cc \
@@ -327,10 +327,6 @@ MICROLITE_LIB_PATH := $(LIBDIR)$(MICROLITE_LIB_NAME)
 CXX := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CXX_TOOL}
 CC := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${CC_TOOL}
 AR := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${AR_TOOL}
-LD := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${LD_TOOL}
-OBJDUMP := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJDUMP_TOOL}
-OBJCOPY := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJCOPY_TOOL}
-READELF := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${READELF_TOOL}
 
 # The default Makefile target(all) must appear before any target,
 # which is compiled if there's no command-line arguments.
