@@ -8,6 +8,13 @@
 
 ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
 
+
+  LD := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${LD_TOOL}
+  OBJDUMP := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJDUMP_TOOL}
+  OBJCOPY := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJCOPY_TOOL}
+  READELF := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${READELF_TOOL}
+
+
   ifeq ($(TARGET), ifx_riscv32_fpga)
     IFX_RV_TARGET_ARCH ?= rv32im
   else
@@ -30,6 +37,8 @@ endif
   PLATFORM_FLAGS = \
     -march=$(TARGET_ARCH) \
     -mabi=$(TARGET_ABI) \
+    -DIFX_RISCV \
+    -DIFX_RISCV_$(patsubst ifx_riscv%,,$(TARGET)) \
     -DTF_LITE_MCU_DEBUG_LOG \
     -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
     -DTF_LITE_USE_GLOBAL_MAX \
@@ -90,7 +99,6 @@ ifeq ($(TARGET), ifx_riscv32_fpga)
 
   IFX_RISCV32_RECOGNIZED=1
 
-
   ADDITIONAL_PLATFORM_FLAGS = \
     -mcmodel=medany \
     -mexplicit-relocs \
@@ -118,7 +126,7 @@ $(BINDIR)%.bin: $(BINDIR)%.elf
 	@mkdir -p $(dir $@)
 	$(OBJDUMP)  -S --line-numbers --full-contents -D -EL  "$<" > "$(BINDIR)$*.disasm"
 	$(OBJCOPY) "$<" "$@" -O binary
-	$(READELF) -a -I "$<" > "$(BINDIR)$*.txt"
+	$(READELF) -a -I "$<" > "$(BINDIR)$
   
 endif
 

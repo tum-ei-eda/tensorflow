@@ -18,6 +18,11 @@
 # Tests a generic riscv32 ELF binary using SWERV (whisper) simulator
 #
 
+if [ "$1" == "--no-check" ]
+then 
+    shift
+    NOCHECK=1
+fi
 
 declare -r TEST_TMPDIR=/tmp/test_swerv_iss$$/
 declare -r MICRO_LOG_PATH=${TEST_TMPDIR}/$1
@@ -30,15 +35,18 @@ then
 else
     SWERV_ISS=@SWERV_ISS_HOME@/bin/whisper
 fi
-
-"$SWERV_ISS" "$1" 2>&1 | tee ${MICRO_LOG_FILENAME}
-
-if grep -q "$2" ${MICRO_LOG_FILENAME}
+if [ -n "$NOCHECK" ]
 then
-  echo "$1: PASS"
-  exit 0
+    "$SWERV_ISS" "$1"
 else
-  echo "$1: FAIL - '$2' not found in logs."
-  exit 1
-fi
+    "$SWERV_ISS" "$1" 2>&1 | tee ${MICRO_LOG_FILENAME}
 
+  if grep -q "$2" ${MICRO_LOG_FILENAME}
+  then
+    echo "$1: PASS"
+    exit 0
+  else
+    echo "$1: FAIL - '$2' not found in logs."
+    exit 1
+  fi
+fi
