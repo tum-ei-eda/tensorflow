@@ -154,7 +154,7 @@ inline void EvalFullyConnectedUint8PackedWeights(
     const RuntimeShape &bias_shape = GetTensorShape(bias);
     auto bias_data = GetTensorData<int32_t>(bias);
     const RuntimeShape &output_shape = GetTensorShape(output);
-    auto output_data = GetTensorData<uint8>(output);
+    auto output_data = GetTensorData<uint8_t>(output);
 
     // here could "Intercept" arguments for offlikne pre-interpretation
     return FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
