@@ -67,6 +67,9 @@ struct OpData {
   // Scratch buffer for per-channel accumulators used to enable
   // efficient "channel-minor" implementation.
   int acc_buf_idx;
+
+  // Weights tensor packing information
+  const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
 };
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
@@ -99,6 +102,9 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
           context->RequestScratchBufferInArena(
             context, num_channels*sizeof(int32_t), &data->acc_buf_idx)
         );
+      data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
+    } else {
+      data->custom_sub8bit_packing = nullptr;
     }
     return tflite::PopulateConvolutionQuantizationParams(
         context, input, filter, bias, output, params->activation,
@@ -271,16 +277,16 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.output_shift = -data.output_shift;
 
   // @IFX_PATCH@
-  if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+  if (data.custom_sub8bit_packing != nullptr) {
       int32_t *acc_buf = 
-        static_cast<int32_t *>(context->GetScratchBuffer(context, data->acc_buf_idx));
+        static_cast<int32_t *>(context->GetScratchBuffer(context, data.acc_buf_idx));
       ::tflite::ops::micro::DepthwiseConvPackedFilter( 
           op_params, 
-          GetTensorShape(input), GetTensorData<uint8_t>(input),
-          GetTensorShape(filter), GetTensorData<void>(filter),
-          GetTensorShape(bias), GetTensorData<int32_t>(bias),
-          GetTensorShape(output), GetTensorData<uint8_t>(output),
-          *filter->quantization.details.data.custom_sub8bit_packing,
+          tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+          tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<void>(filter),
+          tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+          tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output),
+          *data.custom_sub8bit_packing,
           acc_buf
           );
   } else {

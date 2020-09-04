@@ -41,7 +41,7 @@ void FullyConnectedUint8PackedWeights(
         const FullyConnectedParams& params,
         const RuntimeShape& input_shape, const uint8_t* input_data,
         const RuntimeShape& filter_shape, const CONTAINER_T* filter_data,
-        const RuntimeShape& bias_shape, const int32* bias_data,
+        const RuntimeShape& bias_shape, const int32_t* bias_data,
         const RuntimeShape& output_shape, uint8_t* output_data) {
   const int32_t input_offset = params.input_offset;
   const int32_t filter_offset = params.weights_offset;

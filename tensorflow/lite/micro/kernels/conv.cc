@@ -63,6 +63,10 @@ struct OpData {
   // uint8_t these would be 0 and 255.
   int32_t output_activation_min;
   int32_t output_activation_max;
+
+  
+  // Weights tensor packing information
+  const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
 };
 
 inline PaddingType RuntimePaddingType(TfLitePadding padding) {
@@ -103,6 +107,12 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
         GetOptionalInputTensor(context, node, kBiasTensor);
     TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
     int output_channels = filter->dims->data[kConvQuantizedDimension];
+
+    if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+      data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
+    } else {
+      data->custom_sub8bit_packing = nullptr;
+    }
 
     TF_LITE_ENSURE_STATUS(tflite::PopulateConvolutionQuantizationParams(
         context, input, filter, bias, output, params->activation,
@@ -204,11 +214,11 @@ void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
   op_params.quantized_activation_min = data.output_activation_min;
   op_params.quantized_activation_max = data.output_activation_max;
 
-  if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
+  if (data.custom_sub8bit_packing != nullptr)  {
     EvalConvQuantizedPacked(
             op_params,
             input, filter, bias, output, context,
-            *filter->quantization.details.data.custom_sub8bit_packing);
+            *data.custom_sub8bit_packing);
   } else {
     reference_ops::Conv(op_params, tflite::micro::GetTensorShape(input),
                         tflite::micro::GetTensorData<uint8_t>(input),

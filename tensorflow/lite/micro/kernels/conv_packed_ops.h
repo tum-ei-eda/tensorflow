@@ -13,6 +13,7 @@
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
 
 namespace tflite {
 namespace ops {
@@ -22,13 +23,13 @@ namespace conv {
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 void ConvUint8PackedWeights(
         const ConvParams& params,
-        const RuntimeShape& input_shape, const uint8* input,
+        const RuntimeShape& input_shape, const uint8_t* input,
         const RuntimeShape& filter_shape, const CONTAINER_T* filter,
-        const RuntimeShape& bias_shape, const int32* bias,
-        const RuntimeShape& output_shape, uint8* output) {
-  const int32 input_offset = params.input_offset;
-  const int32 filter_offset = params.weights_offset;
-  const int32 output_offset = params.output_offset;
+        const RuntimeShape& bias_shape, const int32_t* bias,
+        const RuntimeShape& output_shape, uint8_t* output) {
+  const int32_t input_offset = params.input_offset;
+  const int32_t filter_offset = params.weights_offset;
+  const int32_t output_offset = params.output_offset;
 
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
@@ -37,10 +38,10 @@ void ConvUint8PackedWeights(
 
   const int pad_width = params.padding_values.width;
   const int pad_height = params.padding_values.height;
-  const int32 output_multiplier = params.output_multiplier;
+  const int32_t output_multiplier = params.output_multiplier;
   const int output_shift = params.output_shift;
-  const int32 output_activation_min = params.quantized_activation_min;
-  const int32 output_activation_max = params.quantized_activation_max;
+  const int32_t output_activation_min = params.quantized_activation_min;
+  const int32_t output_activation_max = params.quantized_activation_max;
   TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
 
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
@@ -63,28 +64,28 @@ void ConvUint8PackedWeights(
 
   // Packing constants
   const int num_packed_containers = std::ceil((float)input_depth / items_per_container);
-  const int32 mask = (1<<bits_per_item)-1;
+  const int32_t mask = (1<<bits_per_item)-1;
 
   for (int batch = 0; batch < batches; ++batch) {
-    uint32 offset_input0 = batch * in_dims[1];
+    uint32_t offset_input0 = batch * in_dims[1];
     for (int out_y = 0; out_y < output_height; ++out_y) {
       for (int out_x = 0; out_x < output_width; ++out_x) {
         for (int out_channel = 0; out_channel < output_depth; ++out_channel) {
           const int in_x_origin = (out_x * stride_width) - pad_width;
           const int in_y_origin = (out_y * stride_height) - pad_height;
 
-          int32 acc = 0;
+          int32_t acc = 0;
 
           unsigned int container_offset = out_channel * filter_height * filter_width * num_packed_containers;
 
           for (int filter_y = 0; filter_y < filter_height; ++filter_y) {
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
-            uint32 offset_container1 = container_offset + filter_y * filter_width * num_packed_containers;
-            uint32 offset_input1 = (offset_input0 + in_y) * in_dims[2];
+            uint32_t offset_container1 = container_offset + filter_y * filter_width * num_packed_containers;
+            uint32_t offset_input1 = (offset_input0 + in_y) * in_dims[2];
             for (int filter_x = 0; filter_x < filter_width; ++filter_x) {
               const int in_x = in_x_origin + dilation_width_factor * filter_x;
-              uint32 offset_container2 = offset_container1 + filter_x * num_packed_containers;
-              uint32 offset_input2 = (offset_input1 + in_x) * in_dims[3];
+              uint32_t offset_container2 = offset_container1 + filter_x * num_packed_containers;
+              uint32_t offset_input2 = (offset_input1 + in_x) * in_dims[3];
               if ((in_x >= 0) && (in_x < input_width) && (in_y >= 0) &&
                                                   (in_y < input_height)) {
 
@@ -92,8 +93,8 @@ void ConvUint8PackedWeights(
                   CONTAINER_T filter_vals = filter[offset_container2 + channel_container];
                   int number_elements_in_container = std::min(input_depth - channel_container * items_per_container, items_per_container);
                   for (int element = 0; element < number_elements_in_container; element++) {
-                    int32 input_val = input[offset_input2 + channel_container*items_per_container + element];
-                    int32 filter_val = filter_vals & mask;
+                    int32_t input_val = input[offset_input2 + channel_container*items_per_container + element];
+                    int32_t filter_val = filter_vals & mask;
                     filter_vals >>= bits_per_item;
                     acc += (filter_val + filter_offset) * (input_val + input_offset);
                   }
@@ -108,7 +109,7 @@ void ConvUint8PackedWeights(
           acc += output_offset;
           acc = std::max(acc, output_activation_min);
           acc = std::min(acc, output_activation_max);
-          output[Offset(output_shape, batch, out_y, out_x, out_channel)] = static_cast<uint8>(acc);
+          output[Offset(output_shape, batch, out_y, out_x, out_channel)] = static_cast<uint8_t>(acc);
         }
       }
     }
@@ -117,9 +118,9 @@ void ConvUint8PackedWeights(
 
 TfLiteStatus EvalConvQuantizedPacked(
         const ConvParams &params,
-        const TfLiteTensor* input,
-        const TfLiteTensor* filter, const TfLiteTensor* bias,
-        TfLiteTensor* output,
+        const TfLiteEvalTensor* input,
+        const TfLiteEvalTensor* filter, const TfLiteEvalTensor* bias,
+        TfLiteEvalTensor* output,
         TfLiteContext* context,
         const TfLiteCustomSub8BitPackingDetails &custom) {
 
@@ -134,10 +135,10 @@ TfLiteStatus EvalConvQuantizedPacked(
             break;
           ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
               params,
-              GetTensorShape(input), GetTensorData<uint8_t>(input),
-              GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-              GetTensorShape(bias), GetTensorData<int32_t>(bias),
-              GetTensorShape(output), GetTensorData<uint8_t>(output)
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint8_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
               );
           return kTfLiteOk;
       }
@@ -146,10 +147,10 @@ TfLiteStatus EvalConvQuantizedPacked(
             break;
           ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
               params,
-              GetTensorShape(input), GetTensorData<uint8_t>(input),
-              GetTensorShape(filter), GetTensorData<uint16_t>(filter),
-              GetTensorShape(bias), GetTensorData<int32_t>(bias),
-              GetTensorShape(output), GetTensorData<uint8_t>(output)
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint16_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
               );
           return kTfLiteOk;
       }
@@ -158,10 +159,10 @@ TfLiteStatus EvalConvQuantizedPacked(
             break;
           ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
                           params,
-                          GetTensorShape(input), GetTensorData<uint8_t>(input),
-                          GetTensorShape(filter), GetTensorData<uint32_t>(filter),
-                          GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                          GetTensorShape(output), GetTensorData<uint8_t>(output)
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint32_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
                           );
           return kTfLiteOk;
       }

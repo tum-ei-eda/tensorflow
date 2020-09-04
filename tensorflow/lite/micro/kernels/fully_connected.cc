@@ -36,6 +36,11 @@ namespace micro {
 namespace fully_connected {
 namespace {
 
+enum PackingType : uint8_t {
+  None,
+  Sub8BitUniform
+};
+
 struct OpData {
   // The scaling factor from input to output (aka the 'real multiplier') can
   // be represented as a fixed point multiplier plus a left shift.
@@ -51,6 +56,8 @@ struct OpData {
   int32_t input_zero_point;
   int32_t filter_zero_point;
   int32_t output_zero_point;
+
+  const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
 };
 
 constexpr int kInputTensor = 0;
@@ -79,6 +86,12 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
     data->input_zero_point = input->params.zero_point;
     data->filter_zero_point = filter->params.zero_point;
     data->output_zero_point = output->params.zero_point;
+
+    if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
+      data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
+    } else {
+      data->custom_sub8bit_packing = nullptr;
+    }
   }
   return status;
 }
@@ -143,18 +156,18 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 inline void EvalFullyConnectedUint8PackedWeights(
         const FullyConnectedParams& params,
-        const TfLiteTensor* input,
-        const TfLiteTensor* filter, const TfLiteTensor* bias,
-        TfLiteTensor* output) {
+        const TfLiteEvalTensor* input,
+        const TfLiteEvalTensor* filter, const TfLiteEvalTensor* bias,
+        TfLiteEvalTensor* output) {
 
-    const RuntimeShape &input_shape = GetTensorShape(input);
-    auto input_data = GetTensorData<uint8_t>(input);
-    const RuntimeShape &filter_shape = GetTensorShape(filter);
-    auto filter_data =  GetTensorData<CONTAINER_T>(filter);
-    const RuntimeShape &bias_shape = GetTensorShape(bias);
-    auto bias_data = GetTensorData<int32_t>(bias);
-    const RuntimeShape &output_shape = GetTensorShape(output);
-    auto output_data = GetTensorData<uint8_t>(output);
+    const RuntimeShape &input_shape = tflite::micro::GetTensorShape(input);
+    auto input_data = tflite::micro::GetTensorData<uint8_t>(input);
+    const RuntimeShape &filter_shape = tflite::micro::GetTensorShape(filter);
+    auto filter_data = tflite::micro:: GetTensorData<CONTAINER_T>(filter);
+    const RuntimeShape &bias_shape = tflite::micro::GetTensorShape(bias);
+    auto bias_data = tflite::micro::GetTensorData<int32_t>(bias);
+    const RuntimeShape &output_shape = tflite::micro::GetTensorShape(output);
+    auto output_data = tflite::micro::GetTensorData<uint8_t>(output);
 
     // here could "Intercept" arguments for offlikne pre-interpretation
     return FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
@@ -168,9 +181,9 @@ inline void EvalFullyConnectedUint8PackedWeights(
 
 TfLiteStatus EvalQuantizedPacked(
         const FullyConnectedParams &params,
-        const TfLiteTensor* input,
-        const TfLiteTensor* filter, const TfLiteTensor* bias,
-        TfLiteTensor* output,
+        const TfLiteEvalTensor* input,
+        const TfLiteEvalTensor* filter, const TfLiteEvalTensor* bias,
+        TfLiteEvalTensor* output,
         TfLiteContext* context,
         const TfLiteCustomSub8BitPackingDetails &custom) {
 
@@ -245,12 +258,12 @@ TfLiteStatus EvalQuantized(TfLiteContext* context, TfLiteNode* node,
       tflite::micro::GetTensorData<output_data_type>(output))
   switch (output->type) {
     case kTfLiteUInt8:
-      if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail)  {
+      if (data.custom_sub8bit_packing != nullptr)  {
             return EvalQuantizedPacked(
                     op_params,
                     input, filter, bias, output,
                     context,
-                    *filter->quantization.details.data.custom_sub8bit_packing);
+                    *data.custom_sub8bit_packing);
       } else {
         TF_LITE_FULLY_CONNECTED(reference_ops::FullyConnected, uint8_t);
       }

@@ -31,12 +31,6 @@ namespace tflite {
 namespace testing {
 namespace {
 
-MockAllocator* mock_allocator;
-TfLiteStatus AllocatePersistentBuffer(struct TfLiteContext* ctx, size_t bytes,
-                                      void** ptr) {
-  return mock_allocator->AllocatePersistentBuffer(ctx, bytes, ptr);
-}
-
 // TODO Factor into shared support library
 template <typename CONTAINER_T>
 static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
