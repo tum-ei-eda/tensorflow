@@ -31,6 +31,7 @@ limitations under the License.
 namespace tflite {
 namespace {
 
+#if !(TF_LITE_STRIP_ERROR_STRINGS && NDEBUG)
 const char* OpNameFromRegistration(const TfLiteRegistration* registration) {
   if (registration->builtin_code == BuiltinOperator_CUSTOM) {
     return registration->custom_name;
@@ -38,6 +39,7 @@ const char* OpNameFromRegistration(const TfLiteRegistration* registration) {
     return EnumNameBuiltinOperator(BuiltinOperator(registration->builtin_code));
   }
 }
+#endif
 
 }  // namespace
 

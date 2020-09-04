@@ -78,7 +78,9 @@ uint8_t* SimpleMemoryAllocator::AllocateFromTail(size_t size,
                                                  size_t alignment) {
   uint8_t* const aligned_result = AlignPointerDown(tail_ - size, alignment);
   if (aligned_result < head_) {
+#if !TF_LITE_STRIP_ERROR_STRINGS
     const size_t missing_memory = head_ - aligned_result;
+#endif
     TF_LITE_REPORT_ERROR(
         error_reporter_,
         "Failed to allocate memory. Requested: %u, available %u, missing: %u",

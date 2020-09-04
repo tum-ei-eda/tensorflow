@@ -121,18 +121,21 @@ void PrintModelData(const Model* model, ErrorReporter* error_reporter) {
   const SubGraph* subgraph = (*subgraphs)[0];
   const flatbuffers::Vector<flatbuffers::Offset<Tensor>>* tensors =
       subgraph->tensors();
-  const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers =
-      model->buffers();
   TF_LITE_REPORT_ERROR(error_reporter, "==== Model info: =====");
   for (size_t i = 0; i < tensors->size(); ++i) {
     const tflite::Tensor& flatbuffer_tensor = *tensors->Get(i);
     size_t type_size, tensor_size;
+
+#if !TF_LITE_STRIP_ERROR_STRINGS
+  const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers =
+      model->buffers();
     auto* buffer = (*buffers)[flatbuffer_tensor.buffer()];
     auto* array = buffer->data();
     int array_size = 0;
     if (array) {
       array_size = array->size();
     }
+#endif
     BytesRequiredForTensor(flatbuffer_tensor, &tensor_size, &type_size,
                            error_reporter);
     TF_LITE_REPORT_ERROR(
