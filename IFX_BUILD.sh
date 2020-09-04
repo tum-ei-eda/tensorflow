@@ -20,7 +20,7 @@ do
     case "$1" in
     "--help"|"-?") 
         echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
-	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm]" 1>&2
+	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm] [--no-download-update] " 1>&2
 	echo "  [--verbose]" 1>&2
         exit 1
         ;;
@@ -34,7 +34,6 @@ do
         NOTFLITE=1
         ;;
     "--no-download-update")
-        NOINSTALL=1
         NODOWNLOAD_UPDATE=1
         ;;
     "--no-install")
