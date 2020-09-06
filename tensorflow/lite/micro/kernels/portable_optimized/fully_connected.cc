@@ -72,7 +72,7 @@ struct OpData {
   // The index of the temporary tensor where the quantized inputs are cached.
   int input_quantized_index;
   // A buffer containing the sum-of-weights factor
-  int32* sum_of_weights_factor;
+  int32_t* sum_of_weights_factor;
   // Eval function pointer
   TfLiteStatus (*eval_function)(TfLiteContext* context, TfLiteFullyConnectedParams* params,
       OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,
@@ -108,7 +108,7 @@ TfLiteStatus CalculateOpData(TfLiteContext* context,
 }  // namespace
 
 template <typename T>
-inline void PrecomputeSumOfWeightsFactor(const int32* bias, const T* weights,
+inline void PrecomputeSumOfWeightsFactor(const int32_t* bias, const T* weights,
                                          int32_t* sum_of_weights_factor,
                                          int cols, int rows,
                                          int32_t weights_offset,
@@ -128,8 +128,7 @@ inline void PrecomputeSumOfWeightsFactor(const int32* bias, const T* weights,
 }
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
-  void* raw;
-  context->AllocatePersistentBuffer(context, sizeof(OpData), &raw);
+  void* raw = context->AllocatePersistentBuffer(context, sizeof(OpData));
   OpData* data = reinterpret_cast<OpData*>(raw);
   *data = {};
   return raw;
@@ -255,7 +254,7 @@ inline void EvalFullyConnectedUint8PackedWeights(
   const RuntimeShape& bias_shape = GetTensorShape(bias);
   auto bias_data = GetTensorData<int32_t>(bias);
   const RuntimeShape& output_shape = GetTensorShape(output);
-  auto output_data = GetTensorData<uint8>(output);
+  auto output_data = GetTensorData<uint8_t>(output);
 
   FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item,
                                    items_per_container>(
@@ -356,11 +355,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     const int rows = weights_shape.Dims(0);
     const int cols = weights_shape.Dims(1);
 
-    void* raw;
-    context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows, &raw);
+    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows);
     data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
     const int32_t input_offset = -input->params.zero_point;
-    const int32* bias_data = GetTensorData<int32_t>(bias);
+    const int32_t* bias_data = GetTensorData<int32_t>(bias);
 
     if (weights->type == kTfLiteInt8) {
       PrecomputeSumOfWeightsFactor<int8_t>(bias_data,
@@ -393,7 +391,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           data->eval_function = &EvalQuantized<int8_t>;
           break;
         default:
-          TF_LITE_KERNEL_LOG(context, "Quantized int8 expects output int8");
+          TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
           return kTfLiteError;
       }
       break;
@@ -413,7 +411,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           break;
         default:
           TF_LITE_KERNEL_LOG(context,
-                             "Quantized uint8 expects output uint8 or int16");
+                             "Quantized uint8_t expects output uint8_t or int16");
           return kTfLiteError;
       }
       break;
@@ -435,7 +433,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           fully_connected_pointer_collector.add_pointer("EvalQuantized<int8_t>");
           break;
         default:
-          TF_LITE_KERNEL_LOG(context, "Quantized int8 expects output int8");
+          TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
           return kTfLiteError;
       }
       break;
@@ -455,7 +453,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           break;
         default:
           TF_LITE_KERNEL_LOG(context,
-                             "Quantized uint8 expects output uint8 or int16");
+                             "Quantized uint8_t expects output uint8_t or int16");
           return kTfLiteError;
       }
       break;

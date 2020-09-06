@@ -26,7 +26,7 @@ limitations under the License.
 #include "tensorflow/lite/version.h"
 
 // Create an area of memory to use for input, output, and intermediate arrays.
-constexpr int tensor_arena_size = 180 * 1024;
+constexpr int tensor_arena_size = 184 * 1024;
 uint8_t tensor_arena[tensor_arena_size];
 
 TF_LITE_MICRO_TESTS_BEGIN
@@ -61,8 +61,9 @@ TF_LITE_MICRO_TEST(TestInvoke) {
   tflite::MicroInterpreter interpreter(model, micro_op_resolver, tensor_arena,
                                        tensor_arena_size,
                                        &micro_error_reporter);
-  interpreter.AllocateTensors();
+  auto status = interpreter.AllocateTensors();
 
+  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, status);
   // Get information about the memory area to use for the model's input.
   TfLiteTensor* input = interpreter.input(0);
 
