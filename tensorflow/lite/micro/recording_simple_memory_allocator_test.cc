@@ -62,7 +62,7 @@ TF_LITE_MICRO_TEST(TestRecordsMisalignedTailAllocations) {
                           static_cast<size_t>(1));
 }
 
-TF_LITE_MICRO_TEST(TestDoesNotRecordFailedTailAllocations) {
+TF_LITE_MICRO_TEST(TestDoesNotRecordFailedTailAllocations_1) {
   constexpr size_t arena_size = 1024;
   uint8_t arena[arena_size];
   tflite::RecordingSimpleMemoryAllocator allocator(micro_test::reporter, arena,
@@ -119,7 +119,7 @@ TF_LITE_MICRO_TEST(TestRecordsMisalignedHeadSizeAdjustments) {
                           static_cast<size_t>(0));
 }
 
-TF_LITE_MICRO_TEST(TestDoesNotRecordFailedTailAllocations) {
+TF_LITE_MICRO_TEST(TestDoesNotRecordFailedTailAllocations_2) {
   constexpr size_t arena_size = 1024;
   uint8_t arena[arena_size];
   tflite::RecordingSimpleMemoryAllocator allocator(micro_test::reporter, arena,
@@ -132,6 +132,16 @@ TF_LITE_MICRO_TEST(TestDoesNotRecordFailedTailAllocations) {
                           static_cast<size_t>(0));
   TF_LITE_MICRO_EXPECT_EQ(allocator.GetAllocatedCount(),
                           static_cast<size_t>(0));
+}
+
+TF_LITE_MICRO_TEST(DemonstrateOverflow) {
+  constexpr size_t arena_size = 1024;
+  uint8_t *arena = reinterpret_cast<uint8_t *>(-arena_size);
+  tflite::RecordingSimpleMemoryAllocator allocator(micro_test::reporter, arena,
+                                                   arena_size);
+
+  TF_LITE_MICRO_EXPECT_EQ(
+      kTfLiteError, allocator.EnsureHeadSize(/*size=*/2048, /*alignment=*/1));
 }
 
 TF_LITE_MICRO_TESTS_END

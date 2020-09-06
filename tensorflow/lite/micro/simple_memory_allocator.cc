@@ -71,7 +71,11 @@ TfLiteStatus SimpleMemoryAllocator::EnsureHeadSize(size_t size,
   }
 
   uint8_t* const aligned_result = AlignPointerUp(buffer_head_, alignment);
-  if (aligned_result + size < head_) {
+  // Caution needed here as overflow possible if buffer_head_ is at end of memory map
+  // This is a safer version of aligned_result+size < head_ ...
+
+  ptrdiff_t aligned_head_head_diff = head_-aligned_result;
+  if (aligned_head_head_diff >=0 && size < static_cast<size_t>(aligned_head_head_diff)) {
     // Size is below the current head size, just return.
     return kTfLiteOk;
   }
