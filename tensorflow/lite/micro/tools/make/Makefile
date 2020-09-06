@@ -99,7 +99,7 @@ MICROLITE_LIBS := -lm
 
 CC_WARNINGS := -Werror -Wsign-compare -Wdouble-promotion \
                -Wshadow -Wunused-variable -Wmissing-field-initializers \
-               -Wunused-function
+               -Wno-error=unused-function
 # TODO(b/150240249): Add in -fno-rtti once that works for the Xtensa toolchain.
 # TODO(b/159155203): Consider TF_LITE_STATIC_MEMORY to align more with the fact
 # this flag is for an optimized micro runtime.

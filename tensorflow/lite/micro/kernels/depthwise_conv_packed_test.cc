@@ -252,8 +252,6 @@ void TestDepthwiseConvQuantizedPerLayer(
 
 TF_LITE_MICRO_TESTS_BEGIN
 
-
-
 TF_LITE_MICRO_TEST(DepthwiseConvQuantizedPackedWeights4Bit) {
   using tflite::testing::ZeroPointFromMinMax;
   using tflite::testing::ScaleFromMinMaxPacked;
