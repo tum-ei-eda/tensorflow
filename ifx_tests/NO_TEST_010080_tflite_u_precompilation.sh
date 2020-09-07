@@ -1,7 +1,5 @@
 #!/bin/bash
 
-cd `dirname "$BASH_SOURCE"`/..
-
 echo "----------Testing conv----------"
 make clean > /dev/null 2>/dev/null
 make TAGS=portable_optimized LOCAL_CPPFLAGS=-DPRECOMPILE -j8 test_kernel_conv_test > /dev/null 2>/dev/null
