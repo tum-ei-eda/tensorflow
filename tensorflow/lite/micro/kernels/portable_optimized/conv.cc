@@ -15,26 +15,20 @@ limitations under the License.
 
 // PORTABLE OPTIMIZED
 
-// Choose compilation mode from (PRECOMPILE, EVAL, RUNTIME)
-// RUNTIME: Default mode, compiles all kernel implementations and chooses during runtime.
-// PRECOMPILE: When this mode is selected, the required kernel implementation is found and
-//             information to select it is stored in a file. No inference is done in this mode,
-//             only the kernel selection is performed in the Prepare phase.
-// EVAL: This mode compiles the kernel that was determined in the PRECOMPILE phase and
-//       all the other kernels are not compiled. The PRECOMPILE mode must be run before this mode,
-//       otherwise compilation errors will occur!
-// Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
-// Limitations: Two separate compilations need to be run
+// Support recording of selected kernel variant in prepare phase for static extraction for
+// a fixed tflite model.
 
-#if !defined(PRECOMPILE) && !defined(EVAL)
-#define RUNTIME
-#endif
+// TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT: 
+//  When set the names of kernel variants eval functions recorded and can be dumped
+// via PointerCollect API.
+// TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+//   When set prepare phase kernel variant selection code is dropped with 
+// the eval functions recorded in tflite::micro::kernels::conv::eval_functions used instead.
+//
+// Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
-#ifdef PRECOMPILE
-#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/pointer_collector.h"
-static ConvPointerCollector conv_pointer_collector(
-    "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h");
-#endif
+
+
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
@@ -44,18 +38,32 @@ static ConvPointerCollector conv_pointer_collector(
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
-#if defined(EVAL) || defined(RUNTIME)
 #include "tensorflow/lite/kernels/internal/reference/conv.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/conv.h"
 #include "tensorflow/lite/micro/kernels/conv_packed_ops.h"
+
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
+#include "tensorflow/lite/micro/kernels/pointer_collector.h"
+static PointerCollector pointer_collector(
+  "conv", 
+  "struct OpData;\n",
+      "    TfLiteConvParams* params, OpData* data,\n"
+      "    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter, \n"
+      "    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context"
+);
+#endif
+
+
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
-#endif
+
 
 namespace tflite {
 namespace ops {
 namespace micro {
 namespace conv {
+
+// Defined in code generated via PointerCollector::writeCppSyntaxPointerTable
 
 constexpr int kInputTensor = 0;
 constexpr int kFilterTensor = 1;
@@ -101,6 +109,15 @@ struct OpData {
       const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
       const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context);
 };
+
+#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+typedef TfLiteStatus (*EvalVariantFptr)(
+      TfLiteConvParams* params, OpData* data,
+      const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+      const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context);
+EvalVariantFptr recordedVariant();
+#endif
+
 
 inline PaddingType RuntimePaddingType(TfLitePadding padding) {
   switch (padding) {
@@ -196,7 +213,6 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 
 void Free(TfLiteContext* context, void* buffer) {}
 
-#if defined(RUNTIME) ||  defined(EVAL)
 TfLiteStatus EvalConvUInt8Packed(
     TfLiteConvParams* params, OpData* data,
     const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
@@ -704,12 +720,6 @@ TfLiteStatus EvalConvFloat(
                       tflite::micro::GetTensorData<float>(im2col));
   return kTfLiteOk;
 }
-#endif
-
-#ifdef EVAL
-#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/conv_pointer_table.h"
-static unsigned int counter = 0;
-#endif
 
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
@@ -789,8 +799,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               filter_height, output_width, output_height, input->type, data));
 
 
+#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+  data->eval_function = recordedVariant();
+#else
+
   // Determine which version to use
-#if defined(RUNTIME) || defined(PRECOMPILE)
   bool use_reference = false, use_padding = false, use_packed = false;
   const int dilation_width_factor = params->dilation_width_factor;
   const int dilation_height_factor = params->dilation_height_factor;
@@ -804,36 +817,34 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
     use_packed = true;
   }
-#endif
-#ifdef RUNTIME
   // Set the function pointer that is used during inference here
   switch (filter->type) {
     case kTfLiteFloat32:
     {
-      data->eval_function = &EvalConvFloat;
+      data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvFloat);
       break;
     }
     case kTfLiteInt8:
     {
       if (use_reference) {
-        data->eval_function = &EvalConvInt8Reference;
+        data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvInt8Reference);
       } else if (use_padding) {
-        data->eval_function = &EvalConvInt8Padding;
+        data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvInt8Padding);
       } else {
-        data->eval_function = &EvalConvInt8;
+        data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvInt8);
       }
       break;
     }
     case kTfLiteUInt8:
     {
       if (use_packed)  {
-        data->eval_function = &EvalConvUInt8Packed;
+        data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvUInt8Packed);
       } else if (use_reference) {
-        data->eval_function = &EvalConvUInt8Reference;
+        data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvUInt8Reference);
       } else if (use_padding) {
-        data->eval_function = &EvalConvUInt8Padding;
+        data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvUInt8Padding);
       } else {
-        data->eval_function = &EvalConvUInt8;
+        data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalConvUInt8);
       }
       break;
     }
@@ -844,58 +855,12 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       return kTfLiteError;
     }
   }
-#endif
-
-#ifdef PRECOMPILE
-  switch (filter->type) {
-    case kTfLiteFloat32:
-    {
-      conv_pointer_collector.add_pointer("EvalConvFloat");
-      break;
-    }
-    case kTfLiteInt8:
-    {
-      if (use_reference) {
-        conv_pointer_collector.add_pointer("EvalConvInt8Reference");
-      } else if (use_padding) {
-        conv_pointer_collector.add_pointer("EvalConvInt8Padding");
-      } else {
-        conv_pointer_collector.add_pointer("EvalConvInt8");
-      }
-      break;
-    }
-    case kTfLiteUInt8:
-    {
-      if (use_packed)  {
-        conv_pointer_collector.add_pointer("EvalConvUInt8Packed");
-      } else if (use_reference) {
-        conv_pointer_collector.add_pointer("EvalConvUInt8Reference");
-      } else if (use_padding) {
-        conv_pointer_collector.add_pointer("EvalConvUInt8Padding");
-      } else {
-        conv_pointer_collector.add_pointer("EvalConvUInt8");
-      }
-      break;
-    }
-    default:
-    {
-      TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
-                         TfLiteTypeGetName(input->type), input->type);
-      return kTfLiteError;
-    }
-  }
-#endif
-
-#ifdef EVAL
-  data->eval_function = *(eval_functions[counter]);
-  counter++;
 #endif
   return kTfLiteOk;
 }
 
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-#ifndef PRECOMPILE
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
   auto* params = reinterpret_cast<TfLiteConvParams*>(node->builtin_data);
 
@@ -911,9 +876,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       tflite::micro::GetEvalOutput(context, node, kOutputTensor);
 
   return data->eval_function(params, data, input, filter, bias, output, context);
-#else
-  return kTfLiteOk;
-#endif
 }
 
 }  // namespace conv

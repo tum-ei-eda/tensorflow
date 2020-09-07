@@ -31,7 +31,7 @@ limitations under the License.
 #endif
 
 #ifdef PRECOMPILE
-#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/pointer_collector.h"
+#include "tensorflow/lite/micro/kernels/pointer_collector.h"
 static FullyConnectedPointerCollector fully_connected_pointer_collector(
     "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/fully_connected_pointer_table.h");
 #endif

@@ -43,6 +43,14 @@ const char* OpNameFromRegistration(const TfLiteRegistration* registration) {
 
 }  // namespace
 
+#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+namespace ops {
+namespace micro {
+  void  resetRecordedVariants();
+}
+}
+#endif
+
 namespace internal {
 
 ContextHelper::ContextHelper(ErrorReporter* error_reporter,
@@ -376,6 +384,9 @@ TfLiteStatus MicroInterpreter::Invoke() {
   if (!tensors_allocated_) {
     TF_LITE_ENSURE_OK(&context_, AllocateTensors());
   }
+#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+  tflite::ops::micro::resetRecordedVariants();
+#endif
 
   for (size_t i = 0; i < subgraph_->operators()->size(); ++i) {
     auto* node = &(node_and_registrations_[i].node);

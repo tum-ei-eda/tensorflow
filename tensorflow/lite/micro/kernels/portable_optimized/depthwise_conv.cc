@@ -15,26 +15,32 @@ limitations under the License.
 
 // PORTABLE OPTIMIZED
 
-// Choose compilation mode from (PRECOMPILE, EVAL, RUNTIME)
-// RUNTIME: Default mode, compiles all kernel implementations and chooses during runtime.
-// PRECOMPILE: When this mode is selected, the required kernel implementation is found and
-//             information to select it is stored in a file. No inference is done in this mode,
-//             only the kernel selection is performed in the Prepare phase.
-// EVAL: This mode compiles the kernel that was determined in the PRECOMPILE phase and
-//       all the other kernels are not compiled. The PRECOMPILE mode must be run before this mode,
-//       otherwise compilation errors will occur!
-// Benefits of EVAL/PRECOMPILE: Smaller binary, no unnecessary kernels are compiled
-// Limitations: Two separate compilations need to be run
 
-#if !defined(PRECOMPILE) && !defined(EVAL)
-#define RUNTIME
+// Support recording of selected kernel variant in prepare phase for static extraction for
+// a fixed tflite model.
+
+// TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT: 
+//  When set the names of kernel variants eval functions recorded and can be dumped
+// via PointerCollect API.
+// TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+//   When set prepare phase kernel variant selection code is dropped with 
+// the eval functions recorded in tflite::micro::kernels::conv::eval_functions used instead.
+//
+// Benefits smaller binary, used unnecessary eval function variants are not lnked.
+
+
+
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
+#include "tensorflow/lite/micro/kernels/pointer_collector.h"
+static PointerCollector pointer_collector(
+  "depthwise_conv",
+  "struct OpData;\n",
+      "    TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n"
+      "    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter, \n"
+      "    const TfLiteTensor* bias, TfLiteTensor* output"
+);
 #endif
 
-#ifdef PRECOMPILE
-#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/pointer_collector.h"
-static DepthwiseConvPointerCollector depthwise_conv_pointer_collector(
-    "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/depthwise_conv_pointer_table.h");
-#endif
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
@@ -44,19 +50,17 @@ static DepthwiseConvPointerCollector depthwise_conv_pointer_collector(
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
-#if defined(EVAL) || defined(RUNTIME)
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_float.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
-#endif
+
 
 namespace tflite {
 namespace ops {
 namespace micro {
 namespace depthwise_conv {
-namespace {
 
 constexpr int kInputTensor = 0;
 constexpr int kFilterTensor = 1;
@@ -98,6 +102,16 @@ struct OpData {
       const TfLiteTensor* input, const TfLiteTensor* filter,
       const TfLiteTensor* bias, TfLiteTensor* output);
 };
+
+
+// Defined in code generated via PointerCollector::writeCppSyntaxPointerTable
+#ifdef TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+typedef TfLiteStatus (*EvalVariantFptr)(
+      TfLiteContext* context, const TfLiteDepthwiseConvParams &params, const OpData* data,
+      const TfLiteTensor* input, const TfLiteTensor* filter,
+      const TfLiteTensor* bias, TfLiteTensor* output);
+EvalVariantFptr recordedVariant();
+#endif
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
                              TfLiteDepthwiseConvParams* params, int width,
@@ -230,7 +244,6 @@ inline void PrecomputeSumOfPackedFiltersFactor(
   }
 }
 
-}  // namespace
 
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   TFLITE_DCHECK(context->AllocatePersistentBuffer != nullptr);
@@ -239,8 +252,7 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
   return data;
 }
 
-#if defined(RUNTIME) ||  defined(EVAL)
-static inline TfLiteStatus DepthwiseConvOptimizedForFilterWidthEight(
+TfLiteStatus DepthwiseConvOptimizedForFilterWidthEight(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -629,7 +641,7 @@ struct DepthwiseConvPacked {
 };
 
 template <class PADDING_TRAITS>
-TfLiteStatus DepthwiseConvPackedFilter(TfLiteContext* context,
+inline TfLiteStatus DepthwiseConvPackedFilter(TfLiteContext* context,
     const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -669,7 +681,27 @@ TfLiteStatus DepthwiseConvPackedFilter(TfLiteContext* context,
   }
 }
 
-inline TfLiteStatus EvalUInt8Padding(
+TfLiteStatus DepthwiseConvPackedFilterWithPadding(TfLiteContext* context,
+    const TfLiteDepthwiseConvParams& params, const OpData* data,
+    const TfLiteTensor* input, const TfLiteTensor* filter,
+    const TfLiteTensor* bias, TfLiteTensor* output)
+{
+  return DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
+           context, params, data,
+           input, filter, bias, output);
+}
+
+TfLiteStatus DepthwiseConvPackedFilterWithoutPadding(TfLiteContext* context,
+    const TfLiteDepthwiseConvParams& params, const OpData* data,
+    const TfLiteTensor* input, const TfLiteTensor* filter,
+    const TfLiteTensor* bias, TfLiteTensor* output)
+{
+  return DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>(
+           context, params, data,
+           input, filter, bias, output);
+}
+
+TfLiteStatus EvalUInt8Padding(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -775,7 +807,7 @@ inline TfLiteStatus EvalUInt8Padding(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalUInt8(
+TfLiteStatus EvalUInt8(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -874,7 +906,7 @@ inline TfLiteStatus EvalUInt8(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalFloat(
+TfLiteStatus EvalFloat(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -915,7 +947,7 @@ inline TfLiteStatus EvalFloat(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalInt8Padding(
+TfLiteStatus EvalInt8Padding(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -1023,7 +1055,7 @@ inline TfLiteStatus EvalInt8Padding(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalInt8(
+TfLiteStatus EvalInt8(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -1126,7 +1158,7 @@ inline TfLiteStatus EvalInt8(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalInt8Reference(
+TfLiteStatus EvalInt8Reference(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -1158,7 +1190,7 @@ inline TfLiteStatus EvalInt8Reference(
   return kTfLiteOk;
 }
 
-inline TfLiteStatus EvalUInt8Reference(
+TfLiteStatus EvalUInt8Reference(
     TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
     const TfLiteTensor* input, const TfLiteTensor* filter,
     const TfLiteTensor* bias, TfLiteTensor* output) {
@@ -1192,13 +1224,7 @@ inline TfLiteStatus EvalUInt8Reference(
                 GetTensorShape(output), GetTensorData<uint8_t>(output));
   return kTfLiteOk;
 }
-#endif
 
-
-#ifdef EVAL
-#include "tensorflow/lite/micro/kernels/portable_optimized/pointer_tables/depthwise_conv_pointer_table.h"
-static unsigned int counter = 0;
-#endif
 
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
@@ -1299,11 +1325,6 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const bool use_optimized_filter_width = (GetTensorShape(filter).Dims(0) != 1);
   const bool use_reference = ((dilation_width_factor != 1)
       || (dilation_height_factor != 1) || use_optimized_filter_width);
-#if defined(PRECOMPILE) || defined(RUNTIME)
-  const bool use_padding = (data->padding.height != 0 || data->padding.width != 0 ||
-      data->padding.height_offset != 0 || data->padding.width_offset != 0);
-  const bool use_packed = (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
-#endif
   const int input_depth = GetTensorShape(input).Dims(3);
   const int needed_size =
             output_depth * filter_width * filter_height * input_depth;
@@ -1317,38 +1338,44 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     data->acc_buf = static_cast<int32_t*>(raw);
   }
 
-#ifdef RUNTIME
+#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+  data->eval_function = recordedVariant();
+#else
+  const bool use_padding = (data->padding.height != 0 || data->padding.width != 0 ||
+      data->padding.height_offset != 0 || data->padding.width_offset != 0);
+  const bool use_packed = (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
+
   // Set the function pointer that is used during inference here
   switch (input->type) {  // Already know in/out types are same.
       case kTfLiteFloat32:
-        data->eval_function = &EvalFloat;
+        data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalFloat);
         break;
       case kTfLiteInt8: {
         if (use_reference) {
-          data->eval_function = &EvalInt8Reference;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8Reference);
         } else if (use_padding) {
           // Use the version that can handle padding
-          data->eval_function = &EvalInt8Padding;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8Padding);
         } else {
-          data->eval_function = &EvalInt8;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8);
         }
         break;
       }
       case kTfLiteUInt8: {
         if (use_packed) {
           if (use_padding) {
-            data->eval_function = &DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>;
+            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvPackedFilterWithPadding);
           } else {
-            data->eval_function = &DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>;
+            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvPackedFilterWithoutPadding);
           }
         } else if (use_reference) {
-          data->eval_function = &EvalUInt8Reference;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8Reference);
         } else if (use_optimized_size) {
-          data->eval_function = &DepthwiseConvOptimizedForFilterWidthEight;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvOptimizedForFilterWidthEight);
         } else if (use_padding) {
-          data->eval_function = &EvalUInt8Padding;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8Padding);
         } else {
-          data->eval_function = &EvalUInt8;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8);
         }
         break;
       }
@@ -1357,59 +1384,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                            TfLiteTypeGetName(input->type), input->type);
         return kTfLiteError;
     }
-#endif
-
-#ifdef PRECOMPILE
-  switch (input->type) {  // Already know in/out types are same.
-      case kTfLiteFloat32:
-        depthwise_conv_pointer_collector.add_pointer("EvalFloat");
-        break;
-      case kTfLiteInt8: {
-        if (use_reference) {
-          depthwise_conv_pointer_collector.add_pointer("EvalInt8Reference");
-        } else if (use_padding) {
-          depthwise_conv_pointer_collector.add_pointer("EvalInt8Padding");
-        } else {
-          depthwise_conv_pointer_collector.add_pointer("EvalInt8");
-        }
-        break;
-      }
-      case kTfLiteUInt8: {
-        if (use_packed) {
-          if (use_padding) {
-            depthwise_conv_pointer_collector.add_pointer(
-                "DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>");
-          } else {
-            depthwise_conv_pointer_collector.add_pointer(
-                "DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>");
-          }
-        } else if (use_reference) {
-          depthwise_conv_pointer_collector.add_pointer("EvalUInt8Reference");
-        } else if (use_optimized_size) {
-          depthwise_conv_pointer_collector.add_pointer("DepthwiseConvOptimizedForFilterWidthEight");
-        } else if (use_padding) {
-          depthwise_conv_pointer_collector.add_pointer("EvalUInt8Padding");
-        } else {
-          depthwise_conv_pointer_collector.add_pointer("EvalUInt8");
-        }
-        break;
-      }
-      default:
-        TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
-                           TfLiteTypeGetName(input->type), input->type);
-        return kTfLiteError;
-    }
-#endif
-
-#ifdef EVAL
-  data->eval_function = *(eval_functions[counter]);
-  counter++;
 #endif
   return kTfLiteOk;
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-#ifndef PRECOMPILE
   const TfLiteDepthwiseConvParams& params =
       *(reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data));
   const OpData& data = *(static_cast<const OpData*>(node->user_data));
@@ -1421,9 +1400,6 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
       (NumInputs(node) == 3) ? GetInput(context, node, kBiasTensor) : nullptr;
 
   return data.eval_function(context, params, &data, input, filter, bias, output);
-  #else
-    return kTfLiteOk;
-  #endif
 }
 
 }  // namespace depthwise_conv
