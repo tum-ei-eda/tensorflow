@@ -39,17 +39,17 @@ namespace micro {
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
 void FullyConnectedUint8PackedWeights(
         const FullyConnectedParams& params,
-        const RuntimeShape& input_shape, const uint8* input_data,
+        const RuntimeShape& input_shape, const uint8_t* input_data,
         const RuntimeShape& filter_shape, const CONTAINER_T* filter_data,
-        const RuntimeShape& bias_shape, const int32* bias_data,
-        const RuntimeShape& output_shape, uint8* output_data) {
-  const int32 input_offset = params.input_offset;
-  const int32 filter_offset = params.weights_offset;
-  const int32 output_offset = params.output_offset;
-  const int32 output_multiplier = params.output_multiplier;
+        const RuntimeShape& bias_shape, const int32_t* bias_data,
+        const RuntimeShape& output_shape, uint8_t* output_data) {
+  const int32_t input_offset = params.input_offset;
+  const int32_t filter_offset = params.weights_offset;
+  const int32_t output_offset = params.output_offset;
+  const int32_t output_multiplier = params.output_multiplier;
   const int output_shift = params.output_shift;
-  const int32 output_activation_min = params.quantized_activation_min;
-  const int32 output_activation_max = params.quantized_activation_max;
+  const int32_t output_activation_min = params.quantized_activation_min;
+  const int32_t output_activation_max = params.quantized_activation_max;
   TFLITE_DCHECK_GE(filter_shape.DimensionsCount(), 2);
   TFLITE_DCHECK_GE(output_shape.DimensionsCount(), 1);
   TFLITE_DCHECK_LE(output_activation_min, output_activation_max);
@@ -70,7 +70,7 @@ void FullyConnectedUint8PackedWeights(
                                        output_shape, output_dim_count - 1);
   const unsigned int accum_depth = filter_shape.Dims(filter_dim_count - 1);
   const unsigned int accum_container_depth = (accum_depth + (items_per_container-1u))/items_per_container;
-  const int32 mask = (1<<bits_per_item)-1;
+  const int32_t mask = (1<<bits_per_item)-1;
 #if IFX_DEBUG_LOGGING
   std::cout << "Packed implementation!: accum-depth = " << std::dec << accum_depth << std::endl;
   bool once = false;
@@ -79,7 +79,7 @@ void FullyConnectedUint8PackedWeights(
   unsigned int final_container_begin = accum_depth-(accum_depth%items_per_container);
   for (int b = 0; b < batches; ++b) {
     for (unsigned int out_c = 0; out_c < output_depth; ++out_c) {
-      int32 acc = 0;
+      int32_t acc = 0;
       const uint8_t *input_vals;
       CONTAINER_T filter_vals;
       unsigned int d = 0;
@@ -93,8 +93,8 @@ void FullyConnectedUint8PackedWeights(
           break;
         // Unrollable loop!!
         for( unsigned int i = 0; i < items_per_container; ++i) {
-            int32 input_val = input_vals[i] + input_offset;
-            int32 filter_val = (filter_vals & mask) + filter_offset;
+            int32_t input_val = input_vals[i] + input_offset;
+            int32_t filter_val = (filter_vals & mask) + filter_offset;
 #if IFX_DEBUG_LOGGING
             if( !once ) {
                 std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
@@ -112,8 +112,8 @@ void FullyConnectedUint8PackedWeights(
 
       unsigned int i = 0;
       while( d < accum_depth ) {
-          int32 input_val = input_vals[i] + input_offset;
-          int32 filter_val = (filter_vals & mask) + filter_offset;
+          int32_t input_val = input_vals[i] + input_offset;
+          int32_t filter_val = (filter_vals & mask) + filter_offset;
 #if IFX_DEBUG_LOGGING
         if( !once ) {
           std::cout <<  std::dec << input_val << "*" << filter_val << ", ";
@@ -138,7 +138,7 @@ void FullyConnectedUint8PackedWeights(
       acc += output_offset;
       acc = std::max(acc, output_activation_min);
       acc = std::min(acc, output_activation_max);
-      output_data[out_c + output_depth * b] = static_cast<uint8>(acc);
+      output_data[out_c + output_depth * b] = static_cast<uint8_t>(acc);
     }
 
   }

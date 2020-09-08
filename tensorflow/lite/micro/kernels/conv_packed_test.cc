@@ -16,7 +16,7 @@ limitations under the License.
 #include <vector>
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/kernels/kernel_runner.h"
 #include "tensorflow/lite/micro/micro_utils.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
 #include "tensorflow/lite/micro/testing/test_utils.h"
@@ -65,14 +65,14 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
                      static_cast<CONTAINER_T>(1);
   uint32_t container_buf = 0;
   // Lazy way of getting sufficient CONTAINER_T aligned storage...
-  uint32 cont_per_minor = std::ceil((float)(minor_dim_size * bits_per_item) / container_bits);
-  uint32 number_containers = (elts / minor_dim_size) * cont_per_minor;
+  uint32_t cont_per_minor = std::ceil((float)(minor_dim_size * bits_per_item) / container_bits);
+  uint32_t number_containers = (elts / minor_dim_size) * cont_per_minor;
   std::vector<CONTAINER_T> packed_data(number_containers);
 
   uint8_t* packed_data_byte = reinterpret_cast<uint8_t*>(packed_data.data());
   int bits_in_container = 0;
   for (size_t dim = 0; dim < elts / minor_dim_size; dim++) {
-    uint32 data_index = dim * minor_dim_size;
+    uint32_t data_index = dim * minor_dim_size;
     for (size_t i = 0; i < minor_dim_size; ++i) {
       // Little-endian packing...
       container_buf |= (static_cast<CONTAINER_T>(data[data_index + i]) & mask) << bits_in_container;
@@ -109,57 +109,32 @@ static void SetPackingParams(TfLiteTensor& tensor, float min, float max,
   tensor.quantization.details.data.custom_sub8bit_packing = format;
 }
 
+
 template <typename T>
 TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
                                  const T* expected_output_data, T* output_data,
                                  int output_length,
                                  TfLiteConvParams* conv_params,
                                  float tolerance = 1e-5) {
-  TfLiteContext context;
-  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
-
-  ::tflite::AllOpsResolver resolver;
-
-  const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_CONV_2D);
-
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
-
-  const char* init_data = reinterpret_cast<const char*>(conv_params);
-  size_t init_data_size = 0;
-  void* user_data = nullptr;
-
-  if (registration->init) {
-    user_data = registration->init(&context, init_data, init_data_size);
-  }
-
   int inputs_array_data[] = {3, 0, 1, 2};
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
 
-  TfLiteNode node;
-  node.inputs = inputs_array;
-  node.outputs = outputs_array;
-  node.user_data = user_data;
-  node.builtin_data = reinterpret_cast<void*>(conv_params);
-  node.custom_initial_data = nullptr;
-  node.custom_initial_data_size = 0;
+  const TfLiteRegistration registration =
+      tflite::ops::micro::Register_CONV_2D();
+  micro::KernelRunner runner(
+      registration, tensors, tensors_size, inputs_array, outputs_array,
+      reinterpret_cast<void*>(conv_params), micro_test::reporter);
 
-  if (registration->prepare) {
-    TfLiteStatus return_val = registration->prepare(&context, &node);
-    if (return_val != kTfLiteOk) {
-      return return_val;
-    }
-  }
+  const char* init_data = reinterpret_cast<const char*>(conv_params);
 
   // TODO(b/154240825): Use a test macro here which fails and returns.
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
-  TF_LITE_ENSURE_OK(context, registration->invoke(&context, &node));
-
-  if (registration->free) {
-    registration->free(&context, user_data);
+  TfLiteStatus status = runner.InitAndPrepare(init_data);
+  if (status != kTfLiteOk) {
+    return status;
   }
+  TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, runner.Invoke());
 
   for (int i = 0; i < output_length; ++i) {
     TF_LITE_MICRO_EXPECT_NEAR(expected_output_data[i], output_data[i],

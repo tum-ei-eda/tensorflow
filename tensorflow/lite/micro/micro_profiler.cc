@@ -36,5 +36,4 @@ void MicroProfiler::EndEvent(uint32_t event_handle) {
   TF_LITE_REPORT_ERROR(reporter_, "%s took %d cycles\n", event_tag_,
                        GetCurrentTimeTicks() - start_time_);
 }
-
 }  // namespace tflite

@@ -52,3 +52,6 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+
+#IFX Specific
+tensorflow/lite/micro/kernels/generated/*.cc

@@ -104,8 +104,7 @@ void RecordingMicroAllocator::PrintAllocations() const {
 void RecordingMicroAllocator::PrintRecordedAllocation(
     RecordedAllocationType allocation_type, const char* allocation_name,
     const char* allocation_description) const {
-
-#if !TF_LITE_STRIP_ERROR_STRINGS
+#ifndef TF_LITE_STRIP_ERROR_STRINGS
   RecordedAllocation allocation = GetRecordedAllocation(allocation_type);
   TF_LITE_REPORT_ERROR(
       error_reporter(),
