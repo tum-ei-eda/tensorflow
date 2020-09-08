@@ -42,8 +42,9 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/conv.h"
 #include "tensorflow/lite/micro/kernels/conv_packed_ops.h"
 
-#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
+
 #include "tensorflow/lite/micro/kernels/pointer_collector.h"
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
 static PointerCollector pointer_collector(
   "conv", 
   "struct OpData;\n",

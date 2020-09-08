@@ -167,30 +167,6 @@ PointerCollectors::~PointerCollectors() {
 
 #if 0
 
-  myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_GENERATED_CONV_POINTER_TABLE_H_ */\n";
-  myfile.close();
-
-
-
-DepthwiseConvPointerCollector::~DepthwiseConvPointerCollector() {
-  //Store everything in the output file here
-  std::ofstream myfile;
-  myfile.open(path, std::fstream::out);
-  myfile << "#ifndef TENSORFLOW_LITE_MICRO_KERNELS_GENERATED_DEPTHWISE_CONV_POINTER_TABLE_H_\n";
-  myfile << "#define TENSORFLOW_LITE_MICRO_KERNELS_GENERATED_DEPTHWISE_CONV_POINTER_TABLE_H_\n\n";
-
-  myfile << "TfLiteStatus (*eval_functions[" << counter << "])(TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n" <<
-      "    const OpData* data, const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter, \n" <<
-      "    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) = {\n";
-
-  for (size_t i = 0; i < pointers.size(); i++) {
-    myfile << pointers[i] << ",\n";
-  }
-  myfile << "};\n\n#endif /* TENSORFLOW_LITE_MICRO_KERNELS_GENERATED_DEPTHWISE_CONV_POINTER_TABLE_H_ */\n";
-  myfile.close();
-}
-
-
 
 FullyConnectedPointerCollector::~FullyConnectedPointerCollector() {
   //Store everything in the output file here

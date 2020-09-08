@@ -29,9 +29,9 @@ limitations under the License.
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
 
+#include "tensorflow/lite/micro/kernels/pointer_collector.h"
 
 #if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
-#include "tensorflow/lite/micro/kernels/pointer_collector.h"
 static PointerCollector pointer_collector(
   "depthwise_conv",
   "struct OpData;\n",

@@ -15,8 +15,6 @@
 #include <string>
 #include <iostream>
 
-#define TFLITE_MICRO_POINTER_COLLECTOR(kernel_name, func_ptr_signature) \
-ConvPointerCollector pointer_collector(kernel_name,func_ptr_signature);
 
 #define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   (pointer_collector.addPointer(#funptr_name), &funptr_name)
