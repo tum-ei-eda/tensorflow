@@ -22,7 +22,7 @@ limitations under the License.
 // TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT: 
 //  When set the names of kernel variants eval functions recorded and can be dumped
 // via PointerCollect API.
-// TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+// TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 //   When set prepare phase kernel variant selection code is dropped with 
 // the eval functions recorded in tflite::micro::kernels::conv::eval_functions used instead.
 //
@@ -105,7 +105,7 @@ struct OpData {
 
 
 // Defined in code generated via PointerCollector::writeCppSyntaxPointerTable
-#ifdef TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+#ifdef TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 typedef TfLiteStatus (*EvalVariantFptr)(
       TfLiteContext* context, const TfLiteDepthwiseConvParams &params, const OpData* data,
       const TfLiteTensor* input, const TfLiteTensor* filter,
@@ -1338,7 +1338,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     data->acc_buf = static_cast<int32_t*>(raw);
   }
 
-#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   data->eval_function = recordedVariant();
 #else
   const bool use_padding = (data->padding.height != 0 || data->padding.width != 0 ||

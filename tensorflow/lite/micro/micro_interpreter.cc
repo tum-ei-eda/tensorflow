@@ -43,7 +43,7 @@ const char* OpNameFromRegistration(const TfLiteRegistration* registration) {
 
 }  // namespace
 
-#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 namespace ops {
 namespace micro {
   void  resetRecordedVariants();
@@ -384,7 +384,7 @@ TfLiteStatus MicroInterpreter::Invoke() {
   if (!tensors_allocated_) {
     TF_LITE_ENSURE_OK(&context_, AllocateTensors());
   }
-#if TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   tflite::ops::micro::resetRecordedVariants();
 #endif
 

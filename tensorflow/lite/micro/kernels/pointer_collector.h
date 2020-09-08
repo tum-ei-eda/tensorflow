@@ -79,7 +79,7 @@ class FullyConnectedPointerCollector: public PointerCollector {
 
 #endif
 
-#elif TFLITE_MICRO_USE_STATIC_KERNEL_VARIANT
+#elif TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 
 
 #else
