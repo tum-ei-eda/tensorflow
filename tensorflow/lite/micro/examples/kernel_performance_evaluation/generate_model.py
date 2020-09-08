@@ -132,7 +132,7 @@ q_params = {}
 f_weights = {}
 weight_codes = {}
 #%%
-QBITS = [4,5,6,8]
+QBITS = [8] # 4,5,6,
 for qbits in QBITS:
     # 
     tf.keras.backend.clear_session()
@@ -235,17 +235,27 @@ for qbits in QBITS:
     else:
         type_suff = ""
     mlir_fname_root = f"mnist{type_suff}_{qbits}"
-    cmdline_args = {'print-ir-after-all':None}
+    tflite_u_fname = mlir_fname_root+".tflite"
     translate_from_keras_model(model_q, mlir_fname_root, 0.0, 1.0, use_toco=False,
                                constant_folding=False, translator=translator,
-                               tool_cmdline_args={})
-    #translate_from_keras_model(model_q, "hello_world_toco", 0.0, math.pi*2, use_toco=True,
-    #                           constant_folding=False)
+                               tool_cmdline_args={'experimental-pack-packable-quant-constants':'true'})
+    if qbits < 8:
+        # Create flatbuffer without actually packing narrow weights that is runnable on standard tflite
+        # as a reference
+        mlir_tflite_fname_root = f"mnist_unpacked_{qbits}"
+        tflite_fname = mlir_tflite_fname_root+".tflite"
+        translate_from_keras_model(model_q, mlir_tflite_fname_root, 0.0, 1.0, use_toco=False,
+                                constant_folding=False, translator=translator,
+                                tool_cmdline_args={'experimental-pack-packable-quant-constants':'false'}
+                                )
+    else:
+        tflite_fname = tflite_u_fname
 
     write_C_array_src_and_hdr(f"{qbits}-Bit weight 'mnist' model", ".", mlir_fname_root,
                               aligned=True,
-                              src_datafile=mlir_fname_root+".tflite")
-
+                              src_datafile=tflite_u_fname)
+    print(model_q.layers)
+    sys.exit(0)
     layer_vars = model_q.layers[-2].get_weights()
     f_weights[qbits] = [v for v in layer_vars[0].flatten()]
     fq_min = layer_vars[3]
