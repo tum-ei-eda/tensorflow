@@ -53,7 +53,6 @@ X_test = np.expand_dims(X_test, axis=3)/255.0
 Y_test = tf.keras.utils.to_categorical(Y_test, 2)
 # Set random seed for reproducibility
 tf.random.set_seed(1)
-
 # %% [markdown]
 # ## Add some noise
 # Since it was generated directly by the sine function, our data fits a nice, smooth curve.
@@ -257,17 +256,25 @@ for qbits in QBITS:
     weight_codes[qbits] = uniform_encode(f_weights[qbits], scale_zero=q_params[qbits], bits=qbits)
     with open(mlir_fname_root+ "refdata.h", "w") as res:
 
-        res.write(f"float {mlir_fname_root}_refdata[2][28][28][1] = [\n")
-        test_data = [np.expand_dims(X_test[0], axis=0), np.expand_dims(X_test[-1], axis=0)]
-        results = [[1,0], [0,1]]
+        res.write(f"float {mlir_fname_root}_refdata[2][28][28][1] = {{\n")
+        test_data = [np.expand_dims(X_test[0], axis=0), np.expand_dims(X_test[1], axis=0)]
+        results = [[0,1], [1,0]]
         for i, x in enumerate(test_data):
-            res.write( f"    {x},\n")
-        res.write("];")
-        res.write(f"float {mlir_fname_root}_refdata_res[2][2] = {{\n")
+            res.write(f"{{")
+            for dim2 in range(28):
+                res.write(f"{{")
+                for dim3 in range(28):
+                    res.write(f"{{{x[0][dim2][dim3][0]} }},")
+                res.write(f"}},\n")
+            res.write(f"}},\n")
+        res.write(f"}};\n\n")
+            
+        res.write(f"float {mlir_fname_root}_refdata_label[2][2] = {{\n")
         for i, x in enumerate(test_data):
             y = model_q.predict([x])
-            res.write( f"    {{{results[i]}, {y}}},\n")
-        res.write("}};")
+            print(f"{y} should be close to {results[i]}")
+            res.write( f"    {{{results[i][0]},{results[i][1]}}},\n")
+        res.write(f"}};")
 
 # %%
 for qbits in QBITS:
