@@ -242,7 +242,7 @@ fi
 
 if [ -z "$NOTFLITE" ] 
 then
-    if [ -z "$NODOWNLOAD_UPDATE"]
+    if [ -z "$NODOWNLOAD_UPDATE" ]
     then
 	    make mrproper clean_downloads
     else

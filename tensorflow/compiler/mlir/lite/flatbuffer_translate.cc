@@ -114,11 +114,18 @@ static opt<bool, true> strip_debug_info_flag(
     llvm::cl::location(strip_debug_info), llvm::cl::init(false));
 
 bool experimental_pack_packable_quantized_constants;
+bool experimental_log_packing;
 
 static opt<bool, true> experimental_pack_packable_quantized_constants_flag(
     "experimental-pack-packable-quant-constants",
     llvm::cl::desc("Actually pack flatbuffer values for packable quantized constants."),
     llvm::cl::location(experimental_pack_packable_quantized_constants),
+    llvm::cl::init(false));
+
+static opt<bool, true> experimental_log_packing_flag(
+    "experimental-log-packing",
+    llvm::cl::desc("Actually pack flatbuffer values for packable quantized constants."),
+    llvm::cl::location(experimental_log_packing),
     llvm::cl::init(false));
 
 namespace mlir {

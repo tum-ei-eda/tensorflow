@@ -3,21 +3,14 @@
 
 cd `dirname "$BASH_SOURCE"`/..
 
-
-# Native host build of micro_speech, execute and check signals test passed
-bazel test //tensorflow/lite:all //tensorflow/lite/kernels/...:all //tensorflow/lite/core/...:all 
-
-RES=$?
-# Under Windows tflite test appear broken and unmaintained (fail to build)
+TEST_OPTIONS=()
 case `uname` in
 
   MINGW*)
-     if [[ ! $RES = 0 ]]
-     then
-        exit 122
-     else
-        exit 123
-     fi
+    TEST_OPTIONS=( --test_tag_filters=-no_windows )
 esac
+	
+# Native host build of micro_speech, execute and check signals test passed
+bazel test "${TEST_OPTIONS[@]}" //tensorflow/lite:all //tensorflow/lite/kernels/...:all //tensorflow/lite/core/...:all 
 
-exit $RES
+
