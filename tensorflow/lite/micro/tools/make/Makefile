@@ -325,10 +325,11 @@ ALL_SRCS := \
 # GNU make hack to remove whitespaces
 space :=
 space +=
-SQUASHED_TAGS := $(subst $(space),_,$(strip $(ALL_TAGS)))
+
+underscore_seperated = $(subst $(space),_,$(strip $(1)))
 
 # Where compiled objects are stored.
-GENDIR := $(GENROOT_DIR)/$(SQUASHED_TAGS)$(BUILD_SUFFIX)/
+GENDIR := $(GENROOT_DIR)/$(call underscore_seperated,$(ALL_TAGS))$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
