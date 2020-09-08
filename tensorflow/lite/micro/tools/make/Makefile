@@ -322,9 +322,13 @@ ALL_SRCS := \
 	$(MICROLITE_CC_SRCS) \
 	$(MICROLITE_TEST_SRCS)
 
-# Where compiled objects are stored.
+# GNU make hack to remove whitespaces
+space :=
+space +=
+SQUASHED_TAGS := $(subst $(space),_,$(strip $(ALL_TAGS)))
 
-GENDIR := $(GENROOT_DIR)/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+# Where compiled objects are stored.
+GENDIR := $(GENROOT_DIR)/$(SQUASHED_TAGS)$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/

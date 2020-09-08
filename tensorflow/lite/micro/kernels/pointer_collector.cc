@@ -14,6 +14,9 @@
 #include <fstream>
 #include <memory>
 
+namespace tflite {
+namespace ops {
+namespace micro {
 //
 // Implementation of pointer collector (will be owned) by
 // PointerCollectors singleton.
@@ -93,6 +96,11 @@ void PointerCollector::addPointer(const std::string &pointer) {
 
 void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
 
+  os << 
+    "namespace tflite {\n"
+    "namespace ops {\n"
+    "namespace micro {\n\n";
+
   for (auto &collector : collectors_) {
     os << "namespace " << collector->kernel_name_ << " {\n\n";
     os << collector->local_argtype_decls_ << "\n";
@@ -118,8 +126,7 @@ void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
       // Function pointer table for sequence of invocations recorded for model.
       // Common special case: if same Variant is used throughout use table size 1
       size_t ptr_tbl_size = unique_pointers.size() == 1u ? 1u : collector->pointers_.size();
-      os << "TfLiteStatus (*eval_functions[" << ptr_tbl_size << "])"
-        << "(" << collector->signature_ << ") = {\n";
+      os << "RecordedVariantFPtr eval_functions[" << ptr_tbl_size << "] = {\n";
       for( size_t i = 0; i < ptr_tbl_size; ++i ) {
         os << "  " << collector->pointers_[i] << ",\n";
       }
@@ -139,31 +146,37 @@ void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
     os << "  " << collector->kernel_name_ << "::invoke_counter = 0;\n";
   }
   os << "}\n\n";
+  
+  os <<
+    "} // namespace micro\n"
+    "} // namespace ops\n"
+    "} // namespace tflite\n";
 }
 
 
 PointerCollectors::~PointerCollectors() {
 #if TF_LITE_MICRO_AUTO_DUMP_POINTER_TABLES
   std::ofstream myfile;
-  myfile.open("tensorflow/lite/micro/kernels/generated/static_eval_tables.cc", std::fstream::out);
+  myfile.open("tensorflow/lite/micro/kernels/recorded_model/static_eval_tables.cc", std::fstream::out);
   myfile << 
   "#include \"tensorflow/lite/c/common.h\"\n"
   "#include \"tensorflow/lite/c/builtin_op_data.h\"\n"
-  "\n"
-  "namespace tflite {\n"
-  "namespace ops {\n"
-  "namespace micro {\n\n";
+  "\n";
   writeInvokeRecordedCppFunctions(myfile);
-  myfile <<
-  "} // namespace micro\n"
-  "} // namespace ops\n"
-  "} // namespace tflite\n";
   myfile.close();
 #endif
 }
 
-#endif
 
+void writeCppFunctionsToInvokeRecorded(std::ostream &os) {
+  PointerCollectors::instance().writeInvokeRecordedCppFunctions(os);
+}
+
+}  // namespace ops
+}  // namespace micro
+}  // namespace tflite
+
+#endif
 
 #if 0
 
@@ -186,3 +199,5 @@ FullyConnectedPointerCollector::~FullyConnectedPointerCollector() {
   myfile.close();
 }
 #endif
+
+

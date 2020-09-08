@@ -31,15 +31,13 @@ limitations under the License.
 
 #include "tensorflow/lite/micro/kernels/pointer_collector.h"
 
-#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 
-static PointerCollector pointer_collector(
+KERNEL_VARIANT_COLLECT_INFO(
   "depthwise_conv",
   "struct OpData;\n",
       "    TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n"
       "    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter, \n"
       "    const TfLiteTensor* bias, TfLiteTensor* output"
 );
-#endif
 
 
 #include "tensorflow/lite/c/builtin_op_data.h"

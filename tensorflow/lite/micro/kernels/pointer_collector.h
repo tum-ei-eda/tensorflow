@@ -19,7 +19,16 @@
 #define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   (pointer_collector.addPointer(#funptr_name), &funptr_name)
 
+#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature) \
+  static tflite::ops::micro::PointerCollector pointer_collector( \
+    kernel_name, \
+    type_decls, \
+    funptr_signature \
+);
 
+namespace tflite {
+namespace ops {
+namespace micro {
 
 class PointerCollectors;
 
@@ -40,8 +49,6 @@ class PointerCollector  {
 
   static void setOutputPath(const std::string &output_path);
 
-  static std::string writeInvokeRecordedCppFunctions(std::ostream &os);
-
  protected:
   friend class PointerCollectors;
   class Implementation;
@@ -52,8 +59,12 @@ private:
   PointerCollector(const PointerCollector &);
 };
 
+//
+// Primary entry point for tflite(u) post-compiler...
+//
+void writeCppFunctionsToInvokeRecorded(std::ostream &os);
 
-#if 0
+#if 0 // TODO REMOVE
 class ConvPointerCollector: public PointerCollector {
  public:
   ConvPointerCollector(std::string _path): PointerCollector(_path) {}
@@ -75,14 +86,25 @@ class FullyConnectedPointerCollector: public PointerCollector {
   ~FullyConnectedPointerCollector();
 };
 
+
 #endif
+
+}  // namespace micro
+}  // namespace ops
+}  // namespace tflite
+
 
 #elif TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 
+#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature)
 
 #else
-#define TLITE_MICRO_SELECTED_KERNEL_VARIANT(kernel_name,funptr_name) \
+#define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   &funptr_name
+
+  
+#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature)
+
 #endif
 
 #endif /* TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_POINTER_TABLES_POINTER_COLLECTOR_H_ */
