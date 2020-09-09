@@ -44,10 +44,6 @@ limitations under the License.
 extern "C" {
 #endif  // __cplusplus
 
-// Set this macro to forward/backward compatible
-// implementation of code dependent on additional fields
-// for holding packing information.
-#define TF_LITE_PACKED_QUANTIZED_DATA_VERSION 100
 
 typedef enum TfLiteStatus {
   kTfLiteOk = 0,
