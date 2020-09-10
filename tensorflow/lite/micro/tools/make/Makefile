@@ -62,6 +62,10 @@ TARGET_ARCH := $(HOST_ARCH)
 CXX_TOOL := g++
 CC_TOOL := gcc
 AR_TOOL := ar
+LD_TOOL := ld
+OBJDUMP_TOOL := objdump
+OBJCOPY_TOOL := objcopy
+READELF_TOOL := readelf
 
 # Specify TAGS on the command line to add a particular set of specialized
 # implementations, for example TAGS="CMSIS disco_f746ng" to target a Discovery
@@ -103,8 +107,8 @@ CC_WARNINGS := -Werror -Wsign-compare -Wdouble-promotion \
 # TODO(b/150240249): Add in -fno-rtti once that works for the Xtensa toolchain.
 # TODO(b/159155203): Consider TF_LITE_STATIC_MEMORY to align more with the fact
 # this flag is for an optimized micro runtime.
-CXXFLAGS := -std=c++11 -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
-CCFLAGS  := -std=c11   -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
+CXXFLAGS := -std=c++11 -Wstrict-aliasing -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
+CCFLAGS  := -DTF_LITE_STATIC_MEMORY $(CC_WARNINGS)
 ARFLAGS := -r
 
 # override these in the makefile.inc for specific compiler targets
@@ -119,10 +123,10 @@ else ifeq ($(BUILD_TYPE), release)
 	CXXFLAGS += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
 	CCFLAGS  += -DNDEBUG -O3 -DTF_LITE_STRIP_ERROR_STRINGS
     BUILD_SUFFIX := _release
-else
+else  
 	CXXFLAGS += -DNDEBUG -O3
 	CCFLAGS  += -DNDEBUG -O3
-    BUILD_SUFFIX := 
+    BUILD_SUFFIX :=
 endif
 
 # This library is the main target for this makefile. It will contain a minimal
@@ -132,8 +136,12 @@ MICROLITE_LIB_NAME := libtensorflow-microlite.a
 # These two must be defined before we include the target specific Makefile.inc
 # because we filter out the examples that are not supported for those targets.
 # See targets/xtensa_xpg_makefile.inc for an example.
-MICRO_LITE_EXAMPLE_TESTS := $(shell find $(EXAMPLES_DIR) -name Makefile.inc)
-MICRO_LITE_BENCHMARKS := $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/Makefile.inc)
+# We limit max depth of directories to search to do not include
+# target specific Makefiles that are included directly by the
+# main example Makefile.
+# See examples/micro_speech/Makefile.inc for an example.
+MICRO_LITE_EXAMPLE_TESTS := $(shell find $(EXAMPLES_DIR) -maxdepth 2 -name Makefile.inc)
+MICRO_LITE_BENCHMARKS := $(wildcard  $(TFLITE_U_PATH)tensorflow/lite/micro/benchmarks/Makefile.inc)
 
 MICROLITE_TEST_SRCS := \
 $(wildcard $(TFLITE_U_PATH)tensorflow/lite/micro/*test.cc) \
@@ -204,6 +212,7 @@ tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/logistic.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/l2normalization.h \
+tensorflow/lite/kernels/internal/reference/integer_ops/mean.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/mul.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h \
 tensorflow/lite/kernels/internal/reference/integer_ops/tanh.h \
@@ -228,22 +237,23 @@ tensorflow/lite/kernels/internal/reference/tanh.h \
 tensorflow/lite/kernels/internal/cppmath.h \
 tensorflow/lite/kernels/internal/max.h \
 tensorflow/lite/kernels/internal/min.h \
+tensorflow/lite/kernels/internal/portable_tensor.h \
 tensorflow/lite/kernels/internal/strided_slice_logic.h \
-tensorflow/lite/kernels/internal/tensor.h \
 tensorflow/lite/kernels/internal/tensor_ctypes.h \
 tensorflow/lite/kernels/internal/types.h \
 tensorflow/lite/kernels/kernel_util.h \
 tensorflow/lite/kernels/op_macros.h \
 tensorflow/lite/kernels/padding.h \
+tensorflow/lite/portable_type_to_tflitetype.h \
 tensorflow/lite/schema/schema_generated.h \
-tensorflow/lite/string_type.h \
-tensorflow/lite/string_util.h \
-tensorflow/lite/type_to_tflitetype.h \
 tensorflow/lite/experimental/custom_quantization_util.h \
 tensorflow/lite/version.h
 
+# TODO(b/165940489): Figure out how to avoid including fixed point
+# platform-specific headers.
 THIRD_PARTY_CC_HDRS := \
 third_party/gemmlowp/fixedpoint/fixedpoint.h \
+third_party/gemmlowp/fixedpoint/fixedpoint_neon.h \
 third_party/gemmlowp/fixedpoint/fixedpoint_sse.h \
 third_party/gemmlowp/internal/detect_platform.h \
 third_party/gemmlowp/LICENSE \
@@ -287,6 +297,8 @@ THIRD_PARTY_DOWNLOADS :=
 $(eval $(call add_third_party_download,$(GEMMLOWP_URL),$(GEMMLOWP_MD5),gemmlowp,))
 $(eval $(call add_third_party_download,$(FLATBUFFERS_URL),$(FLATBUFFERS_MD5),flatbuffers,))
 $(eval $(call add_third_party_download,$(RUY_URL),$(RUY_MD5),ruy,))
+$(eval $(call add_third_party_download,$(PERSON_MODEL_URL),$(PERSON_MODEL_MD5),person_model_grayscale,))
+$(eval $(call add_third_party_download,$(PERSON_MODEL_INT8_URL),$(PERSON_MODEL_INT8_MD5),person_model_int8,))
 
 # These target-specific makefiles should modify or replace options like
 # CXXFLAGS or LIBS to work for a specific targeted architecture. All logic
@@ -310,9 +322,14 @@ ALL_SRCS := \
 	$(MICROLITE_CC_SRCS) \
 	$(MICROLITE_TEST_SRCS)
 
-# Where compiled objects are stored.
+# GNU make hack to remove whitespaces
+space :=
+space +=
 
-GENDIR := $(GENROOT_DIR)/$(TARGET)_$(TARGET_ARCH)$(BUILD_SUFFIX)/
+underscore_seperated = $(subst $(space),_,$(strip $(1)))
+
+# Where compiled objects are stored.
+GENDIR := $(GENROOT_DIR)/$(call underscore_seperated,$(ALL_TAGS))$(BUILD_SUFFIX)/
 OBJDIR := $(GENDIR)obj/
 BINDIR := $(GENDIR)bin/
 LIBDIR := $(GENDIR)lib/
@@ -403,11 +420,9 @@ build: $(MICROLITE_BUILD_TARGETS)
 ifndef TFLITE_U_PATH
 generate_projects: $(ALL_PROJECT_TARGETS)
 
-generate_non_kernel_projects: $(filter-out generate_kernel%,$(ALL_PROJECT_TARGETS))
+ARDUINO_PROJECT_TARGETS := $(foreach TARGET,$(ALL_PROJECT_TARGETS),$(if $(findstring _arduino,$(TARGET)),$(TARGET),))
 
-generate_non_test_projects: $(filter-out %_test%,$(ALL_PROJECT_TARGETS))
-
-generate_arduino_zip: generate_non_kernel_projects $(ARDUINO_LIBRARY_ZIPS)
+generate_arduino_zip: $(ARDUINO_PROJECT_TARGETS) $(ARDUINO_LIBRARY_ZIPS)
 	python tensorflow/lite/micro/tools/make/merge_arduino_zips.py $(PRJDIR)/tensorflow_lite.zip $(ARDUINO_LIBRARY_ZIPS)
 
 # Removes third-party downloads.

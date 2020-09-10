@@ -16,16 +16,18 @@ limitations under the License.
 #include "tensorflow/lite/micro/micro_error_reporter.h"
 
 int main(int argc, char** argv) {
+#ifndef TF_LITE_STRIP_ERROR_STRINGS
   tflite::MicroErrorReporter micro_error_reporter;
   tflite::ErrorReporter* error_reporter = &micro_error_reporter;
+#endif
   TF_LITE_REPORT_ERROR(error_reporter, "Number: %d", 42);
   TF_LITE_REPORT_ERROR(error_reporter, "Badly-formed format string %");
   TF_LITE_REPORT_ERROR(error_reporter,
                        "Another % badly-formed %% format string");
 
   // Workaround gcc C/C++ horror-show.  For 32-bit targets  va_list is simply an alias for
-  // char *, gcc-7 (at least) converts the second string constant to const char * 
-  // only a warning that C++ actually forbids this with the result that
+  // char *, gcc-7 (at least) converts the second string constant from to char * 
+  // with only a warning that C++ actually forbids this!   This means 
   // MicroErrorReporter::Report(const char* format, va_list args) 
   // is called rather than
   // MicroErrorReporter::Report(const char* format, ...) 
@@ -38,4 +40,5 @@ int main(int argc, char** argv) {
 #else
   TF_LITE_REPORT_ERROR(error_reporter, "~~~%s~~~", "ALL TESTS PASSED");
 #endif
+#endif  // !defined(TF_LITE_STRIP_ERROR_STRINGS)
 }

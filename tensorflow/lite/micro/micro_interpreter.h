@@ -25,12 +25,15 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/micro/micro_allocator.h"
 #include "tensorflow/lite/micro/micro_op_resolver.h"
+#include "tensorflow/lite/portable_type_to_tflitetype.h"
 #include "tensorflow/lite/schema/schema_generated.h"
-#include "tensorflow/lite/type_to_tflitetype.h"
 
 namespace tflite {
 
+
 namespace internal {
+
+constexpr size_t kMaxScratchBuffersPerOp = 8;
 
 // A helper class to encapsulate the implementation of APIs in Context.
 // context->impl_ points to an instance of this class.
@@ -42,8 +45,7 @@ class ContextHelper {
                          MicroAllocator* allocator, const Model* model);
 
   // Functions that will be assigned to function pointers on TfLiteContext:
-  static TfLiteStatus AllocatePersistentBuffer(TfLiteContext* ctx, size_t bytes,
-                                               void** ptr);
+  static void* AllocatePersistentBuffer(TfLiteContext* ctx, size_t bytes);
   static TfLiteStatus RequestScratchBufferInArena(TfLiteContext* ctx,
                                                   size_t bytes,
                                                   int* buffer_idx);
@@ -54,25 +56,52 @@ class ContextHelper {
                                  int tensor_idx);
   static TfLiteEvalTensor* GetEvalTensor(const struct TfLiteContext* context,
                                          int tensor_idx);
+  // Commits all scratch buffer allocations to MicroAllocator.
+  TfLiteStatus CommitScratchBuffers();
+
+  static void SetNodeIndexHooked(const struct TfLiteContext* context,
+                                    int idx);
 
   // Sets the current node index to assist with scratch buffer allocations:
   void SetNodeIndex(int idx);
 
   // Sets the pointer to a list of TfLiteEvalTensor instances.
   void SetTfLiteEvalTensors(TfLiteEvalTensor* eval_tensors);
+  // Sets the pointer to scratch buffer handle, which is needed by
+  // `GetScratchBuffer`.
+  void SetScratchBufferHandles(void* scratch_buffer_handle);
 
  private:
-  MicroAllocator* allocator_;
-  ErrorReporter* error_reporter_;
-  const Model* model_;
-  TfLiteEvalTensor* eval_tensors_;
+  MicroAllocator* allocator_ = nullptr;
+  ErrorReporter* error_reporter_ = nullptr;
+  const Model* model_ = nullptr;
+  TfLiteEvalTensor* eval_tensors_ = nullptr;
+  void* scratch_buffer_handles_ = nullptr;
   int current_node_idx_ = -1;
+
+  size_t scrach_buffer_sizes_[kMaxScratchBuffersPerOp];
+  size_t scratch_buffer_count_ = 0;
 };
 
 }  // namespace internal
 
+
+
 class MicroInterpreter {
  public:
+
+  struct TfLiteContextHooks {
+
+    decltype(TfLiteContext::AllocatePersistentBuffer)  AllocatePersistentBuffer;
+
+    decltype(TfLiteContext::RequestScratchBufferInArena) RequestScratchBufferInArena;
+
+    decltype(TfLiteContext::GetScratchBuffer) GetScratchBuffer;
+
+    void (*SetNodeIndex)(const struct TfLiteContext* context,
+                             int idx);
+  };
+
   // The lifetime of the model, op resolver, tensor arena, error reporter and
   // profiler must be at least as long as that of the interpreter object, since
   // the interpreter may need to access them at any time. This means that you
@@ -169,6 +198,23 @@ class MicroInterpreter {
   // arena_used_bytes() + 16.
   size_t arena_used_bytes() const { return allocator_.used_bytes(); }
 
+  //
+  // Provides entry-pointer for intercepting allocation etc for
+  // off-line pre-interpretation/instrumentation and similar.
+  //
+  inline TfLiteContext *getTFLContext()  {
+    return &context_;
+  }
+ 
+  inline TfLiteContextHooks *getHooks() const {
+    return hooks_;
+  }
+
+   
+  inline void setHooks( TfLiteContextHooks *hooks) {
+    hooks_ = hooks;
+  }
+
  protected:
   const MicroAllocator& allocator() const { return allocator_; }
   const TfLiteContext& context() const { return context_; }
@@ -202,6 +248,9 @@ class MicroInterpreter {
   // TfLiteEvalTensor buffers.
   TfLiteTensor* input_tensor_;
   TfLiteTensor* output_tensor_;
+
+  TfLiteContextHooks *hooks_;
+  static TfLiteContextHooks default_hooks_;
 };
 
 }  // namespace tflite

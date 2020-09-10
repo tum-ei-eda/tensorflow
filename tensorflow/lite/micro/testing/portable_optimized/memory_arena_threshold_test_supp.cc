@@ -24,21 +24,22 @@ limitations under the License.
 // We need different values for portable_optimized as different ScratchBuffer /
 // PersistentBuffer are allocated result in different Head/Tail usage.
 
-const unsigned int TfLiteTensor_size_measured = 64u;
+const unsigned int TfLiteEvalTensor_size_measured = 24u;
 const int kKeywordModelTensorCount = 54;
 const int kKeywordModelHeadSize = 672;
+
 #ifdef TF_LITE_STATIC_MEMORY
-const int kKeywordModelTailSize = 13936+kKeywordModelTensorCount*(sizeof(TfLiteTensor)-TfLiteTensor_size_measured);
+const int kKeywordModelTailSize = 14032+kKeywordModelTensorCount*(sizeof(TfLiteEvalTensor)-TfLiteEvalTensor_size_measured);
 #else
-const int kKeywordModelTailSize = 14304+kKeywordModelTensorCount*(sizeof(TfLiteTensor)-TfLiteTensor_size_measured);
+const int kKeywordModelTailSize = 14400+kKeywordModelTensorCount*(sizeof(TfLiteEvalTensor)-TfLiteEvalTensor_size_measured);
 #endif
 const int kKeywordModellAdditionalOpTailAllocations = 1024+512;
 
 const int kTestConvModelTensorCount = 15;
 const int kTestConvModelHeadSize = 7744;
 #ifdef TF_LITE_STATIC_MEMORY
-const int kTestConvModelTailSize = 2016+kTestConvModelTensorCount*(sizeof(TfLiteTensor)-TfLiteTensor_size_measured);
+const int kTestConvModelTailSize = 2144+kTestConvModelTensorCount*(sizeof(TfLiteEvalTensor)-TfLiteEvalTensor_size_measured);
 #else
-const int kTestConvModelTailSize = 2176+kTestConvModelTensorCount*(sizeof(TfLiteTensor)-TfLiteTensor_size_measured);    
+const int kTestConvModelTailSize = 2304+kTestConvModelTensorCount*(sizeof(TfLiteEvalTensor)-TfLiteEvalTensor_size_measured);    
 #endif
-const int kTestConvModelAdditionalOpTailAllocations = 1024+512;
+

@@ -35,11 +35,11 @@ struct DepthwiseConvPackedFilter {
 
   static inline void Run(const DepthwiseParams& params,
                          const RuntimeShape& input_shape,
-                         const uint8* input_data,
+                         const uint8_t* input_data,
                          const RuntimeShape& filter_shape,
                          const CONTAINER_T* filter_data,
-                         const RuntimeShape& bias_shape, const int32* bias_data,
-                         const RuntimeShape& output_shape, uint8* output_data, int32_t *accbuf) {
+                         const RuntimeShape& bias_shape, const int32_t* bias_data,
+                         const RuntimeShape& output_shape, uint8_t* output_data, int32_t *accbuf) {
     const int stride_width = params.stride_width;
     const int stride_height = params.stride_height;
     const int dilation_width_factor = params.dilation_width_factor;
@@ -47,12 +47,12 @@ struct DepthwiseConvPackedFilter {
     const int pad_width = params.padding_values.width;
     const int pad_height = params.padding_values.height;
     const int depth_multiplier = params.depth_multiplier;
-    const int32 output_activation_min = params.quantized_activation_min;
-    const int32 output_activation_max = params.quantized_activation_max;
-    const int32 input_offset = params.input_offset;
-    const int32 filter_offset = params.weights_offset;
-    const int32 output_offset = params.output_offset;
-    const int32 output_multiplier = params.output_multiplier;
+    const int32_t output_activation_min = params.quantized_activation_min;
+    const int32_t output_activation_max = params.quantized_activation_max;
+    const int32_t input_offset = params.input_offset;
+    const int32_t filter_offset = params.weights_offset;
+    const int32_t output_offset = params.output_offset;
+    const int32_t output_multiplier = params.output_multiplier;
     const int output_shift = params.output_shift;
     TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
     TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
@@ -72,7 +72,7 @@ struct DepthwiseConvPackedFilter {
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
     const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
-    const int32 mask = (1<<bits_per_item)-1;
+    const int32_t mask = (1<<bits_per_item)-1;
 
     for (int b = 0; b < batches; ++b) {
       for (int out_y = 0; out_y < output_height; ++out_y) {
@@ -102,8 +102,8 @@ struct DepthwiseConvPackedFilter {
                   int number_elements_in_container = std::min(output_depth - channel_container * items_per_container, items_per_container);
                   for (int element = 0; element < number_elements_in_container; element++) {
                     const unsigned int output_channel = channel_container*items_per_container + element;
-                    int32 input_val = input_data[Offset(input_shape, b, in_y, in_x, input_channel)];
-                    int32 filter_val = filter_vals & mask;
+                    int32_t input_val = input_data[Offset(input_shape, b, in_y, in_x, input_channel)];
+                    int32_t filter_val = filter_vals & mask;
                     filter_vals >>= bits_per_item;
                     accbuf[output_channel] += (filter_val + filter_offset) * (input_val + input_offset);
                     if ((output_channel+1) % depth_multiplier == 0) {
@@ -115,7 +115,7 @@ struct DepthwiseConvPackedFilter {
             }
           }
           for (int oc =0; oc < output_depth; ++oc) {
-            int32 acc = accbuf[oc];
+            int32_t acc = accbuf[oc];
             if (bias_data) {
               acc += bias_data[oc];
             }
@@ -124,7 +124,7 @@ struct DepthwiseConvPackedFilter {
             acc = std::max(acc, output_activation_min);
             acc = std::min(acc, output_activation_max);
             output_data[Offset(output_shape, b, out_y, out_x, oc)] =
-                static_cast<uint8>(acc);
+                static_cast<uint8_t>(acc);
           }
 
         }  // out_x
@@ -137,10 +137,10 @@ struct DepthwiseConvPackedFilter {
 
 inline void DepthwiseConvPackedFilter(
     const DepthwiseParams& params, const RuntimeShape& input_shape,
-    const uint8* input_data, const RuntimeShape& filter_shape,
+    const uint8_t* input_data, const RuntimeShape& filter_shape,
     const void* filter_data, const RuntimeShape& bias_shape,
-    const int32* bias_data, const RuntimeShape& output_shape,
-    uint8* output_data,
+    const int32_t* bias_data, const RuntimeShape& output_shape,
+    uint8_t* output_data,
     const TfLiteCustomSub8BitPackingDetails& packing_details,
     int32_t *acc_buf) {
   // We need to allocated output_deptch size buffer for accumulators.

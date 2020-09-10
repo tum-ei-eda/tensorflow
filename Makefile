@@ -18,7 +18,7 @@ show_project_targets:
 test_executables: $(MICROLITE_BUILD_TARGETS)
 
 mrproper:
-	rm -rf $(PROJECT_DIR)/gen
+	rm -rf $(GENROOT_DIR)
 
 # Note that third-party download libraries are copied into place
 # as they appear in a sub-directory of tools/make

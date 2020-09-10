@@ -1,12 +1,25 @@
 # Settings for RISCV 32-bit MCU toolchain target Variants
 
+
+
 #
 # Common settings (derived from pulpine via TUM / ETISSS examples
 #
 
 ifneq ($(subst ifx_riscv32,,$(TARGET)),$(TARGET))
 
-  IFX_RV_TARGET_ARCH ?= rv32imac
+
+  LD := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${LD_TOOL}
+  OBJDUMP := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJDUMP_TOOL}
+  OBJCOPY := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${OBJCOPY_TOOL}
+  READELF := $(TARGET_TOOLCHAIN_ROOT)${TARGET_TOOLCHAIN_PREFIX}${READELF_TOOL}
+
+
+  ifeq ($(TARGET), ifx_riscv32_fpga)
+    IFX_RV_TARGET_ARCH ?= rv32im
+  else
+    IFX_RV_TARGET_ARCH ?= rv32imac
+  endif
   IFX_RV_TARGET_ABI ?= ilp32
   TARGET_ARCH := $(IFX_RV_TARGET_ARCH)
   TARGET_ABI := $(IFX_RV_TARGET_ABI)
@@ -24,6 +37,8 @@ endif
   PLATFORM_FLAGS = \
     -march=$(TARGET_ARCH) \
     -mabi=$(TARGET_ABI) \
+    -DIFX_RISCV \
+    -DIFX_RISCV_$(patsubst ifx_riscv%,,$(TARGET)) \
     -DTF_LITE_MCU_DEBUG_LOG \
     -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
     -DTF_LITE_USE_GLOBAL_MAX \
@@ -42,7 +57,7 @@ endif
     -Wno-sign-compare \
     -fno-delete-null-pointer-checks \
     -fomit-frame-pointer \
-    $(PLATFORM_OPT_FLAGS) 
+    $(PLATFORM_OPT_FLAGS)
 
 
   BUILD_TYPE := micro
@@ -67,11 +82,54 @@ ifeq ($(TARGET), ifx_riscv32_mcu)
   THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
   
   CXXFLAGS += $(PLATFORM_FLAGS) 
-
   CCFLAGS += -std=gnu99 $(PLATFORM_FLAGS)
   
   
 endif
+
+#
+# ----------------------------------------------------------------------
+# Settings for RISCV 32-bit MCU on FPGA.
+# -----------------------------------------------------------------------
+#
+
+
+
+ifeq ($(TARGET), ifx_riscv32_fpga)
+
+  IFX_RISCV32_RECOGNIZED=1
+
+  ADDITIONAL_PLATFORM_FLAGS = \
+    -mcmodel=medany \
+    -mexplicit-relocs \
+    -fno-builtin-printf \
+    -Wsign-compare \
+    -Wdouble-promotion \
+    -Wshadow \
+    -Wno-unused-variable \
+    -Wunused-function \
+    -fno-threadsafe-statics \
+    -fno-use-cxa-atexit
+
+  LDFLAGS +=  -nostartfiles 
+  LDFLAGS +=	-T $(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_riscv/ifx_rv32_link.ld \
+	   $(INSTALLED_TFLITE_MICRO)/tools/make/targets/ifx_riscv/ifx_rv32_startup.c 
+
+
+  THIRD_PARTY_TARGETS += $(TEST_SCRIPT)
+  
+  CXXFLAGS += $(PLATFORM_FLAGS) $(ADDITIONAL_PLATFORM_FLAGS)
+
+  CCFLAGS += $(PLATFORM_FLAGS)  $(ADDITIONAL_PLATFORM_FLAGS)
+  
+$(BINDIR)%.bin: $(BINDIR)%.elf
+	@mkdir -p $(dir $@)
+	$(OBJDUMP)  -S --line-numbers --full-contents -D -EL  "$<" > "$(BINDIR)$*.disasm"
+	$(OBJCOPY) "$<" "$@" -O binary
+	$(READELF) -a -I "$<" > "$(BINDIR)$
+  
+endif
+
 
 #
 # ----------------------------------------------------------------------
@@ -119,7 +177,7 @@ ifeq ($(TARGET), ifx_riscv32_pulpino)
 
   PLATFORM_FLAGS += \
     -fno-builtin \
-	  -ffreestanding \
+    -ffreestanding \
     -fno-builtin-printf 
     -fno-delete-null-pointer-checks \
     -fno-threadsafe-statics \

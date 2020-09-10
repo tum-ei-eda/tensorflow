@@ -8,9 +8,10 @@ case `uname` in
 
   MINGW*)
     TEST_OPTIONS=( --test_tag_filters=-no_windows )
+    echo tflite tests not runnable under windows currently
+   ;;
+
+  *)
+     bazel test "${TEST_OPTIONS[@]}" //tensorflow/lite:all //tensorflow/lite/kernels/...:all //tensorflow/lite/core/...:all 
+   ;;
 esac
-	
-# Native host build of micro_speech, execute and check signals test passed
-bazel test "${TEST_OPTIONS[@]}" //tensorflow/lite:all //tensorflow/lite/kernels/...:all //tensorflow/lite/core/...:all 
-
-

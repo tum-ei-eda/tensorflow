@@ -26,4 +26,11 @@ limitations under the License.
 // This value is currently shared with that of TensorFlow.
 #define TFLITE_VERSION_STRING TF_VERSION_STRING
 
+// @IFX_PATCH@ Infineon Technologies AG extended tflite(micro)
+// Set this macro to forward/backward compatible
+// implementation of code dependent on additional fields
+// for holding packing information.
+#define TF_LITE_PACKED_QUANTIZED_DATA_VERSION 100
+#define TF_LITE_STATIC_KERNEL_VARIANTS_VERSION 100
+
 #endif  // TENSORFLOW_LITE_VERSION_H_

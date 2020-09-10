@@ -109,6 +109,8 @@ const char* AllocTypeName(TfLiteAllocationType type) {
       return "kTfLiteArenaRwPersistent";
     case kTfLitePersistentRo:
       return "kTfLitePersistentRo";
+    case kTfLiteCustom:
+      return "kTfLiteCustom";
   }
   return "(invalid)";
 }
@@ -117,28 +119,33 @@ const char* AllocTypeName(TfLiteAllocationType type) {
 // Helper function to print model flatbuffer data. This function is not called
 // by default. Hence it's not linked in to the final binary code.
 void PrintModelData(const Model* model, ErrorReporter* error_reporter) {
+#ifndef TF_LITE_STRIP_ERROR_STRINGS
   auto* subgraphs = model->subgraphs();
   const SubGraph* subgraph = (*subgraphs)[0];
   const flatbuffers::Vector<flatbuffers::Offset<Tensor>>* tensors =
       subgraph->tensors();
-  const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers =
-      model->buffers();
   TF_LITE_REPORT_ERROR(error_reporter, "==== Model info: =====");
   for (size_t i = 0; i < tensors->size(); ++i) {
     const tflite::Tensor& flatbuffer_tensor = *tensors->Get(i);
     size_t type_size, tensor_size;
+
+#if !TF_LITE_STRIP_ERROR_STRINGS
+  const flatbuffers::Vector<flatbuffers::Offset<Buffer>>* buffers =
+      model->buffers();
     auto* buffer = (*buffers)[flatbuffer_tensor.buffer()];
     auto* array = buffer->data();
     int array_size = 0;
     if (array) {
       array_size = array->size();
     }
+#endif
     BytesRequiredForTensor(flatbuffer_tensor, &tensor_size, &type_size,
                            error_reporter);
     TF_LITE_REPORT_ERROR(
         error_reporter, "Tensor index: %d arena tensor %d size %d ", i,
         !array_size && !flatbuffer_tensor.is_variable(), tensor_size);
   }
+#endif
 }
 
 // Prints a dump of what tensors and what nodes are in the interpreter.
