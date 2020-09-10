@@ -39,6 +39,5 @@ int main(int argc, char** argv) {
   TF_LITE_REPORT_ERROR(error_reporter, "~~~%s~~~", "ALL TESTS PASSED", 0/*dummy*/);
 #else
   TF_LITE_REPORT_ERROR(error_reporter, "~~~%s~~~", "ALL TESTS PASSED");
-#endif
 #endif  // !defined(TF_LITE_STRIP_ERROR_STRINGS)
 }

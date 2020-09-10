@@ -38,7 +38,7 @@ installed_settings:
 	mkdir -p $(PREFIX)/tools/make
 	echo 'TFLITE_U_PATH := $$(abspath $$(here)../..)/' >  $(PREFIX)/tools/make/installed_settings.inc
 	echo 'PULPINO_CRT ?= $(ETISS_HOME)/crt_cmake' >> $(PREFIX)/tools/make/installed_settings.inc
-
+	../GET_PROJECT_SETTINGS.sh --makefile_defaults --id_prefix IFX_ >> $(PREFIX)/tools/make/installed_settings.inc
 
  $(MAKEFILE_DIR)/gen/%.sh: $(TESTING_DIR)/%.sh.tpl
 	mkdir -p  $(MAKEFILE_DIR)/gen

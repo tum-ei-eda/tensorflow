@@ -32,7 +32,10 @@ endif
   TARGET_TOOLCHAIN_ROOT:=$(IFX_TOOLSPREFIX)/$(IFX_RV_TOOLCHAIN_ID)-$(IFX_RV_TOOLCHAIN_VERSION)/bin/
   SWERV_ISS_HOME := $(IFX_TOOLSPREFIX)/swerviss-$(IFX_SWERVISS_VERSION)
 
-
+CC_WARNINGS := -Wsign-compare -Wdouble-promotion \
+               -Wshadow -Wunused-variable -Wmissing-field-initializers \
+               -Wno-error=unused-function
+               
   TARGET_TOOLCHAIN_PREFIX := $(IFX_RV_TOOLCHAIN_TRIPLET)-
   PLATFORM_FLAGS = \
     -march=$(TARGET_ARCH) \
