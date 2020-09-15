@@ -74,7 +74,18 @@ constexpr int kOutputTensor = 0;
 // https://www.tensorflow.org/lite/performance/quantization_spec
 constexpr int kConvQuantizedDimension = 0;
 
-// This file has 2 implementation of Conv.
+
+struct OpData
+;
+
+typedef TfLiteStatus (*EvalVariantFptr)(
+      TfLiteConvParams* params, OpData* data,
+      const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+      const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context);
+
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+EvalVariantFptr recordedVariant();
+#endif
 
 struct OpData {
   TfLitePaddingValues padding;
@@ -105,18 +116,10 @@ struct OpData {
   const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
 
   // Eval function pointer
-  TfLiteStatus (*eval_function)(TfLiteConvParams* params, OpData* data,
-      const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
-      const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context);
+  EvalVariantFptr eval_function;
 };
 
-#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-typedef TfLiteStatus (*EvalVariantFptr)(
-      TfLiteConvParams* params, OpData* data,
-      const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
-      const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context);
-EvalVariantFptr recordedVariant();
-#endif
+
 
 
 inline PaddingType RuntimePaddingType(TfLitePadding padding) {
