@@ -36,8 +36,10 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/reference/fully_connected.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
 #include "tensorflow/lite/micro/kernels/fully_connected_packed_weights.h"
+#include "tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h"
 #include "tensorflow/lite/micro/kernels/pointer_collector.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
+
 
 //#define IFX_DEBUG_LOGGING 1
 #if IFX_DEBUG_LOGGING
@@ -47,9 +49,9 @@ limitations under the License.
 KERNEL_VARIANT_COLLECT_INFO(
   "fully_connected", 
   "struct OpData;\n",
-      "    TfLiteConvParams* params, OpData* data,\n"
-      "    const TfLiteEvalTensor* input, const TfLiteEvalTensor* weights, \n"
-      "    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output"
+  "   TfLiteContext* context, TfLiteFullyConnectedParams* params,\n"
+  "   OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,\n"
+  "   const TfLiteTensor* bias, TfLiteTensor* output"
 );
 
 
@@ -59,35 +61,36 @@ namespace micro {
 namespace fully_connected {
 namespace {
 
-struct OpData;
 
  typedef TfLiteStatus (*EvalVariantFptr)(TfLiteContext* context, TfLiteFullyConnectedParams* params,
       OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,
       const TfLiteTensor* bias, TfLiteTensor* output);
 
-struct OpData {
-  // The scaling factor from input to output (aka the 'real multiplier') can
-  // be represented as a fixed point multiplier plus a left shift.
-  int32_t output_multiplier;
-  int output_shift;
-  // The range of the fused activation layer. For example for kNone and
-  // uint8_t these would be 0 and 255.
-  int32_t output_activation_min;
-  int32_t output_activation_max;
-  // The index of the temporary tensor where the quantized inputs are cached.
-  int input_quantized_index;
-  // A buffer containing the sum-of-weights factor
-  int32_t* sum_of_weights_factor;
-  // Eval function pointer
-  EvalVariantFptr eval_function;
-};
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
 
-static std::string static_op_data()
+static DefineStaticOpDataHeaders op_data_info(
+  "fully_connected",
+  "#include \"tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h\"",
+  "OpData"
+);
+
+static CppPODStructInitializer *static_opdata(OpData &od, size_t len_sowf)
 {
-  std::stringstream s;
-  s << "{";
-  return s.str();
+  auto init = new CppPODStructInitializer();
+
+  CppNamedVec<int32_t> sowf("sum_of_weights_factor", "int32_t", od.sum_of_weights_factor, len_sowf);
+  
+  *init << od.output_multiplier
+       << od.output_shift
+       << od.output_activation_min
+       << od.output_activation_max
+       << od.input_quantized_index
+       << sowf
+       << od.eval_function;
+
+  return init;
 }
+#endif
 
 
 constexpr int kInputTensor = 0;
@@ -138,11 +141,20 @@ inline void PrecomputeSumOfWeightsFactor(const int32_t* bias, const T* weights,
   }
 }
 
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  EvalVariantFptr recordedVariant();
+  OpData *recordedStaticOpData();
+#endif
+
 void* Init(TfLiteContext* context, const char* buffer, size_t length) {
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  return recordedStaticOpData();
+#else
   void* raw = context->AllocatePersistentBuffer(context, sizeof(OpData));
   OpData* data = reinterpret_cast<OpData*>(raw);
   *data = {};
   return raw;
+#endif
 }
 
 void Free(TfLiteContext* context, void* buffer) {}
@@ -357,8 +369,12 @@ TfLiteStatus EvalFloat(TfLiteContext* context, TfLiteFullyConnectedParams* param
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
   OpData* data = reinterpret_cast<OpData*>(node->user_data);
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  data->eval_function = recordedVariant();
+#else
+  int rows = 0;
+  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
   if (weights->type == kTfLiteInt8 || weights->type == kTfLiteUInt8) {
     // Calculate data for quantized operation
@@ -373,7 +389,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     const int32_t weights_offset = -weights->params.zero_point;
     RuntimeShape weights_shape = GetTensorShape(weights);
     TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
-    const int rows = weights_shape.Dims(0);
+    rows = weights_shape.Dims(0);
     const int cols = weights_shape.Dims(1);
 
     void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows);
@@ -397,19 +413,16 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     }
   }
 
-#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-  data->eval_function = recordedVariant();
-#else
   bool use_packed = (weights->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
 
   switch (weights->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
-      data->eval_function = &EvalFloat;
+      data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalFloat);
       break;
     case kTfLiteInt8:
       switch (output->type) {
         case kTfLiteInt8:
-          data->eval_function = &EvalQuantizedInt8;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedInt8);
           break;
         default:
           TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
@@ -422,13 +435,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           // TODO packed variant pre-computing to eliminate tensor_offset
           // addition
           if (use_packed) {
-            data->eval_function = &EvalQuantizedPacked;
+            data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedPacked);
           } else {
-            data->eval_function = &EvalQuantizedUInt8;
+            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedUInt8);
           }
           break;
         case kTfLiteInt16:
-          data->eval_function = &EvalQuantizedUint8WithOutputInt16;
+          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedUint8WithOutputInt16);
           break;
         default:
           TF_LITE_KERNEL_LOG(context,
@@ -441,9 +454,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                          weights->type);
       return kTfLiteError;
   }
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
+  recordStaticOpdata("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
 #endif
 
-
+#endif
   return kTfLiteOk;
 }
 
