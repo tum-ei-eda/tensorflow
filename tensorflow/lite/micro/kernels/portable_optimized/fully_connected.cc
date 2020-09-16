@@ -46,19 +46,24 @@ limitations under the License.
 #include <iostream>
 #endif
 
-KERNEL_VARIANT_COLLECT_INFO(
-  "fully_connected", 
-  "struct OpData;\n",
-  "   TfLiteContext* context, TfLiteFullyConnectedParams* params,\n"
-  "   OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,\n"
-  "   const TfLiteTensor* bias, TfLiteTensor* output"
-);
 
 
 namespace tflite {
 namespace ops {
 namespace micro {
 namespace fully_connected {
+
+KERNEL_VARIANT_COLLECT_INFO(
+  "fully_connected", 
+  "struct OpData;\n",
+  "#include \"tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h\"",
+  "OpData",
+  "   TfLiteContext* context, TfLiteFullyConnectedParams* params,\n"
+  "   OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,\n"
+  "   const TfLiteTensor* bias, TfLiteTensor* output"
+);
+
+
 namespace {
 
 
@@ -68,15 +73,9 @@ namespace {
 
 #if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
 
-static DefineStaticOpDataHeaders op_data_info(
-  "fully_connected",
-  "#include \"tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h\"",
-  "OpData"
-);
-
-static CppPODStructInitializer *static_opdata(OpData &od, size_t len_sowf)
+static CppItems *static_opdata(OpData &od, size_t len_sowf)
 {
-  auto init = new CppPODStructInitializer();
+  auto init = new CppItems();
 
   CppNamedVec<int32_t> sowf("sum_of_weights_factor", "int32_t", od.sum_of_weights_factor, len_sowf);
   
@@ -213,7 +212,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedInt8);
           break;
         default:
-          TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
+          TF_LITE_KERNEL_LOG(context, "Quantized int8 _t expects output int8");
           return kTfLiteError;
       }
       break;
@@ -245,7 +244,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 
   TF_LITE_MICRO_RECORD_OP_USER_DATA("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
 
-#endif
+#endif // ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   return kTfLiteOk;
 }
 

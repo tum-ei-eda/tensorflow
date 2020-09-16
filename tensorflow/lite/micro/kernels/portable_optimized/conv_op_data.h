@@ -1,4 +1,4 @@
-/* Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,10 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_FULLY_CONNECTED_OP_DATA_H_
-#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_FULLY_CONNECTED_OP_DATA_H_
-
 // PORTABLE OPTIMIZED
+
+// Support recording of selected kernel variant in prepare phase for static extraction for
+// a fixed tflite model.
 
 // TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT: 
 //  When set the names of kernel variants eval functions recorded and can be dumped
@@ -28,59 +28,83 @@ limitations under the License.
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
 
-
+#ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_CONV_OP_DATA_H_
+#define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_CONV_OP_DATA_H_
 
 
 #include "tensorflow/lite/c/common.h"
 
 
+#define MAX(A,B) ((A) > (B) ? (A) : (B))
+#define MIN(A,B) ((A) < (B) ? (A) : (B))
+
+
 namespace tflite {
 namespace ops {
 namespace micro {
-namespace fully_connected {
+namespace conv {
+
 
 struct OpData;
 
- typedef TfLiteStatus (*EvalVariantFptr)(TfLiteContext* context, TfLiteFullyConnectedParams* params,
-      OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,
-      const TfLiteTensor* bias, TfLiteTensor* output);
-
-#define EVAL_FUNC(name) \
+#define EVAL_FUNC_DECL(name) \
   TfLiteStatus name( \
-    TfLiteContext* context, TfLiteFullyConnectedParams* params, OpData* opData, \
-    const TfLiteTensor* input, const TfLiteTensor* weights, \
-    const TfLiteTensor* bias, TfLiteTensor* output)
+      TfLiteConvParams* params, OpData* data, \
+      const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter, \
+      const TfLiteEvalTensor* bias, TfLiteEvalTensor* output, TfLiteContext* context)
 
-template <typename T>
-EVAL_FUNC(EvalQuantized);
-EVAL_FUNC(EvalQuantizedInt8);
-EVAL_FUNC(EvalQuantizedUint8WithOutputInt16);
-EVAL_FUNC(EvalQuantizedPacked);
-EVAL_FUNC(EvalQuantizedUInt8);
-EVAL_FUNC(EvalFloat);
+typedef EVAL_FUNC_DECL((*EvalVariantFptr));
 
-#undef EVAL_FUNC
+EVAL_FUNC_DECL(EvalConvFloat);
+EVAL_FUNC_DECL(EvalConvInt8Reference);
+EVAL_FUNC_DECL(EvalConvInt8Padding);
+EVAL_FUNC_DECL(EvalConvInt8);
+EVAL_FUNC_DECL(EvalConvUInt8Packed);
+EVAL_FUNC_DECL(EvalConvUInt8Padding);
+EVAL_FUNC_DECL(EvalConvUInt8Reference);
+EVAL_FUNC_DECL(EvalConvUInt8);
+
+
+#undef EVAL_FUNC_DECL
+
 
 struct OpData {
+  TfLitePaddingValues padding;
   // The scaling factor from input to output (aka the 'real multiplier') can
   // be represented as a fixed point multiplier plus a left shift.
+
+  // Cached tensor zero point values for quantized operations.
+  int32_t input_zero_point;
+  int32_t filter_zero_point;
+  int32_t output_zero_point;
+
   int32_t output_multiplier;
   int output_shift;
+
+  // Per channel output multiplier and shift (allocated dynamically).
+  int32_t *per_channel_output_multiplier;
+  int32_t *per_channel_output_shift;
+
   // The range of the fused activation layer. For example for kNone and
   // uint8_t these would be 0 and 255.
   int32_t output_activation_min;
   int32_t output_activation_max;
-  // The index of the temporary tensor where the quantized inputs are cached.
-  int input_quantized_index;
-  // A buffer containing the sum-of-weights factor
-  int32_t* sum_of_weights_factor;
+
+  // The precomputed sum of filters factor
+  int32_t *sum_of_filters_factor;
+
+    // Weights tensor packing information
+  const TfLiteCustomSub8BitPackingDetails *custom_sub8bit_packing;
+
   // Eval function pointer
   EvalVariantFptr eval_function;
 };
 
-}  // namespace fully_connected
+
+
+}  // namespace conv
 }  // namespace micro
 }  // namespace ops
 }  // namespace tflite
 
-#endif // TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_FULLY_CONNECTED_OP_DATA_H_
+#endif // TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_CONV_OP_DATA_H_

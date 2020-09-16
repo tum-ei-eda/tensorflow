@@ -9,12 +9,10 @@ set -e
 # Tests that Invoke more than one model or invoke kernels in a different order from prepare calls
 # wil fail.
 
-RECORD_KERNEL_VARIANTS=( TAGS=portable_optimized \
-   LOCAL_CPPFLAGS="-DTF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT -DTF_LITE_MICRO_AUTO_DUMP_POINTER_TABLES" \
+RECORD_KERNEL_VARIANTS=( TAGS="portable_optimized record_model autodump"
 )
 
-USE_RECORDED_VARIANTS=( TAGS="portable_optimized generated" \
-   LOCAL_CPPFLAGS="-DTF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS" \
+USE_RECORDED_VARIANTS=( TAGS="portable_optimized recorded_model" \
 )
 
 echo "----------Testing conv----------"

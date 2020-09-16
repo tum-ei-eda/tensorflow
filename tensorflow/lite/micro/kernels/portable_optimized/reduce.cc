@@ -54,6 +54,8 @@ struct OpData {
 
 KERNEL_VARIANT_COLLECT_INFO(
     "reduce", "struct OpData;\n",
+    "",
+    "OpData",
     "    TfLiteContext* context,\n"
     "    OpData* op_data, TfLiteReducerParams* params,\n"
     "    const TfLiteEvalTensor* input, const TfLiteEvalTensor* axis,\n"

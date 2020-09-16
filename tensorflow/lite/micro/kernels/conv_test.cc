@@ -768,6 +768,9 @@ TF_LITE_MICRO_TEST(Kernel1x1QuantizedPerChannelRelu6) {
 }
 
 TF_LITE_MICRO_TEST(FilterDimsNotMatchingAffineQuantization) {
+    // No-op if using recorded user_data as test intentional fails
+    // in prepare phase so no user_data recorded.
+#if ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   const int output_dims_count = 12;
   int8_t output_data[output_dims_count];
 
@@ -849,6 +852,7 @@ TF_LITE_MICRO_TEST(FilterDimsNotMatchingAffineQuantization) {
       tflite::testing::ValidateConvGoldens(
           tensors, tensors_size, golden_quantized, output_data,
           output_dims_count, &tflite::testing::common_conv_params));
+#endif
 }
 
 TF_LITE_MICRO_TEST(BroadcastPerLayerQuantizationToPerChannelShouldMatchGolden) {

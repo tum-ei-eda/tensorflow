@@ -46,7 +46,7 @@ const char* OpNameFromRegistration(const TfLiteRegistration* registration) {
 #if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 namespace ops {
 namespace micro {
-  void  resetRecordedVariants();
+  void  resetStaticDataCounters();
 }
 }
 #endif
@@ -403,7 +403,7 @@ TfLiteStatus MicroInterpreter::Invoke() {
     TF_LITE_ENSURE_OK(&context_, AllocateTensors());
   }
 #if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-  tflite::ops::micro::resetRecordedVariants();
+  tflite::ops::micro::resetStaticDataCounters();
 #endif
 
   for (size_t i = 0; i < subgraph_->operators()->size(); ++i) {

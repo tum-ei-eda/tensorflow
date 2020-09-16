@@ -34,6 +34,8 @@ limitations under the License.
 KERNEL_VARIANT_COLLECT_INFO(
   "depthwise_conv",
   "struct OpData;\n",
+  "",
+  "OpData",
       "    TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n"
       "    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter, \n"
       "    const TfLiteTensor* bias, TfLiteTensor* output"

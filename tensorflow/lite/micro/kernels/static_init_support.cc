@@ -11,13 +11,36 @@
 #include <fstream>
 #include <set>
 
-#include "tensorflow/lite/micro/kernels/pointer_collector.h"
-
 #if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
 
 namespace tflite {
 namespace ops {
 namespace micro {
+
+
+// Vector: needs a named sub-initializer that has to be output first
+CppItems &CppItems::operator<<(const char *literal) {
+  elements_.push_back(
+      std::unique_ptr<CppInitializerBase>(new CppLiteral(literal)));
+  return *this;
+}
+
+CppItems &CppItems::operator<<(const CppNamedStruct &structref) {    
+  named_sub_inits_.push_front(
+      std::unique_ptr<CppDefinitionBase>(new CppNamedStruct(structref)));
+  elements_.push_back(std::unique_ptr<CppInitializerBase>(
+      new CppInitializerPointer(structref.getId())));
+  return *this;
+}
+
+
+CppItems &CppItems::operator<<(const CppPODStructInitializer &substruct) {
+  elements_.push_back(std::unique_ptr<CppInitializerBase>(
+      new CppPODStructInitializer(substruct)));
+  return *this;
+}
+
+
 //
 // Implementation of pointer collector (will be owned) by
 // PointerCollectors singleton.
@@ -138,7 +161,7 @@ class CppInitializerCollector : public PointerCollectors {
                            const char *type);
 
   void recordStaticOpdata(const char *op_name,
-                          CppPODStructInitializer *op_data);
+                          CppItems *op_data);
 
   void writeStaticOpDataHeaders(std::ostream &os);
 
@@ -189,10 +212,11 @@ void CppInitializerCollector::recordOpDataHeaders(const char *op_name,
 }
 
 void CppInitializerCollector::recordStaticOpdata(
-    const char *op_name, CppPODStructInitializer *op_data) {
+    const char *op_name, CppItems *op_data) {
   std::string key(op_name);
   auto &inst_user_data = per_inst_user_data_[key];
-  inst_user_data->pushBackElt(op_data);
+  auto pod_init = new CppPODStructInitializer(op_data);
+  inst_user_data->pushBackElt(pod_init);
 }
 
 void CppInitializerCollector::writeStaticOpDataHeaders(std::ostream &os) {
@@ -208,7 +232,7 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
         "namespace micro {\n\n";
 
   for (auto &id_i : per_inst_user_data_) {
-
+    os << "namespace " << id_i.first << " {\n\n";
     if (id_i.second->getSize() == 0) {
       // Special-case: never used.  Just dummy function to resolve linking.
       os << id_i.second->getType()
@@ -216,7 +240,7 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
             "  return nullptr;\n"
             "}\n\n";
     } else {
-      os << "namespace " << id_i.first << " {\n\n";
+
       id_i.second->serialize(os, "");
 
       os << "  size_t inst_counter = 0;\n\n"
@@ -224,8 +248,8 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
         << " *recordedStaticOpData() {\n"
             "  return &op_user_data[inst_counter++];\n"
             "}\n\n";
-      os << "} // namespace " << id_i.first << "\n\n";
     }
+    os << "} // namespace " << id_i.first << "\n\n";
   }
 
 
@@ -286,7 +310,7 @@ void writeStaticOpDataDefinitions(std::ostream &os) {
   CppInitializerCollector::instance().writeStaticOpDataDefinitions(os);
 }
 
-void recordStaticOpdata(const char *op_name, CppPODStructInitializer *op_data) {
+void recordStaticOpdata(const char *op_name, CppItems *op_data) {
   CppInitializerCollector::instance().recordStaticOpdata(op_name, op_data);
 }
 
