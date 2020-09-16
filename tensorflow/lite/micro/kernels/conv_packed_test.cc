@@ -65,9 +65,9 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
                      static_cast<CONTAINER_T>(1);
   uint32_t container_buf = 0;
   // Lazy way of getting sufficient CONTAINER_T aligned storage...
-  uint32 items_per_container = std::floor((float)(container_bits)/bits_per_item);
+  uint32_t items_per_container = std::floor((float)(container_bits)/bits_per_item);
   uint32_t cont_per_minor = std::ceil((float)(minor_dim_size)/items_per_container);
-  uint32 number_containers = (elts / minor_dim_size) * cont_per_minor;
+  uint32_t number_containers = (elts / minor_dim_size) * cont_per_minor;
   std::vector<CONTAINER_T> packed_data(number_containers);
 
   uint8_t* packed_data_byte = reinterpret_cast<uint8_t*>(packed_data.data());
