@@ -26,12 +26,19 @@
 #define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   (pointer_collector.addPointer(#funptr_name, reinterpret_cast<void*>(&funptr_name)), &funptr_name)
 
+#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
+  (recordLiteralForPointer(#funptr_name, reinterpret_cast<void*>(&funptr_name)), &funptr_name)
+
+
 #define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature) \
   static tflite::ops::micro::PointerCollector pointer_collector( \
     kernel_name, \
     type_decls, \
     funptr_signature \
 );
+
+#define TF_LITE_MICRO_RECORD_OP_USER_DATA(kernel_name, op_data) \
+  recordStaticOpdata(kernel_name, op_data)
 
 namespace tflite {
 namespace ops {
@@ -279,6 +286,8 @@ class CppNamedStructVecInitializer : public CppNamedItemBase {
 
   const std::string &getType() const { return type_; }
 
+  size_t getSize() const { return elts_.size(); }
+
  protected:
   std::string type_;
   std::vector<std::unique_ptr<CppPODStructInitializer>> elts_;
@@ -297,6 +306,8 @@ void recordStaticOpdata(const char *op_name, CppPODStructInitializer *op_data);
 
 void writeCppFunctionsToInvokeRecorded(std::ostream &os);
 
+void recordLiteralForPointer(const std::string &literal, void *ptr);
+
 class DefineStaticOpDataHeaders {
  public:
   DefineStaticOpDataHeaders(const char *op_name, const char *headers,
@@ -313,12 +324,17 @@ class DefineStaticOpDataHeaders {
 #define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   &funptr_name
 
+#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
+  &funptr_name
+
 #define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature)
 
 #else
 #define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
   &funptr_name
 
+#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
+  &funptr_name
   
 #define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, funptr_signature)
 

@@ -65,6 +65,7 @@ CC_WARNINGS := -Wsign-compare -Wdouble-promotion \
 
   BUILD_TYPE := micro
 
+  LDFLAGS +=  -Wl,--gc-sections
 endif
 
 ifeq ($(TARGET), ifx_riscv32_install_only)

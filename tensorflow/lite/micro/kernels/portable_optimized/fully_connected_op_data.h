@@ -42,6 +42,22 @@ struct OpData;
       OpData* opData, const TfLiteTensor* input, const TfLiteTensor* weights,
       const TfLiteTensor* bias, TfLiteTensor* output);
 
+#define EVAL_FUNC(name) \
+  TfLiteStatus name( \
+    TfLiteContext* context, TfLiteFullyConnectedParams* params, OpData* opData, \
+    const TfLiteTensor* input, const TfLiteTensor* weights, \
+    const TfLiteTensor* bias, TfLiteTensor* output)
+
+template <typename T>
+EVAL_FUNC(EvalQuantized);
+EVAL_FUNC(EvalQuantizedInt8);
+EVAL_FUNC(EvalQuantizedUint8WithOutputInt16);
+EVAL_FUNC(EvalQuantizedPacked);
+EVAL_FUNC(EvalQuantizedUInt8);
+EVAL_FUNC(EvalFloat);
+
+#undef EVAL_FUNC
+
 struct OpData {
   // The scaling factor from input to output (aka the 'real multiplier') can
   // be represented as a fixed point multiplier plus a left shift.

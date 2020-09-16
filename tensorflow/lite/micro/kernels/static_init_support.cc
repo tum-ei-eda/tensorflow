@@ -30,6 +30,7 @@ class PointerCollector::Implementation {
 
  protected:
   friend class PointerCollectors;
+  friend class CppInitializerCollector;
 
   // Vector that stores all the pointers to the used kernels
   std::vector<std::string> pointers_;
@@ -124,12 +125,6 @@ void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
     os << "} // namespace " << collector->kernel_name_ << "\n\n";
   }
 
-  os << "void resetRecordedVariants() { \n";
-  for (auto &collector : collectors_) {
-    os << "  " << collector->kernel_name_ << "::invoke_counter = 0;\n";
-  }
-  os << "}\n\n";
-
   os << "} // namespace micro\n"
         "} // namespace ops\n"
         "} // namespace tflite\n";
@@ -213,17 +208,37 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
         "namespace micro {\n\n";
 
   for (auto &id_i : per_inst_user_data_) {
-    os << "namespace " << id_i.first << " {\n\n";
-    id_i.second->serialize(os, "");
 
-    os << "  static size_t inst_counter = 0;\n\n"
-       << id_i.second->getType()
-       << " *recordedStaticOpData() {\n"
-          "  return &op_user_data[inst_counter++];\n"
-          "}\n\n";
+    if (id_i.second->getSize() == 0) {
+      // Special-case: never used.  Just dummy function to resolve linking.
+      os << id_i.second->getType()
+         << " *recordedStaticOpData() {\n"
+            "  return nullptr;\n"
+            "}\n\n";
+    } else {
+      os << "namespace " << id_i.first << " {\n\n";
+      id_i.second->serialize(os, "");
 
-    os << "} // namespace " << id_i.first << "\n\n";
+      os << "  size_t inst_counter = 0;\n\n"
+        << id_i.second->getType()
+        << " *recordedStaticOpData() {\n"
+            "  return &op_user_data[inst_counter++];\n"
+            "}\n\n";
+      os << "} // namespace " << id_i.first << "\n\n";
+    }
   }
+
+
+  os << "void resetStaticDataCounters() { \n";
+  for (auto &collector : collectors_) {
+    os << "  " << collector->kernel_name_ << "::invoke_counter = 0;\n";
+  }
+  for (auto &id_i : per_inst_user_data_) {
+    if (id_i.second->getSize() > 0u) {
+      os << "  " << id_i.first << "::inst_counter = 0;\n";
+    }
+  }
+  os << "}\n\n";
 
   os << "} // namespace micro\n"
         "} // namespace ops\n"
@@ -250,6 +265,8 @@ void PointerCollector::addPointer(const std::string &literal, void *ptr) {
   CppInitializerCollector::instance().recordLiteralForPointer(ptr, literal);
 }
 
+
+
 void CppPointerLiteral::serialize_initializer(std::ostream &os,
                                               const std::string &id_prefix) {
   auto literal = CppInitializerCollector::instance().getLiteralForPointer(ptr_);
@@ -271,6 +288,11 @@ void writeStaticOpDataDefinitions(std::ostream &os) {
 
 void recordStaticOpdata(const char *op_name, CppPODStructInitializer *op_data) {
   CppInitializerCollector::instance().recordStaticOpdata(op_name, op_data);
+}
+
+
+void recordLiteralForPointer(const std::string &literal, void *ptr) {
+  CppInitializerCollector::instance().recordLiteralForPointer(ptr, literal);
 }
 
 DefineStaticOpDataHeaders::DefineStaticOpDataHeaders(

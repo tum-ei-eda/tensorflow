@@ -157,6 +157,98 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 #endif
 }
 
+
+TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
+#if ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  OpData* data = reinterpret_cast<OpData*>(node->user_data);
+  int rows = 0;
+  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+  if (weights->type == kTfLiteInt8 || weights->type == kTfLiteUInt8) {
+    // Calculate data for quantized operation
+    auto* params =
+        reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
+    const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+    const TfLiteTensor* bias =
+        GetOptionalInputTensor(context, node, kBiasTensor);
+    TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, input->type, input,
+                                          weights, bias, output, data));
+    // Pre-compute factors for quantized operation
+    const int32_t weights_offset = -weights->params.zero_point;
+    RuntimeShape weights_shape = GetTensorShape(weights);
+    TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
+    rows = weights_shape.Dims(0);
+    const int cols = weights_shape.Dims(1);
+
+    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows);
+    data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
+    const int32_t input_offset = -input->params.zero_point;
+    const int32_t* bias_data = GetTensorData<int32_t>(bias);
+
+    if (weights->type == kTfLiteInt8) {
+      PrecomputeSumOfWeightsFactor<int8_t>(bias_data,
+                                           GetTensorData<int8_t>(weights),
+                                           data->sum_of_weights_factor, cols,
+                                           rows, weights_offset, input_offset);
+    } else if (weights->quantization.details.type ==
+               kTfLiteSub8BitPackedUniformDetail) {
+      // TODO implement pre-compute sum-of-weights for packed weights...
+    } else {
+      PrecomputeSumOfWeightsFactor<uint8_t>(bias_data,
+                                            GetTensorData<uint8_t>(weights),
+                                            data->sum_of_weights_factor, cols,
+                                            rows, weights_offset, input_offset);
+    }
+  }
+
+  bool use_packed = (weights->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
+
+  switch (weights->type) {  // Already know in/out types are same.
+    case kTfLiteFloat32:
+      data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalFloat);
+      break;
+    case kTfLiteInt8:
+      switch (output->type) {
+        case kTfLiteInt8:
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedInt8);
+          break;
+        default:
+          TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
+          return kTfLiteError;
+      }
+      break;
+    case kTfLiteUInt8:
+      switch (output->type) {
+        case kTfLiteUInt8:
+          // TODO packed variant pre-computing to eliminate tensor_offset
+          // addition
+          if (use_packed) {
+            data->eval_function =  TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedPacked);
+          } else {
+            data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedUInt8);
+          }
+          break;
+        case kTfLiteInt16:
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedUint8WithOutputInt16);
+          break;
+        default:
+          TF_LITE_KERNEL_LOG(context,
+                             "Quantized uint8_t expects output uint8_t or int16");
+          return kTfLiteError;
+      }
+      break;
+    default:
+      TF_LITE_KERNEL_LOG(context, "Weight type %d not currently supported.",
+                         weights->type);
+      return kTfLiteError;
+  }
+
+  TF_LITE_MICRO_RECORD_OP_USER_DATA("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
+
+#endif
+  return kTfLiteOk;
+}
+
 void Free(TfLiteContext* context, void* buffer) {}
 
 
@@ -368,99 +460,6 @@ TfLiteStatus EvalFloat(TfLiteContext* context, TfLiteFullyConnectedParams* param
   return kTfLiteOk;
 }
 
-TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  OpData* data = reinterpret_cast<OpData*>(node->user_data);
-#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-  data->eval_function = recordedVariant();
-#else
-  int rows = 0;
-  const TfLiteTensor* weights = GetInput(context, node, kWeightsTensor);
-  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-  if (weights->type == kTfLiteInt8 || weights->type == kTfLiteUInt8) {
-    // Calculate data for quantized operation
-    auto* params =
-        reinterpret_cast<TfLiteFullyConnectedParams*>(node->builtin_data);
-    const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-    const TfLiteTensor* bias =
-        GetOptionalInputTensor(context, node, kBiasTensor);
-    TF_LITE_ENSURE_STATUS(CalculateOpData(context, params, input->type, input,
-                                          weights, bias, output, data));
-    // Pre-compute factors for quantized operation
-    const int32_t weights_offset = -weights->params.zero_point;
-    RuntimeShape weights_shape = GetTensorShape(weights);
-    TFLITE_DCHECK_GE(weights_shape.DimensionsCount(), 2);
-    rows = weights_shape.Dims(0);
-    const int cols = weights_shape.Dims(1);
-
-    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * rows);
-    data->sum_of_weights_factor = reinterpret_cast<int32_t*>(raw);
-    const int32_t input_offset = -input->params.zero_point;
-    const int32_t* bias_data = GetTensorData<int32_t>(bias);
-
-    if (weights->type == kTfLiteInt8) {
-      PrecomputeSumOfWeightsFactor<int8_t>(bias_data,
-                                           GetTensorData<int8_t>(weights),
-                                           data->sum_of_weights_factor, cols,
-                                           rows, weights_offset, input_offset);
-    } else if (weights->quantization.details.type ==
-               kTfLiteSub8BitPackedUniformDetail) {
-      // TODO implement pre-compute sum-of-weights for packed weights...
-    } else {
-      PrecomputeSumOfWeightsFactor<uint8_t>(bias_data,
-                                            GetTensorData<uint8_t>(weights),
-                                            data->sum_of_weights_factor, cols,
-                                            rows, weights_offset, input_offset);
-    }
-  }
-
-  bool use_packed = (weights->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
-
-  switch (weights->type) {  // Already know in/out types are same.
-    case kTfLiteFloat32:
-      data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalFloat);
-      break;
-    case kTfLiteInt8:
-      switch (output->type) {
-        case kTfLiteInt8:
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedInt8);
-          break;
-        default:
-          TF_LITE_KERNEL_LOG(context, "Quantized int8_t expects output int8");
-          return kTfLiteError;
-      }
-      break;
-    case kTfLiteUInt8:
-      switch (output->type) {
-        case kTfLiteUInt8:
-          // TODO packed variant pre-computing to eliminate tensor_offset
-          // addition
-          if (use_packed) {
-            data->eval_function =  TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedPacked);
-          } else {
-            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedUInt8);
-          }
-          break;
-        case kTfLiteInt16:
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalQuantizedUint8WithOutputInt16);
-          break;
-        default:
-          TF_LITE_KERNEL_LOG(context,
-                             "Quantized uint8_t expects output uint8_t or int16");
-          return kTfLiteError;
-      }
-      break;
-    default:
-      TF_LITE_KERNEL_LOG(context, "Weight type %d not currently supported.",
-                         weights->type);
-      return kTfLiteError;
-  }
-#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
-  recordStaticOpdata("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
-#endif
-
-#endif
-  return kTfLiteOk;
-}
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input = GetInput(context, node, kInputTensor);
