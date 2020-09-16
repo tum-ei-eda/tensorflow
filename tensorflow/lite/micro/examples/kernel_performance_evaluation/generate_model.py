@@ -37,7 +37,7 @@ from tensorflow.keras.datasets import mnist
 # We'll use this many sample datapoints
 SAMPLES = 1000
 reload = True
-translator = "C:/Inicio/tools/64/tflite_u-2.2.0.2/bin/tf_tfl_translate"
+translator = "C:/Inicio/tools/64/tflite_u-2.4.0.3/bin/tf_tfl_translate"
 
 
 # Load the Mnist dataset and keep only zeros and ones
@@ -122,9 +122,9 @@ def quant_mnist_model(qbits):
 
 
     # We need an output fq layer to get final quantization for converter
-    model.add(TFMinMaxQuantizer(name="output",
-                                qmin=-1.0, qmax=127 / 128.0, quant_delay=100, num_bits=8,
-                                narrow_range=False))
+    #model.add(TFMinMaxQuantizer(name="output",
+    #                            qmin=-1.0, qmax=127 / 128.0, quant_delay=100, num_bits=8,
+    #                            narrow_range=False))
     model.summary()
     return model
 
@@ -132,7 +132,7 @@ q_params = {}
 f_weights = {}
 weight_codes = {}
 #%%
-QBITS = [8] # 4,5,6,
+QBITS = [4,5,6,8] 
 for qbits in QBITS:
     # 
     tf.keras.backend.clear_session()
@@ -254,8 +254,7 @@ for qbits in QBITS:
     write_C_array_src_and_hdr(f"{qbits}-Bit weight 'mnist' model", ".", mlir_fname_root,
                               aligned=True,
                               src_datafile=tflite_u_fname)
-    print(model_q.layers)
-    sys.exit(0)
+
     layer_vars = model_q.layers[-2].get_weights()
     f_weights[qbits] = [v for v in layer_vars[0].flatten()]
     fq_min = layer_vars[3]
@@ -287,11 +286,11 @@ for qbits in QBITS:
         res.write(f"}};")
 
 # %%
-for qbits in QBITS:
-
-    print("QUANT BITWIDTH:", qbits)
-    print("WEIGHT PARAMS :", q_params[qbits])
-    print("WEIGHT VALUES :", f_weights[qbits])
+#for qbits in QBITS:
+#
+#    print("QUANT BITWIDTH:", qbits)
+#    print("WEIGHT PARAMS :", q_params[qbits])
+#    print("WEIGHT VALUES :", f_weights[qbits])
 
 
 sys.exit(0)

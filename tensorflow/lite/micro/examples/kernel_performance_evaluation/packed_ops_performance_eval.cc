@@ -22,6 +22,7 @@ limitations under the License.
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/kernels/kernel_runner.h"
 #include "tensorflow/lite/micro/micro_utils.h"
 #include "tensorflow/lite/micro/test_helpers.h"
 #include "tensorflow/lite/micro/testing/micro_test.h"
@@ -40,14 +41,14 @@ limitations under the License.
 #include "tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6refdata.h"
 #include "tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8refdata.h"
 
-uint8_t input_quant( float x )
+float output_dquant( uint8_t x )
 {
-  return static_cast<uint8_t>(x/0.003921568859368563f);
+  return 0.00390625f * static_cast<float>(x);
 }
 
-float output_dquant( uint8_t x)
+uint8_t input_quant( float x)
 {
-  return (x-128)*7.812500e-03f;
+  return static_cast<uint8_t>(x/0.003921568859368563f);
 }
 
 void run_model( const uint8_t *model_fb, float data[2][28][28][1], float label[2][2] ) {
@@ -84,11 +85,12 @@ void run_model( const uint8_t *model_fb, float data[2][28][28][1], float label[2
 // At the time of writing, the hello world model uses 2208 bytes, we leave
 // 100 bytes head room here to make the test less fragile and in the same
 // time, alert for substantial increase.
-  TF_LITE_MICRO_EXPECT_LE(interpreter.arena_used_bytes(), 2208 + 100);
+  TF_LITE_MICRO_EXPECT_LE(interpreter.arena_used_bytes(), 65536);
 
 // Obtain a pointer to the model's input tensor
   TfLiteTensor *input = interpreter.input(0);
-
+  //uint8_t input_buffer[28*28];
+  //input->data.data = input_buffer;
 // Make sure the input has the properties we expect
   TF_LITE_MICRO_EXPECT_NE(nullptr, input);
 // The property "dims" tells us the tensor's shape. It has one element for
@@ -107,26 +109,35 @@ void run_model( const uint8_t *model_fb, float data[2][28][28][1], float label[2
 
   TfLiteTensor *output = interpreter.output(0);
   TF_LITE_MICRO_EXPECT_EQ(2, output->dims->size);
-  TF_LITE_MICRO_EXPECT_EQ(1, input->dims->data[0]);
-  TF_LITE_MICRO_EXPECT_EQ(2, input->dims->data[1]);
+  TF_LITE_MICRO_EXPECT_EQ(1, output->dims->data[0]);
+  TF_LITE_MICRO_EXPECT_EQ(2, output->dims->data[1]);
   TF_LITE_MICRO_EXPECT_EQ(kTfLiteUInt8, output->type);
 
   for (int h = 0; h < 2; ++h) {
 // Provide an input value
-    for (int i = 0; i < 28; i++) {
-      for (int j = 0; j < 28; j++) {
-        input->data.uint8[28*i+j] = input_quant(data[h][i][j][0]);
-      }
-    }
     float ref_data[2] = {label[h][0], label[h][1]};
 
 // Run the model on this input and check that it succeeds
-    TfLiteStatus invoke_status = interpreter.Invoke();
-    TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
+    const int number_of_invocations = 100;
+    auto start = std::chrono::high_resolution_clock::now();
 
+    for (int invoke_index = 0; invoke_index < number_of_invocations; invoke_index++) {
+      for (int i = 0; i < 28; i++) {
+        for (int j = 0; j < 28; j++) {
+          input->data.uint8[28*i+j] = input_quant(data[h][i][j][0]);
+        }
+      }
+      TfLiteStatus invoke_status = interpreter.Invoke();
+      TF_LITE_MICRO_EXPECT_EQ(kTfLiteOk, invoke_status);
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    micro_test::reporter->Report("Image%d %d Invoke run time = %d us", h,
+                                 number_of_invocations, duration);
 // Obtain the output value from the tensor
     float value0 = output_dquant(output->data.uint8[0]);
-    float value1 = output_dquant(output->data.uint8[0]);
+    float value1 = output_dquant(output->data.uint8[1]);
 // Check that the output value is within 0.001 of the expected  value
 // (produced using from a face-quantized prediction using the original model)
     TF_LITE_MICRO_EXPECT_NEAR(ref_data[0], value0, 0.05f);
@@ -164,15 +175,15 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
                      static_cast<CONTAINER_T>(1);
   uint32_t container_buf = 0;
   // Lazy way of getting sufficient CONTAINER_T aligned storage...
-  uint32 items_per_container = std::floor((float)(container_bits)/bits_per_item);
+  uint32_t items_per_container = std::floor((float)(container_bits)/bits_per_item);
   uint32_t cont_per_minor = std::ceil((float)(minor_dim_size)/items_per_container);
-  uint32 number_containers = (elts / minor_dim_size) * cont_per_minor;
+  uint32_t number_containers = (elts / minor_dim_size) * cont_per_minor;
   std::vector<CONTAINER_T> packed_data(number_containers);
 
   uint8_t* packed_data_byte = reinterpret_cast<uint8_t*>(packed_data.data());
   int bits_in_container = 0;
   for (size_t dim = 0; dim < elts / minor_dim_size; dim++) {
-    uint32 data_index = dim * minor_dim_size;
+    uint32_t data_index = dim * minor_dim_size;
     for (size_t i = 0; i < minor_dim_size; ++i) {
       // Little-endian packing...
       container_buf |= (static_cast<CONTAINER_T>(data[data_index + i]) & mask) << bits_in_container;
@@ -214,42 +225,23 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
                                  T* output_data, int output_length,
                                  TfLiteConvParams* conv_params, std::string desc,
                                  float tolerance = 1e-5) {
-  TfLiteContext context;
-  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
-
-  ::tflite::AllOpsResolver resolver;
-
-  const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_CONV_2D);
-
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
-
-  const char* init_data = reinterpret_cast<const char*>(conv_params);
-  size_t init_data_size = 0;
-  void* user_data = nullptr;
-
-  if (registration->init) {
-    user_data = registration->init(&context, init_data, init_data_size);
-  }
-
   int inputs_array_data[] = {3, 0, 1, 2};
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
 
-  TfLiteNode node;
-  node.inputs = inputs_array;
-  node.outputs = outputs_array;
-  node.user_data = user_data;
-  node.builtin_data = reinterpret_cast<void*>(conv_params);
-  node.custom_initial_data = nullptr;
-  node.custom_initial_data_size = 0;
+  const TfLiteRegistration registration =
+      tflite::ops::micro::Register_CONV_2D();
+  micro::KernelRunner runner(
+      registration, tensors, tensors_size, inputs_array, outputs_array,
+      reinterpret_cast<void*>(conv_params), micro_test::reporter);
 
-  if (registration->prepare) {
-    TfLiteStatus return_val = registration->prepare(&context, &node);
-    if (return_val != kTfLiteOk) {
-      return return_val;
-    }
+  const char* init_data = reinterpret_cast<const char*>(conv_params);
+
+  // TODO(b/154240825): Use a test macro here which fails and returns.
+  TfLiteStatus status = runner.InitAndPrepare(init_data);
+  if (status != kTfLiteOk) {
+    return status;
   }
 
   // Start main benchmarking loop
@@ -257,9 +249,8 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
   const int number_of_invocations = 100;
   auto start = std::chrono::high_resolution_clock::now();
 
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
   for (int j = 0; j < number_of_invocations; j++) {
-    TfLiteStatus return_val = registration->invoke(&context, &node);
+    TfLiteStatus return_val = runner.Invoke();
     if (return_val != kTfLiteOk) {
       return return_val;
     }
@@ -267,10 +258,6 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   micro_test::reporter->Report("%s %d Invoke run time =  %d us", desc.c_str(), number_of_invocations, duration);
-
-  if (registration->free) {
-    registration->free(&context, user_data);
-  }
 
   return kTfLiteOk;
 }
@@ -286,42 +273,30 @@ TfLiteStatus ValidateConvGoldens(TfLiteTensor* tensors, int tensors_size,
 TfLiteStatus ValidateDepthwiseConvGoldens(TfLiteDepthwiseConvParams params,
                                           float tolerance, int tensors_size,
                                           TfLiteTensor* tensors, std::string desc) {
-  TfLiteContext context;
-  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
-
-  ::tflite::AllOpsResolver resolver;
-  const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_DEPTHWISE_CONV_2D);
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
-
-  const char* init_data = reinterpret_cast<const char*>(&params);
-  size_t init_data_size = 0;
-  void* user_data = nullptr;
-  if (registration->init) {
-    user_data = registration->init(&context, init_data, init_data_size);
-  }
   int inputs_array_data[] = {3, 0, 1, 2};
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
 
-  TfLiteNode node;
-  node.inputs = inputs_array;
-  node.outputs = outputs_array;
-  node.user_data = user_data;
-  node.builtin_data = reinterpret_cast<void*>(&params);
-  node.custom_initial_data = nullptr;
-  node.custom_initial_data_size = 0;
-  if (registration->prepare) {
-    TF_LITE_ENSURE_OK(context, registration->prepare(&context, &node));
+  const TfLiteRegistration registration =
+      tflite::ops::micro::Register_DEPTHWISE_CONV_2D();
+  micro::KernelRunner runner(
+      registration, tensors, tensors_size, inputs_array, outputs_array,
+      reinterpret_cast<void*>(&params), micro_test::reporter);
+
+  const char* init_data = reinterpret_cast<const char*>(&params);
+
+  // TODO(b/154240825): Use a test macro here which fails and returns.
+  TfLiteStatus status = runner.InitAndPrepare(init_data);
+  if (status != kTfLiteOk) {
+    return status;
   }
 
   const int number_of_invocations = 100;
   auto start = std::chrono::high_resolution_clock::now();
 
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
   for (int j = 0; j < number_of_invocations; j++) {
-    TfLiteStatus return_val = registration->invoke(&context, &node);
+    TfLiteStatus return_val = runner.Invoke();
     if (return_val != kTfLiteOk) {
       return return_val;
     }
@@ -330,9 +305,6 @@ TfLiteStatus ValidateDepthwiseConvGoldens(TfLiteDepthwiseConvParams params,
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   micro_test::reporter->Report("%s %d Invoke run time =  %d us", desc.c_str(), number_of_invocations, duration);
 
-  if (registration->free) {
-    registration->free(&context, user_data);
-  }
   return kTfLiteOk;
 }
 
@@ -418,57 +390,37 @@ TfLiteStatus TestFullyConnectedQuantized(
     SetPackingParams(tensors[1], weights_min, weights_max, packing);
   }
 
-  TfLiteContext context;
-  PopulateContext(tensors, tensors_size, micro_test::reporter, &context);
-
-  ::tflite::AllOpsResolver resolver;
-  const TfLiteRegistration* registration =
-      resolver.FindOp(tflite::BuiltinOperator_FULLY_CONNECTED);
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration);
-
   TfLiteFullyConnectedParams builtin_data = {
       activation, kTfLiteFullyConnectedWeightsFormatDefault, false, false};
-  const char* init_data = reinterpret_cast<const char*>(&builtin_data);
-  size_t init_data_size = 0;
-  void* user_data = nullptr;
-  if (registration->init) {
-    user_data = registration->init(&context, init_data, init_data_size);
-  }
 
   int inputs_array_data[] = {3, 0, 1, 2};
   TfLiteIntArray* inputs_array = IntArrayFromInts(inputs_array_data);
   int outputs_array_data[] = {1, 3};
   TfLiteIntArray* outputs_array = IntArrayFromInts(outputs_array_data);
 
-  TfLiteNode node;
-  node.inputs = inputs_array;
-  node.outputs = outputs_array;
-  node.user_data = user_data;
-  node.builtin_data = reinterpret_cast<void*>(&builtin_data);
-  node.custom_initial_data = nullptr;
-  node.custom_initial_data_size = 0;
+  const TfLiteRegistration registration =
+      ops::micro::Register_FULLY_CONNECTED();
+  micro::KernelRunner runner(
+      registration, tensors, tensors_size, inputs_array, outputs_array,
+      reinterpret_cast<void*>(&builtin_data), micro_test::reporter);
 
-  if (registration->prepare) {
-    TF_LITE_ENSURE_OK(&context, registration->prepare(&context, &node));
+  TfLiteStatus status = runner.InitAndPrepare();
+  if (status != kTfLiteOk) {
+      return status;
   }
 
   const int number_of_invocations = 100;
   auto start = std::chrono::high_resolution_clock::now();
 
-  TF_LITE_MICRO_EXPECT_NE(nullptr, registration->invoke);
   for (int j = 0; j < number_of_invocations; j++) {
-    TfLiteStatus return_val = registration->invoke(&context, &node);
-    if (return_val != kTfLiteOk) {
-      return return_val;
+    status = runner.Invoke();
+    if (status != kTfLiteOk) {
+      return status;
     }
   }
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   micro_test::reporter->Report("%s %d Invoke run time =  %d us", desc.c_str(), number_of_invocations, duration);
-
-  if (registration->free) {
-    registration->free(&context, user_data);
-  }
 
   return kTfLiteOk;
 }
@@ -1004,7 +956,17 @@ TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison) {
 
 TF_LITE_MICRO_TEST(MNISTPackedComparison) {
   // Test entire model on MNIST data
+  micro_test::reporter->Report("\n8 BIT (not packed):");
+  run_model(mnist_8_data, mnist_8_refdata, mnist_8_refdata_label);
+
+  micro_test::reporter->Report("\n4 BIT:");
   run_model(mnist_packed_4_data, mnist_packed_4_refdata, mnist_packed_4_refdata_label);
+
+  micro_test::reporter->Report("\n5 BIT:");
+  run_model(mnist_packed_5_data, mnist_packed_5_refdata, mnist_packed_5_refdata_label);
+
+  micro_test::reporter->Report("\n6 BIT:");
+  run_model(mnist_packed_6_data, mnist_packed_6_refdata, mnist_packed_6_refdata_label);
 }
 
 TF_LITE_MICRO_TESTS_END

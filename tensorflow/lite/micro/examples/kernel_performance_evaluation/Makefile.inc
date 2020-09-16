@@ -9,20 +9,20 @@ tensorflow/lite/micro/examples/kernel_performance_evaluation/fully_connected_per
 
 PACKED_WEIGHTS_TEST_SRCS := \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/packed_ops_performance_eval.cc \
+tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8.cc \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_4.cc \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_5.cc \
-tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6.cc \
-tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8.cc
+tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6.cc
 
 PACKED_WEIGHTS_TEST_HDRS := \
+tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8.h \
+tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8refdata.h \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_4.h \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_5.h \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6.h \
-tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8.h \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_4refdata.h \
 tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_5refdata.h \
-tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6refdata.h \
-tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_8refdata.h
+tensorflow/lite/micro/examples/kernel_performance_evaluation/models/mnist_packed_6refdata.h
 
 #Find any platform - specific rules for the examples.
 include $(wildcard tensorflow/lite/micro/examples/kernel_performance_evaluation/*/Makefile.inc)
