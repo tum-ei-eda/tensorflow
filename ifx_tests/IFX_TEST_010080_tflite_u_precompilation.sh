@@ -16,12 +16,12 @@ USE_RECORDED_VARIANTS=( TAGS="portable_optimized recorded_model" \
 )
 
 TESTS=( \
-   conv conv_packed depthwise_conv depthwise_conv_packed \ 
-   fully_connected reduce pooling \
-   hello_world  person_detection micro_speech
+   conv conv_packed depthwise_conv depthwise_conv_packed
+   fully_connected reduce pooling 
+   hello_world person_detection micro_speech
 )
 
-for test in "${TEST[@]}"
+for test in "${TESTS[@]}"
 do
   echo "----------Testing $test ----------"
   make -s clean
