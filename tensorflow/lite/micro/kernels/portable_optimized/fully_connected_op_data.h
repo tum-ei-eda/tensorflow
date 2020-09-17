@@ -28,11 +28,8 @@ limitations under the License.
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
 
-
-
-
 #include "tensorflow/lite/c/common.h"
-
+#include "tensorflow/lite/c/builtin_op_data.h"
 
 namespace tflite {
 namespace ops {

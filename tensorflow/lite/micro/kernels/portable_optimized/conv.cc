@@ -44,7 +44,7 @@ limitations under the License.
 
 #include "tensorflow/lite/micro/kernels/portable_optimized/conv_op_data.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
-
+#include "tensorflow/lite/micro/kernels/static_data_utils.h"
 
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
@@ -67,31 +67,6 @@ KERNEL_VARIANT_COLLECT_INFO(
 
 
 #if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
-
-static CppPODStructInitializer TfLitePaddingValuesSubStruct(TfLitePaddingValues &pv) {
-
-  auto init = new CppItems();
-  *init 
-    << pv.width
-    << pv.height
-    << pv.width_offset
-    << pv.height_offset;
-
-  CppPODStructInitializer res(init);
-  return res;
-}
-
-static CppNamedStruct TfLiteCustomSub8BitPackingDetailsStructPtr(const char *name, const TfLiteCustomSub8BitPackingDetails &pv) {
-
-  auto init = new CppItems();
-  *init 
-    << pv.bits_per_item
-    << pv.container_bits
-    << pv.packed_minor_dims
-    << "{}"; // Empty initializer 
-  CppNamedStruct res(name, "const TfLiteCustomSub8BitPackingDetails", init);
-  return res;
-}
 
 static CppItems *static_opdata(OpData &od, size_t output_depth)
 {

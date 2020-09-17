@@ -236,12 +236,13 @@ class CppItems  {
     return *this;
   }
 
-  // Vector: needs a named sub-initializer that has to be output first
+  // For pointer to array: needs a named sub-initializer that has to be output first
   template <typename T>
   CppItems &operator<<(const CppNamedVec<T> &subvec);
   
-  // Vector: needs a named sub-initializer that has to be output first
   CppItems &operator<<(const char *literal);
+
+  CppItems &operator<<(float fvalue);
 
 
   template <typename T>
@@ -249,8 +250,10 @@ class CppItems  {
                           CppItems &>::type
   operator<<(T value);
 
+  // Pointer to structure: needs a named sub-initializer that has to be output first
   CppItems &operator<<(const CppNamedStruct &structref);
 
+  // For sub-strucuture: an
   CppItems &operator<<(const CppPODStructInitializer &substruct);
 
   typedef std::deque<std::unique_ptr<CppDefinitionBase>> named_subinits_t;

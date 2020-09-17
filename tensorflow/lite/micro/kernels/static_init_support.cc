@@ -17,7 +17,6 @@ namespace tflite {
 namespace ops {
 namespace micro {
 
-
 // Vector: needs a named sub-initializer that has to be output first
 CppItems &CppItems::operator<<(const char *literal) {
   elements_.push_back(
@@ -25,7 +24,13 @@ CppItems &CppItems::operator<<(const char *literal) {
   return *this;
 }
 
-CppItems &CppItems::operator<<(const CppNamedStruct &structref) {    
+CppItems &CppItems::operator<<(float value) {
+  elements_.push_back(std::unique_ptr<CppInitializerBase>(
+      new CppPrimitiveInitializer<float>(value)));
+  return *this;
+}
+
+CppItems &CppItems::operator<<(const CppNamedStruct &structref) {
   named_sub_inits_.push_front(
       std::unique_ptr<CppDefinitionBase>(new CppNamedStruct(structref)));
   elements_.push_back(std::unique_ptr<CppInitializerBase>(
@@ -33,13 +38,11 @@ CppItems &CppItems::operator<<(const CppNamedStruct &structref) {
   return *this;
 }
 
-
 CppItems &CppItems::operator<<(const CppPODStructInitializer &substruct) {
   elements_.push_back(std::unique_ptr<CppInitializerBase>(
       new CppPODStructInitializer(substruct)));
   return *this;
 }
-
 
 //
 // Implementation of pointer collector (will be owned) by
@@ -160,8 +163,7 @@ class CppInitializerCollector : public PointerCollectors {
   void recordOpDataHeaders(const char *op_name, const char *headers,
                            const char *type);
 
-  void recordStaticOpdata(const char *op_name,
-                          CppItems *op_data);
+  void recordStaticOpdata(const char *op_name, CppItems *op_data);
 
   void writeStaticOpDataHeaders(std::ostream &os);
 
@@ -211,8 +213,8 @@ void CppInitializerCollector::recordOpDataHeaders(const char *op_name,
       new CppNamedStructVecInitializer("op_user_data", op_data_type));
 }
 
-void CppInitializerCollector::recordStaticOpdata(
-    const char *op_name, CppItems *op_data) {
+void CppInitializerCollector::recordStaticOpdata(const char *op_name,
+                                                 CppItems *op_data) {
   std::string key(op_name);
   auto &inst_user_data = per_inst_user_data_[key];
   auto pod_init = new CppPODStructInitializer(op_data);
@@ -240,18 +242,16 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
             "  return nullptr;\n"
             "}\n\n";
     } else {
-
       id_i.second->serialize(os, "");
 
       os << "  size_t inst_counter = 0;\n\n"
-        << id_i.second->getType()
-        << " *recordedStaticOpData() {\n"
+         << id_i.second->getType()
+         << " *recordedStaticOpData() {\n"
             "  return &op_user_data[inst_counter++];\n"
             "}\n\n";
     }
     os << "} // namespace " << id_i.first << "\n\n";
   }
-
 
   os << "void resetStaticDataCounters() { \n";
   for (auto &collector : collectors_) {
@@ -289,8 +289,6 @@ void PointerCollector::addPointer(const std::string &literal, void *ptr) {
   CppInitializerCollector::instance().recordLiteralForPointer(ptr, literal);
 }
 
-
-
 void CppPointerLiteral::serialize_initializer(std::ostream &os,
                                               const std::string &id_prefix) {
   auto literal = CppInitializerCollector::instance().getLiteralForPointer(ptr_);
@@ -313,7 +311,6 @@ void writeStaticOpDataDefinitions(std::ostream &os) {
 void recordStaticOpdata(const char *op_name, CppItems *op_data) {
   CppInitializerCollector::instance().recordStaticOpdata(op_name, op_data);
 }
-
 
 void recordLiteralForPointer(const std::string &literal, void *ptr) {
   CppInitializerCollector::instance().recordLiteralForPointer(ptr, literal);
