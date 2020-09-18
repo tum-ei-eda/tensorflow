@@ -43,29 +43,35 @@ static std::vector<CONTAINER_T> PackedSub8BitCustomQuantization(
                      static_cast<CONTAINER_T>(1);
   uint32_t container_buf = 0;
   // Lazy way of getting sufficient CONTAINER_T aligned storage...
-  std::vector<CONTAINER_T> packed_data(elts / (container_bits / 8));
+  uint32_t items_per_container = std::floor((float)(container_bits)/bits_per_item);
+  uint32_t cont_per_minor = std::ceil((float)(minor_dim_size)/items_per_container);
+  uint32_t number_containers = (elts / minor_dim_size) * cont_per_minor;
+  std::vector<CONTAINER_T> packed_data(number_containers);
 
   uint8_t* packed_data_byte = reinterpret_cast<uint8_t*>(packed_data.data());
-  CONTAINER_T bits_in_container = 0;
-  for (size_t i = 0; i < elts; ++i) {
-    // Little-endian packing...
-    container_buf |= (static_cast<CONTAINER_T>(data[i]) & mask) << bits_in_container;
-    bits_in_container += bits_per_item;
-    // Flush container when insufficient space for another item
-    // Start of each minor dimension to ensure CONTAINER_T aligned...
-    // ToDO IFX_PATCH: probably more efficient to align on selected dimension
-    // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
-    if (bits_in_container + bits_per_item > container_bits ||
-        (i % minor_dim_size == (minor_dim_size - 1))) {
-      // Flatbuffers are stored little-endian
-      for (size_t bits = 0; bits < container_bits; bits += 8) {
-        uint8_t byte = (container_buf & 0xff);
-        *packed_data_byte = byte;
-        ++packed_data_byte;
-        container_buf >>= 8;
+  int bits_in_container = 0;
+  for (size_t dim = 0; dim < elts / minor_dim_size; dim++) {
+    uint32_t data_index = dim * minor_dim_size;
+    for (size_t i = 0; i < minor_dim_size; ++i) {
+      // Little-endian packing...
+      container_buf |= (static_cast<CONTAINER_T>(data[data_index + i]) & mask) << bits_in_container;
+      bits_in_container += bits_per_item;
+      // Flush container when insufficient space for another item
+      // Start of each minor dimension to ensure CONTAINER_T aligned...
+      // ToDO IFX_PATCH: probably more efficient to align on selected dimension
+      // (ideally: dependent on op) to handle depthwise conv / inner loop 2D conv
+      if (bits_in_container + bits_per_item > container_bits ||
+          (i % minor_dim_size == (minor_dim_size - 1))) {
+        // Flatbuffers are stored little-endian
+        for (size_t bits = 0; bits < container_bits; bits += 8) {
+          uint8_t byte = (container_buf & 0xff);
+          *packed_data_byte = byte;
+          ++packed_data_byte;
+          container_buf >>= 8;
+        }
+        bits_in_container = 0;
+        container_buf = 0;
       }
-      bits_in_container = 0;
-      container_buf = 0;
     }
   }
 
