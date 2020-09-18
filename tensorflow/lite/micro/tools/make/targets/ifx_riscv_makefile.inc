@@ -37,15 +37,23 @@ CC_WARNINGS := -Wsign-compare -Wdouble-promotion \
                -Wno-error=unused-function
                
   TARGET_TOOLCHAIN_PREFIX := $(IFX_RV_TOOLCHAIN_TRIPLET)-
+ifneq ($(BUILD_TYPE), release)
+  BUILD_TYPE_FLAGS := \
+    -DTF_LITE_MCU_DEBUG_LOG
+  ifeq ($(BUILD_TYPE), debug)
+     PLATFORM_OPT_FLAGS := -O1
+  endif
+endif
+
   PLATFORM_FLAGS = \
     -march=$(TARGET_ARCH) \
     -mabi=$(TARGET_ABI) \
     -DIFX_RISCV \
     -DIFX_RISCV_$(patsubst ifx_riscv%,,$(TARGET)) \
-    -DTF_LITE_MCU_DEBUG_LOG \
     -DTF_LITE_USE_GLOBAL_CMATH_FUNCTIONS \
     -DTF_LITE_USE_GLOBAL_MAX \
     -DTF_LITE_USE_GLOBAL_MIN \
+    $(BUILD_TYPE_FLAGS) \
     -fno-exceptions \
     -fno-unwind-tables \
     -ffunction-sections \
