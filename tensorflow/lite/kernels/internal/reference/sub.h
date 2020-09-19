@@ -115,7 +115,7 @@ inline void BroadcastSubSlow(const ArithmeticParams& params,
                              const RuntimeShape& input2_shape,
                              const uint8_t* input2_data,
                              const RuntimeShape& output_shape,
-                             uint8* output_data) {
+                             uint8_t* output_data) {
   TFLITE_DCHECK_LE(input1_shape.DimensionsCount(), N);
   TFLITE_DCHECK_LE(input2_shape.DimensionsCount(), N);
   TFLITE_DCHECK_LE(output_shape.DimensionsCount(), N);
