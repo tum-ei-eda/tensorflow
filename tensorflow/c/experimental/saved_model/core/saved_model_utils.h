@@ -22,7 +22,9 @@ limitations under the License.
 #include <memory>
 #include <unordered_map>
 
+#include "absl/types/span.h"
 #include "tensorflow/c/eager/immediate_execution_context.h"
+#include "tensorflow/c/experimental/saved_model/core/revived_types/asset.h"
 #include "tensorflow/c/experimental/saved_model/core/revived_types/constant.h"
 #include "tensorflow/c/experimental/saved_model/core/revived_types/tf_concrete_function.h"
 #include "tensorflow/c/experimental/saved_model/core/revived_types/variable.h"
@@ -31,7 +33,9 @@ limitations under the License.
 #include "tensorflow/core/lib/hash/hash.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/stringpiece.h"
+#include "tensorflow/core/protobuf/meta_graph.pb.h"
 #include "tensorflow/core/protobuf/saved_object_graph.pb.h"
+#include "tensorflow/core/protobuf/struct.pb.h"
 
 namespace tensorflow {
 namespace internal {
@@ -51,6 +55,11 @@ Status LoadSavedVariable(ImmediateExecutionContext* ctx,
                          const SavedVariable& variable,
                          std::unique_ptr<Variable>* output);
 
+Status LoadSavedAsset(ImmediateExecutionContext* ctx, const SavedAsset& asset,
+                      const std::string& saved_model_dir,
+                      absl::Span<const AssetFileDef> assets,
+                      std::unique_ptr<Asset>* output);
+
 // Creates a TFConcreteFunction from a SavedConcreteFunction.
 Status LoadTFConcreteFunction(
     const SavedConcreteFunction& saved_concrete_function,
@@ -59,12 +68,21 @@ Status LoadTFConcreteFunction(
         captured_objects,
     ImmediateExecutionContext* ctx, std::unique_ptr<TFConcreteFunction>* out);
 
-// Find the SavedObject in `object_graph` at location `path`. `path` must be a
-// dot-delimited string of object names relative to the root object. If no
-// object is found, returns nullptr. Callers must ensure `object_graph` outlives
-// the returned pointer.
+// Flattens `signature` into a vector of TensorSpecProto pointers back into
+// `signature`. `signature` must outlive flattened_specs. `signature` must also
+// be the input or output signature of a SavedConcreteFunction (i.e. "nested
+// structures of tensorspecs").
+Status FlattenSignature(const StructuredValue& signature,
+                        std::vector<const TensorSpecProto*>* flattened_specs);
+
+// Find the SavedObject in `object_graph` at location `path`. `path` must be
+// a dot-delimited string of object names relative to the root object. If no
+// object is found, returns nullptr. Callers must ensure `object_graph`
+// outlives the returned pointer. If not `nullptr`, `node_id` will contain the
+// index of the returned object in the `SavedObjectGraph.nodes` array.
 const SavedObject* FindNodeAtPath(StringPiece path,
-                                  const SavedObjectGraph& object_graph);
+                                  const SavedObjectGraph& object_graph,
+                                  int* node_id = nullptr);
 
 // Maps each node in `graphdef` to its corresponding Attribute Map.
 // Callers must ensure that `graphdef` outlives the returned map.

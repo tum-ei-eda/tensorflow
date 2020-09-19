@@ -47,6 +47,7 @@ from tensorflow.python.ops import lookup_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import resource_variable_ops
 from tensorflow.python.ops import variables
+from tensorflow.python.saved_model import load
 from tensorflow.python.saved_model import loader
 from tensorflow.python.saved_model import loader_impl
 from tensorflow.python.saved_model import save
@@ -247,7 +248,7 @@ class SaveTest(test.TestCase, parameterized.TestCase):
     root.f(constant_op.constant(1.))
     to_save = root.f.get_concrete_function(constant_op.constant(1.))
     save_dir = os.path.join(self.get_temp_dir(), "saved_model")
-    with self.assertRaisesRegex(ValueError, "non-flat outputs"):
+    with self.assertRaisesRegex(ValueError, "non-Tensor value"):
       save.save(root, save_dir, to_save)
 
   def test_nested_dict_outputs(self):
@@ -259,8 +260,7 @@ class SaveTest(test.TestCase, parameterized.TestCase):
     root.f(constant_op.constant(1.))
     to_save = root.f.get_concrete_function(constant_op.constant(1.))
     save_dir = os.path.join(self.get_temp_dir(), "saved_model")
-    with self.assertRaisesRegex(ValueError,
-                                "dictionary containing non-Tensor value"):
+    with self.assertRaisesRegex(ValueError, "non-Tensor value"):
       save.save(root, save_dir, to_save)
 
   def test_variable(self):
@@ -515,14 +515,33 @@ class SaveTest(test.TestCase, parameterized.TestCase):
     else:
       save.save(obj=root, export_dir=file_name, options=options)
 
-    graph_def = None
+    meta = None
     if meta_graph_only:
-      graph_def = meta_graph.read_meta_graph_file(file_name).graph_def
+      meta = meta_graph.read_meta_graph_file(file_name)
     else:
-      graph_def = loader_impl.parse_saved_model(
-          file_name).meta_graphs[0].graph_def
+      meta = loader_impl.parse_saved_model(file_name).meta_graphs[0]
+
+    # Check devices in meta graph nodes.
+    graph_def = meta.graph_def
     v0 = next((n for n in graph_def.node if n.name == "v0"), None)
     v1 = next((n for n in graph_def.node if n.name == "v1"), None)
+    self.assertIsNotNone(v0)
+    self.assertIsNotNone(v1)
+    if save_devices == save_options.VariablePolicy.SAVE_VARIABLE_DEVICES:
+      self.assertIn("CPU:0", v0.device)
+      self.assertIn("CPU:1", v1.device)
+    else:
+      self.assertEmpty(v0.device)
+      self.assertEmpty(v1.device)
+
+    # Check devices in object graph nodes.
+    object_graph_def = meta.object_graph_def
+    v0 = next((n.variable
+               for n in object_graph_def.nodes
+               if n.HasField("variable") and n.variable.name == "v0"), None)
+    v1 = next((n.variable
+               for n in object_graph_def.nodes
+               if n.HasField("variable") and n.variable.name == "v1"), None)
     self.assertIsNotNone(v0)
     self.assertIsNotNone(v1)
     if save_devices == save_options.VariablePolicy.SAVE_VARIABLE_DEVICES:
@@ -592,6 +611,31 @@ class SaveTest(test.TestCase, parameterized.TestCase):
           options=save_options.SaveOptions(
               experimental_variable_policy=save_options.VariablePolicy
               .EXPAND_DISTRIBUTED_VARIABLES))
+
+  def test_save_uninitialized_variable(self):
+    root = tracking.AutoTrackable()
+    root.uninitialized_variable = resource_variable_ops.UninitializedVariable(
+        name="uninitialized_variable", dtype=dtypes.float32)
+    root.initialized_variable = variables.Variable(
+        1.0, name="initialized_variable")
+
+    # TODO(b/149594077): Python loading does not work now partly because it
+    # shouldn't, as the public API and semantics of uninitialized variables
+    # are not properly defined, and officially supporting loading would end up
+    # defining semantics "by usage." We should only allow loading once the API
+    # is made official.
+    export_dir = os.path.join(self.get_temp_dir(), "saved_model")
+    save.save(root, export_dir)
+    with self.assertRaisesRegex(FileNotFoundError,
+                                "Key uninitialized_variable"):
+      load.load(export_dir)
+    with ops.Graph().as_default(), session_lib.Session() as session:
+      # The final ValueError here (with "no variables to save") is confusing,
+      # but errors upstream give the user the correct information (a
+      # NotFoundError stating that the uninitalized_variable was not found in
+      # the checkpoint).
+      with self.assertRaises(ValueError):
+        loader.load(session, [tag_constants.SERVING], export_dir)
 
 
 class VariablePolicyEnumTest(test.TestCase):
@@ -802,8 +846,7 @@ class AssetTests(test.TestCase):
         key_index=lookup_ops.TextFileIndex.WHOLE_LINE,
         value_dtype=dtypes.int64,
         value_index=lookup_ops.TextFileIndex.LINE_NUMBER)
-    table = lookup_ops.HashTable(
-        initializer, default_value=-1)
+    table = lookup_ops.HashTable(initializer, default_value=-1)
     root.table_user = def_function.function(
         table.lookup,
         input_signature=[tensor_spec.TensorSpec(None, dtypes.string)])

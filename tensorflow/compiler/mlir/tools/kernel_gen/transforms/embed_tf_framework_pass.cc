@@ -26,7 +26,7 @@ namespace tf_framework {
 namespace {
 
 #define GEN_PASS_CLASSES
-#include "tensorflow/compiler/mlir/tools/kernel_gen/transforms/tf_framework_passes.h.inc"
+#include "tensorflow/compiler/mlir/tools/kernel_gen/transforms/kernel_gen_passes.h.inc"
 
 static constexpr StringRef kTFEntry = "tf_entry";
 
@@ -36,6 +36,10 @@ static constexpr StringRef kTFEntry = "tf_entry";
 // * std.dealloc becomes tf_framework.dealloc_raw.
 class EmbedTFFrameworkPass
     : public EmbedTFFrameworkPassBase<EmbedTFFrameworkPass> {
+  void getDependentDialects(DialectRegistry& registry) const override {
+    registry.insert<mlir::kernel_gen::tf_framework::TFFrameworkDialect>();
+  }
+
  public:
   void runOnOperation() override {
     ModuleOp m = getOperation();
@@ -68,7 +72,7 @@ class EmbedTFFrameworkPass
 
 }  // namespace
 
-std::unique_ptr<OperationPass<ModuleOp> > createEmbedTFFrameworkPass() {
+std::unique_ptr<OperationPass<ModuleOp> > CreateEmbedTFFrameworkPass() {
   return std::make_unique<EmbedTFFrameworkPass>();
 }
 

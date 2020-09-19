@@ -18,26 +18,56 @@ limitations under the License.
 
 #include <memory>
 
+#include "mlir/Dialect/GPU/GPUDialect.h"  // from @llvm-project
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"  // from @llvm-project
+#include "mlir/IR/Module.h"  // from @llvm-project
+#include "mlir/Pass/Pass.h"  // from @llvm-project
+
 namespace mlir {
-
-class ModuleOp;
-template <typename T>
-class OperationPass;
-
 namespace kernel_gen {
 namespace tf_framework {
-
-// Test pass for applying TF Framework -> LLVM patterns.
-std::unique_ptr<OperationPass<ModuleOp> >
-createTestTFFrameworkLegalizeToLLVMPass();
 
 // Pass to replace some of the Standard ops with TF Framework ops.
 // * adds tf_framework::OpKernelContextType argument to the function
 // * std.alloc becomes tf_framework.alloc_raw
 // * std.dealloc becomes tf_framework.dealloc_raw
-std::unique_ptr<OperationPass<ModuleOp> > createEmbedTFFrameworkPass();
+std::unique_ptr<OperationPass<ModuleOp> > CreateEmbedTFFrameworkPass();
 
 }  // namespace tf_framework
+
+namespace transforms {
+
+// Pass for applying LLVM legalization patterns.
+std::unique_ptr<OperationPass<ModuleOp> > CreateTFKernelToLLVMPass();
+
+// Pass to tranform shape computations in shape dialect to standard and scf
+// using memref descriptors.
+std::unique_ptr<OperationPass<ModuleOp> > CreateShapeToDescriptorsPass();
+
+// Pass to tranform computations on values to their corresponding parts on
+// buffers.
+std::unique_ptr<OperationPass<ModuleOp> > CreateBufferizePass();
+
+// Pass to materialize broadcasts.
+std::unique_ptr<FunctionPass> CreateMaterializeBroadcastsPass();
+
+// Pass to propagate TF ABI knowledge, e.g. offsets, alignment.
+std::unique_ptr<OperationPass<LLVM::LLVMFuncOp>>
+CreatePropagateTensorFlowABIKnowledgePass(
+    mlir::FunctionType type = {}, llvm::ArrayRef<uint32_t> same_shape = {});
+
+// Pass to annotate GPU Module with its PTX.
+std::unique_ptr<OperationPass<gpu::GPUModuleOp>> CreateGpuKernelToBlobPass(
+    mlir::StringRef blob_annotation = "", int32_t architecture = 0);
+
+// Pass to unfuse batch norm.
+std::unique_ptr<FunctionPass> CreateUnfuseBatchNormPass();
+
+}  // namespace transforms
+
+#define GEN_PASS_REGISTRATION
+#include "tensorflow/compiler/mlir/tools/kernel_gen/transforms/kernel_gen_passes.h.inc"
+
 }  // namespace kernel_gen
 }  // namespace mlir
 

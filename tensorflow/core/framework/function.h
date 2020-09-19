@@ -403,6 +403,9 @@ class FunctionLibraryDefinition : public OpRegistryInterface {
   // are no longer in use.
   Status RemoveFunction(const std::string& func) TF_LOCKS_EXCLUDED(mu_);
 
+  // Removes all the functions and gradient functions.
+  void Clear() TF_LOCKS_EXCLUDED(mu_);
+
   // Adds the functions and gradients in 'other' to this function library.
   // Duplicate functions and gradients are ignored.
   // This operation is atomic.
@@ -611,6 +614,9 @@ class FunctionLibraryRuntime {
     // runtime will leave device specification empty and will rely on Placer to
     // infer correct device.
     std::vector<string> output_devices;
+
+    // If set, it indicates the original output indices of a component function.
+    absl::optional<std::vector<int>> ret_indices = absl::nullopt;
 
     // Maps from a CompositeDevice name to a list of underlying physical
     // devices.
@@ -901,6 +907,9 @@ typedef
         FunctionArg;
 #endif
 
+// Either a local tensor or the shape of a remote tensor.
+typedef absl::variant<Tensor, TensorShape> FunctionRet;
+
 // Used to instantiate and run functions in a distributed system.
 class DistributedFunctionLibraryRuntime {
  public:
@@ -929,14 +938,15 @@ class DistributedFunctionLibraryRuntime {
 
   // Run an instantiated remote function (specified by `handle`) with a list of
   // input Tensors or RemoteTensorHandles as `args` and get its output Tensors
-  // in `rets`. When using RemoteTensorHandles as function inputs, the
-  // corresponding tensor data will be resolved on the remote worker, so it is
-  // not required to be locally available on the caller side. Using
-  // RemoteTensorHandle inputs is not supported in TensorFlow v1 runtime.
-  // TODO(yujingzhang): Support outputting tensors on remote devices.
+  // or TensorShapes in `rets`. When using RemoteTensorHandles as function
+  // inputs or TensorShapes as outputs, the corresponding tensor data will be
+  // resolved on the remote worker, so it is not required to be locally
+  // available on the caller side. Using RemoteTensorHandle inputs is not
+  // supported in TensorFlow v1 runtime.
   virtual void Run(const FunctionLibraryRuntime::Options& opts,
                    FunctionLibraryRuntime::LocalHandle handle,
-                   gtl::ArraySlice<FunctionArg> args, std::vector<Tensor>* rets,
+                   gtl::ArraySlice<FunctionArg> args,
+                   std::vector<FunctionRet>* rets,
                    FunctionLibraryRuntime::DoneCallback done) = 0;
 
   // Clean up a previously instantiated function on remote worker.

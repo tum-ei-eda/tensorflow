@@ -34,8 +34,10 @@ limitations under the License.
 #include "tensorflow/c/experimental/saved_model/core/revived_types/tf_concrete_function.h"
 #include "tensorflow/c/experimental/saved_model/core/revived_types/variable.h"
 #include "tensorflow/c/experimental/saved_model/core/saved_model_utils.h"
+#include "tensorflow/c/experimental/saved_model/core/signature_def_function.h"
 #include "tensorflow/cc/saved_model/bundle_v2.h"
 #include "tensorflow/cc/saved_model/constants.h"
+#include "tensorflow/cc/saved_model/loader_util.h"
 #include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/function.pb.h"
 #include "tensorflow/core/framework/graph.pb.h"
@@ -47,6 +49,7 @@ limitations under the License.
 #include "tensorflow/core/lib/hash/hash.h"
 #include "tensorflow/core/platform/casts.h"
 #include "tensorflow/core/platform/errors.h"
+#include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/path.h"
 #include "tensorflow/core/platform/stringpiece.h"
@@ -106,11 +109,16 @@ Status ConstantFromSavedConstant(
 // SavedResources. These are returned via the `out` parameter.
 Status ReviveObjects(
     const MetaGraphDef& metagraph, ImmediateExecutionContext* context,
+    const std::string& directory,
     std::unordered_map<int, std::unique_ptr<TensorHandleConvertible>>*
         revived_objects) {
   // This is needed to restore "Constant" nodes by looking up their
   // "Value" attribute.
   NodeAttrMap node_attr_map = internal::NodeToAttrMap(metagraph.graph_def());
+
+  // These are needed for creating "Assets", by looking up their filenames.
+  std::vector<AssetFileDef> assets;
+  TF_RETURN_IF_ERROR(internal::GetAssetFileDefs(metagraph, &assets));
 
   // Iterate through all the saved objects, restoring objects as we go.
   // We don't recreate functions until all other objects have been created.
@@ -127,12 +135,10 @@ Status ReviveObjects(
                                                    node_attr_map, &constant));
       (*revived_objects)[i] = std::move(constant);
     } else if (node.kind_case() == SavedObject::kAsset) {
-      // TODO(bmzhao): Implement Asset C++ class. This should be just recreating
-      // the full path to the asset file:
-      // https://github.com/tensorflow/tensorflow/blob/6a0bdbdb7c48a3491ae1277083ae3dafb4ab4d7a/tensorflow/python/saved_model/load.py#L395-L396
-      // and storing it as a string tensor:
-      // https://github.com/tensorflow/tensorflow/blob/6a0bdbdb7c48a3491ae1277083ae3dafb4ab4d7a/tensorflow/python/training/tracking/tracking.py#L324-L325
-      return errors::Unimplemented("SavedAsset loading is not implemented yet");
+      std::unique_ptr<Asset> asset;
+      TF_RETURN_IF_ERROR(internal::LoadSavedAsset(context, node.asset(),
+                                                  directory, assets, &asset));
+      (*revived_objects)[i] = std::move(asset);
     } else if (node.kind_case() == SavedObject::kResource) {
       // TODO(bmzhao): Figure out how resource loading works and implement it
       return errors::Unimplemented(
@@ -241,8 +247,11 @@ Status RestoreCheckpoint(SavedModelV2Bundle* bundle,
           // TODO(bmzhao): This requires using the newly added Save/Restore
           // functions from
           // https://github.com/tensorflow/tensorflow/commit/df6b21c13c82b5d0981642cfe18f10e60f78ea5c
-          return errors::Unimplemented(
-              "Restoring non-variable objects has not been implemented yet. ");
+          LOG(WARNING) << "Restoring non-variable objects has not been "
+                          "implemented yet. (Kind="
+                       << bundle->saved_object_graph().nodes(node).kind_case()
+                       << ")";
+          return Status::OK();
         }
 
         Variable* variable =
@@ -259,6 +268,12 @@ Status RestoreCheckpoint(SavedModelV2Bundle* bundle,
         }
 
         const std::string& checkpoint_key = attribute->checkpoint_key();
+        if (!bundle->variable_reader()->Contains(checkpoint_key)) {
+          LOG(WARNING) << "No checkpoint entry found for " << checkpoint_key
+                       << ". Variable will be uninitialized.";
+          return Status();
+        }
+
         std::string variables_path_prefix =
             io::JoinPath(directory, kSavedModelVariablesDirectory,
                          kSavedModelVariablesFilename);
@@ -301,7 +316,7 @@ Status TFSavedModelAPI::GetFunction(const std::string& function_path,
 }
 
 Status TFSavedModelAPI::GetSignatureDefFunction(
-    const std::string& signature_def_key, ConcreteFunction** function) {
+    const std::string& signature_def_key, SignatureDefFunction** function) {
   // TODO(bmzhao): Add support for retrieving a signaturedef function.
   return errors::Unimplemented(
       "Retrieving SignatureDef functions is unimplemented currently");
@@ -314,6 +329,31 @@ std::vector<ConcreteFunction*> TFSavedModelAPI::ListFunctions() {
     result.push_back(index_and_function.second.get());
   }
   return result;
+}
+
+Status TFSavedModelAPI::GetVariable(const std::string& variable_path,
+                                    Variable** variable) {
+  int node_id;
+  const SavedObject* object = internal::FindNodeAtPath(
+      variable_path, bundle_.saved_object_graph(), &node_id);
+  if (object == nullptr) {
+    return errors::NotFound("No saved object found at path ", variable_path);
+  }
+
+  if (object->kind_case() == SavedObject::kVariable) {
+    auto iter = revived_objects_.find(node_id);
+    if (iter == revived_objects_.end()) {
+      return errors::Internal("Variable ", variable_path,
+                              " was not properly revived.");
+    }
+    *variable = static_cast<Variable*>(iter->second.get());
+    return Status();
+  }
+
+  *variable = nullptr;
+  return errors::InvalidArgument(
+      variable_path, " is not a path to a Variable (kind=", object->kind_case(),
+      ")");
 }
 
 TFSavedModelAPI::TFSavedModelAPI(
@@ -347,8 +387,8 @@ Status TFSavedModelAPI::Load(
   // https://github.com/tensorflow/tensorflow/blob/285b5fa15405c5e2c084080f52a1818be8648079/tensorflow/python/saved_model/function_deserialization.py#L438-L454
 
   RevivedObjectMap revived_objects;
-  TF_RETURN_IF_ERROR(
-      ReviveObjects(bundle.meta_graph_def(), context, &revived_objects));
+  TF_RETURN_IF_ERROR(ReviveObjects(bundle.meta_graph_def(), context, directory,
+                                   &revived_objects));
 
   // TODO(bmzhao): When we later add support for loading resources, we need to
   // handle the case where materializing a function's captures requires invoking
