@@ -16,8 +16,8 @@ USE_RECORDED_VARIANTS=( TAGS="portable_optimized recorded_model" \
 )
 
 TESTS=( \
-   conv conv_packed depthwise_conv depthwise_conv_packed
-   fully_connected reduce pooling 
+   kernel_conv kernel_conv_packed kernel_depthwise_conv kernel_depthwise_conv_packed
+   kernel_fully_connected kernel_reduce kernel_pooling 
    hello_world person_detection micro_speech
 )
 
@@ -25,7 +25,7 @@ for test in "${TESTS[@]}"
 do
   echo "----------Testing $test ----------"
   make -s "${RECORD_KERNEL_VARIANTS[@]}" clean
-  make -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_kernel_${test}_test
+  make -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_${test}_test
   make -s "${USE_RECORDED_VARIANTS[@]}" clean
-  make -s "${USE_RECORDED_VARIANTS[@]}" -j8 test_kernel_${test}_test
+  make -s "${USE_RECORDED_VARIANTS[@]}" -j8 test_${test}_test
 done
