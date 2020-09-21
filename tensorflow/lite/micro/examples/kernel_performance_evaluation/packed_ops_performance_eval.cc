@@ -570,10 +570,11 @@ void TestDepthwiseConvQuantizedPerLayerNotPacked(
 
 TF_LITE_MICRO_TESTS_BEGIN
 
-TF_LITE_MICRO_TEST(FullyConnectedInvokeRuntime4Bit) {
+TF_LITE_MICRO_TEST(FullyConnectedInvokeComparison) {
   //
   // Test the performance of fully connected packed kernels
   //
+  micro_test::reporter->Report("Setting: input 1024, output 1024");
   using tflite::testing::F2Q;
   using tflite::testing::F2Q32;
   using tflite::testing::F2QB;
@@ -667,7 +668,10 @@ TF_LITE_MICRO_TEST(FullyConnectedInvokeRuntime4Bit) {
           output_dims_data, output_min, output_max, kTfLiteActNone,
           output_data, "8 Bit (not packed): ");
   TF_LITE_MICRO_EXPECT_EQ(return_status, kTfLiteOk);
+  micro_test::reporter->Report("");
 }
+
+
 
 TF_LITE_MICRO_TEST(ConvInvokeComparison) {
   //
@@ -675,6 +679,7 @@ TF_LITE_MICRO_TEST(ConvInvokeComparison) {
   // of the conv kernel.
   //
 
+  micro_test::reporter->Report("Setting: input 32x32x3, filter 4x4, output channels 4");
   // Common inputs and outputs.
   static const int batches = 1;
   static const int inputSize = 32;
@@ -823,11 +828,484 @@ TF_LITE_MICRO_TEST(ConvInvokeComparison) {
   micro_test::reporter->Report("");
 }
 
+TF_LITE_MICRO_TEST(ConvInvokeComparison2) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x3, filter 20x6, output channels 4");
+  // Common inputs and outputs.
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 3;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 20;
+  static const int filterY = 6;
+  static const int outputChannels = 4;
+  static const int kFilterElements = filterX * filterY * inputChannels * outputChannels;
+  static const int kFilterShape[] = {4, outputChannels, filterX, filterY, inputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
+
+  static TfLiteConvParams common_conv_params = {
+      kTfLitePaddingValid,  // padding
+      2,                    // stride_width
+      2,                    // stride_height
+      kTfLiteActNone,       // activation
+      1,                    // dilation_width_factor
+      1,                    // dilation_height_factor
+  };
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  uint8_t output_data[kOutputElements];
+
+  // 4 BIT HERE
+  float weights_min = -4.f;
+  float weights_max = 3.5f;
+
+  int weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3, {}};
+
+  float input_scale = 0.5f;
+  float output_scale = 1.0f;
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights4 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights4.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -8.f;
+  weights_max = 7.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights5 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights5.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -16.f;
+  weights_max = 15.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights6 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights6.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params , "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  filter_scale = 0.5f;
+  output_scale = 1.0f;
+  tflite::testing::TestConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      kFilterData, filter_quantized, filter_scale,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
+TF_LITE_MICRO_TEST(ConvInvokeComparison3) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x32, filter 3x3, output channels 4");
+  // Common inputs and outputs.
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 32;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 3;
+  static const int filterY = 3;
+  static const int outputChannels = 4;
+  static const int kFilterElements = filterX * filterY * inputChannels * outputChannels;
+  static const int kFilterShape[] = {4, outputChannels, filterX, filterY, inputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
+
+  static TfLiteConvParams common_conv_params = {
+      kTfLitePaddingValid,  // padding
+      2,                    // stride_width
+      2,                    // stride_height
+      kTfLiteActNone,       // activation
+      1,                    // dilation_width_factor
+      1,                    // dilation_height_factor
+  };
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  uint8_t output_data[kOutputElements];
+
+  // 4 BIT HERE
+  float weights_min = -4.f;
+  float weights_max = 3.5f;
+
+  int weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3, {}};
+
+  float input_scale = 0.5f;
+  float output_scale = 1.0f;
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights4 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights4.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -8.f;
+  weights_max = 7.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights5 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights5.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -16.f;
+  weights_max = 15.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights6 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights6.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params , "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  filter_scale = 0.5f;
+  output_scale = 1.0f;
+  tflite::testing::TestConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      kFilterData, filter_quantized, filter_scale,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
+TF_LITE_MICRO_TEST(ConvInvokeComparison4) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x32, filter 5x5, output channels 4");
+  // Common inputs and outputs.
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 32;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 5;
+  static const int filterY = 5;
+  static const int outputChannels = 4;
+  static const int kFilterElements = filterX * filterY * inputChannels * outputChannels;
+  static const int kFilterShape[] = {4, outputChannels, filterX, filterY, inputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
+
+  static TfLiteConvParams common_conv_params = {
+      kTfLitePaddingValid,  // padding
+      2,                    // stride_width
+      2,                    // stride_height
+      kTfLiteActNone,       // activation
+      1,                    // dilation_width_factor
+      1,                    // dilation_height_factor
+  };
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  uint8_t output_data[kOutputElements];
+
+  // 4 BIT HERE
+  float weights_min = -4.f;
+  float weights_max = 3.5f;
+
+  int weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 3, {}};
+
+  float input_scale = 0.5f;
+  float output_scale = 1.0f;
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights4 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights4.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -8.f;
+  weights_max = 7.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights5 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights5.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -16.f;
+  weights_max = 15.5f;
+
+  weight_zero_point =
+        ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 3, {}};
+
+  input_scale = 0.5f;
+  output_scale = 1.0f;
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, weight_zero_point);
+
+  auto packed_weights6 =
+        tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+            filter_quantized, 1u * kFilterElements, inputChannels, &packing);
+
+
+  tflite::testing::TestConvQuantizedPerLayer(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      reinterpret_cast<const uint8_t*>(packed_weights6.data()),
+      filter_scale, weight_zero_point, weights_min, weights_max, &packing,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params , "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  filter_scale = 0.5f;
+  output_scale = 1.0f;
+  tflite::testing::TestConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData,
+      input_quantized, input_scale, kFilterShape,
+      kFilterData, filter_quantized, filter_scale,
+      kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      &common_conv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
 TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison) {
   //
   // This test compares the invoke run times of packed vs non-packed implementations
   // of the depthwise conv kernel.
   //
+
+  micro_test::reporter->Report("Setting: input 32x32x3, filter 4x4, output channels 6");
 
   static const int batches = 1;
   static const int inputSize = 32;
@@ -847,6 +1325,432 @@ TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison) {
   static const int outputSize = (inputSize - filterSize)/2 + 1;
   static const int kOutputElements = batches * outputSize * outputSize * outputChannels;
   static const int kOutputShape[] = {4, batches, outputSize, outputSize, outputChannels};
+
+  TfLiteDepthwiseConvParams dconv_params = {
+      kTfLitePaddingValid,  // Padding
+      2,                    // Stride Width
+      2,                    // Stride Height
+      2,                    // Depth Multiplier
+      kTfLiteActNone,       // Activation
+      1,                    // Dilation Width
+      1                     // Dilation Height
+  };
+
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+
+  // 4 BIT HERE
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  float input_scale = 0.5f;
+  int input_zero_point = 128;
+  float output_scale = 1.0f;
+  int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1, {}};
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+  uint8_t output_data[kOutputElements];
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights4 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights4.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -7.5f;
+  weights_max = 8.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights5 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights5.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -15.5f;
+  weights_max = 16.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights6 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights6.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  input_zero_point = 128;
+  filter_scale = 0.5f;
+  filter_zero_point = 128;
+  output_scale = 1.0f;
+  output_zero_point = 128;
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, kFilterData, filter_quantized, filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized, kOutputShape, output_data, output_scale,
+      output_zero_point, &dconv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison2) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the depthwise conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x3, filter 20x6, output channels 6");
+
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 3;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 20;
+  static const int filterY = 6;
+  static const int depthMultiplier = 2;
+  static const int outputChannels = inputChannels * depthMultiplier;
+  static const int kFilterElements = filterX * filterY * 1 * outputChannels;
+  static const int kFilterShape[] = {4, 1, filterX, filterY, outputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4, -1, -3};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
+
+  TfLiteDepthwiseConvParams dconv_params = {
+      kTfLitePaddingValid,  // Padding
+      2,                    // Stride Width
+      2,                    // Stride Height
+      2,                    // Depth Multiplier
+      kTfLiteActNone,       // Activation
+      1,                    // Dilation Width
+      1                     // Dilation Height
+  };
+
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+
+  // 4 BIT HERE
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  float input_scale = 0.5f;
+  int input_zero_point = 128;
+  float output_scale = 1.0f;
+  int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1, {}};
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+  uint8_t output_data[kOutputElements];
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights4 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights4.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -7.5f;
+  weights_max = 8.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights5 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights5.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -15.5f;
+  weights_max = 16.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights6 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights6.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  input_zero_point = 128;
+  filter_scale = 0.5f;
+  filter_zero_point = 128;
+  output_scale = 1.0f;
+  output_zero_point = 128;
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, kFilterData, filter_quantized, filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized, kOutputShape, output_data, output_scale,
+      output_zero_point, &dconv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison3) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the depthwise conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x32, filter 3x3, output channels 64");
+
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 32;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 3;
+  static const int filterY = 3;
+  static const int depthMultiplier = 2;
+  static const int outputChannels = inputChannels * depthMultiplier;
+  static const int kFilterElements = filterX * filterY * 1 * outputChannels;
+  static const int kFilterShape[] = {4, 1, filterX, filterY, outputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4, -1, -3};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
+
+  TfLiteDepthwiseConvParams dconv_params = {
+      kTfLitePaddingValid,  // Padding
+      2,                    // Stride Width
+      2,                    // Stride Height
+      2,                    // Depth Multiplier
+      kTfLiteActNone,       // Activation
+      1,                    // Dilation Width
+      1                     // Dilation Height
+  };
+
+  // Randomly initialize inputs and filter
+  tflite::testing::InitInputAndFilterRandomly(kInputData, kFilterData, kInputElements, kFilterElements);
+
+
+  // 4 BIT HERE
+  using tflite::testing::ZeroPointFromMinMax;
+  using tflite::testing::ScaleFromMinMaxPacked;
+  using tflite::testing::ZeroPointFromMinMaxPacked;
+
+  float input_scale = 0.5f;
+  int input_zero_point = 128;
+  float output_scale = 1.0f;
+  int output_zero_point = 128;
+  float weights_min = -3.5f;
+  float weights_max = 4.0f;
+
+  int filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 4);
+  float filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 4);
+
+  TfLiteCustomSub8BitPackingDetails packing = {4, 8, 1, {}};
+
+  uint8_t input_quantized[kInputElements];
+  uint8_t filter_quantized[kFilterElements];
+  int32_t bias_quantized[kBiasElements];
+  uint8_t output_data[kOutputElements];
+
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights4 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint8_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights4.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "4 Bit: ");
+
+  // 5 BIT HERE
+  weights_min = -7.5f;
+  weights_max = 8.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 5);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 5);
+
+  packing = {5, 16, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights5 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint16_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights5.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "5 Bit: ");
+
+  // 6 BIT HERE
+  weights_min = -15.5f;
+  weights_max = 16.0f;
+
+  filter_zero_point =
+          ZeroPointFromMinMaxPacked(weights_min, weights_max, 6);
+  filter_scale = ScaleFromMinMaxPacked(weights_min, weights_max, 6);
+
+  packing = {6, 32, 1, {}};
+  tflite::AsymmetricQuantize(kFilterData, filter_quantized,
+                             kFilterElements, filter_scale, filter_zero_point);
+
+  auto packed_weights6 =
+          tflite::testing::PackedSub8BitCustomQuantization<uint32_t>(
+              filter_quantized, 1u * kFilterElements, outputChannels, &packing);
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayer(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, reinterpret_cast<const uint8_t*>(packed_weights6.data()), filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized,
+      kOutputShape, output_data, output_scale,
+      output_zero_point, dconv_params, &packing, weights_min, weights_max, "6 Bit: ");
+
+  // 8 BIT NOT PACKED HERE
+  input_scale = 0.5f;
+  input_zero_point = 128;
+  filter_scale = 0.5f;
+  filter_zero_point = 128;
+  output_scale = 1.0f;
+  output_zero_point = 128;
+
+  tflite::testing::TestDepthwiseConvQuantizedPerLayerNotPacked(
+      kInputShape, kInputData, input_quantized, input_scale, input_zero_point,
+      kFilterShape, kFilterData, filter_quantized, filter_scale,
+      filter_zero_point, kBiasShape, kBiasData, bias_quantized, kOutputShape, output_data, output_scale,
+      output_zero_point, &dconv_params, "8bit not packed: ");
+  micro_test::reporter->Report("");
+}
+
+TF_LITE_MICRO_TEST(DepthwiseConvInvokeComparison4) {
+  //
+  // This test compares the invoke run times of packed vs non-packed implementations
+  // of the depthwise conv kernel.
+  //
+
+  micro_test::reporter->Report("Setting: input 32x32x32, filter 5x5, output channels 64");
+
+  static const int batches = 1;
+  static const int inputSize = 32;
+  static const int inputChannels = 32;
+  static const int kInputElements = inputSize * inputSize * inputChannels * batches;
+  static const int kInputShape[] = {4, batches, inputSize, inputSize, inputChannels};
+  static float kInputData[kInputElements];
+  static const int filterX = 5;
+  static const int filterY = 5;
+  static const int depthMultiplier = 2;
+  static const int outputChannels = inputChannels * depthMultiplier;
+  static const int kFilterElements = filterX * filterY * 1 * outputChannels;
+  static const int kFilterShape[] = {4, 1, filterX, filterY, outputChannels};
+  static float kFilterData[kFilterElements];
+  static const int kBiasElements = outputChannels;
+  static const int kBiasShape[] = {1, outputChannels};
+  static const float kBiasData[] = {1, 2, 3, 4, -1, -3};
+  static const int outputX = (inputSize - filterX)/2 + 1;
+  static const int outputY = (inputSize - filterY)/2 + 1;
+  static const int kOutputElements = batches * outputX * outputY * outputChannels;
+  static const int kOutputShape[] = {4, batches, outputX, outputY, outputChannels};
 
   TfLiteDepthwiseConvParams dconv_params = {
       kTfLitePaddingValid,  // Padding

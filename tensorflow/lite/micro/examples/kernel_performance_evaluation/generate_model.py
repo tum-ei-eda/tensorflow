@@ -36,8 +36,8 @@ from tensorflow.keras.datasets import mnist
 # %%
 # We'll use this many sample datapoints
 SAMPLES = 1000
-reload = True
-translator = "C:/Inicio/tools/64/tflite_u-2.4.0.3/bin/tf_tfl_translate"
+reload = False
+translator = None # Set translator path here for own translator
 
 
 # Load the Mnist dataset and keep only zeros and ones
