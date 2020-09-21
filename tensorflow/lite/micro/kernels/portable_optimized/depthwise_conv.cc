@@ -24,35 +24,28 @@ limitations under the License.
 // via PointerCollect API.
 // TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 //   When set prepare phase kernel variant selection code is dropped with 
-// the eval functions recorded in tflite::micro::kernels::conv::eval_functions used instead.
+// the eval functions recorded in tflite::micro::kernels::depthwise_conv::eval_functions used instead.
 //
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
-
-
-#include "tensorflow/lite/micro/kernels/pointer_collector.h"
-
-KERNEL_VARIANT_COLLECT_INFO(
-  "depthwise_conv",
-  "struct OpData;\n",
-  "",
-  "OpData",
-      "    TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n"
-      "    const OpData* data, const TfLiteTensor* input, const TfLiteTensor* filter, \n"
-      "    const TfLiteTensor* bias, TfLiteTensor* output"
-);
 
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/common.h"
-#include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/depthwise_conv.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_float.h"
 #include "tensorflow/lite/kernels/internal/reference/depthwiseconv_uint8.h"
+
+#include "tensorflow/lite/micro/kernels/portable_optimized/depthwise_conv_op_data.h"
+#include "tensorflow/lite/micro/kernels/static_init_support.h"
+#include "tensorflow/lite/micro/kernels/static_data_utils.h"
+
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 
@@ -61,6 +54,46 @@ namespace tflite {
 namespace ops {
 namespace micro {
 namespace depthwise_conv {
+
+KERNEL_VARIANT_COLLECT_INFO(
+  "depthwise_conv",
+  "struct OpData;\n",
+  "#include \"tensorflow/lite/micro/kernels/portable_optimized/depthwise_conv_op_data.h\"",
+  "OpData",
+      "    TfLiteContext* context, const TfLiteDepthwiseConvParams& params,\n"
+      "    OpData* data, const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter, \n"
+      "    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output"
+);
+//#define TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT 1
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
+
+static CppItems *static_opdata(OpData &od, size_t output_depth)
+{
+  auto init = new CppItems();
+
+  *init
+    << TfLitePaddingValuesSubStruct(od.padding)
+    << od.input_zero_point
+    << od.filter_zero_point
+    << od.output_zero_point
+    << od.output_multiplier
+    << od.output_shift
+    << CppNamedVec<int32_t>("per_channel_output_multiplier", "int32_t", od.per_channel_output_multiplier, output_depth)
+    << CppNamedVec<int32_t>("per_channel_output_shift", "int32_t", od.per_channel_output_shift, output_depth)
+    << od.output_activation_min
+    << od.output_activation_max
+    << CppNamedVec<int32_t>("sum_of_filters_factor", "int32_t", od.sum_of_filters_factor, output_depth)
+    << CppNamedVec<int32_t>("acc_buf", "int32_t", od.acc_buf, output_depth);
+  if (od.custom_sub8bit_packing) {
+    *init << TfLiteCustomSub8BitPackingDetailsStructPtr("custom_sub8bit_packing", *od.custom_sub8bit_packing);
+  } else {
+    *init << "nullptr";
+  }
+  *init << od.eval_function;
+
+  return init;
+}
+#endif
 
 constexpr int kInputTensor = 0;
 constexpr int kFilterTensor = 1;
@@ -74,44 +107,21 @@ constexpr int kDepthwiseConvQuantizedDimension = 3;
 // Size of the cached buffer we'll be using to hold reordered weights.
 constexpr int kReshapedFilterDataSize = 1 * 1024;
 
-struct OpData {
-  TfLitePaddingValues padding;
-
-  // The scaling factor from input to output (aka the 'real multiplier') can
-  // be represented as a fixed point multiplier plus a left shift.
-  int32_t output_multiplier;
-  int output_shift;
-
-  // Per channel output multiplier and shift.
-  int32_t* per_channel_output_multiplier;
-  int32_t* per_channel_output_shift;
-  // The range of the fused activation layer. For example for kNone and
-  // uint8_t these would be 0 and 255.
-  int32_t output_activation_min;
-  int32_t output_activation_max;
-
-  // The precomputed sum of filters factor
-  int32_t* sum_of_filters_factor;
-
-  // The buffer for accumulation
-  int32_t* acc_buf;
-
-  // Eval function pointer
-  TfLiteStatus (*eval_function)(TfLiteContext* context,
-      const TfLiteDepthwiseConvParams& params, const OpData* data,
-      const TfLiteTensor* input, const TfLiteTensor* filter,
-      const TfLiteTensor* bias, TfLiteTensor* output);
-};
-
-
-// Defined in code generated via PointerCollector::writeCppSyntaxPointerTable
-#ifdef TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-typedef TfLiteStatus (*EvalVariantFptr)(
-      TfLiteContext* context, const TfLiteDepthwiseConvParams &params, const OpData* data,
-      const TfLiteTensor* input, const TfLiteTensor* filter,
-      const TfLiteTensor* bias, TfLiteTensor* output);
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 EvalVariantFptr recordedVariant();
 #endif
+
+void* Init(TfLiteContext* context, const char* buffer, size_t length) {
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  OpData *recordedStaticOpData();
+  return recordedStaticOpData();
+#else
+  TFLITE_DCHECK(context->AllocatePersistentBuffer != nullptr);
+  void* data = context->AllocatePersistentBuffer(context, sizeof(OpData));
+  TFLITE_DCHECK(data != nullptr);
+  return data;
+#endif
+}
 
 TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
                              TfLiteDepthwiseConvParams* params, int width,
@@ -245,25 +255,189 @@ inline void PrecomputeSumOfPackedFiltersFactor(
 }
 
 
-void* Init(TfLiteContext* context, const char* buffer, size_t length) {
-  TFLITE_DCHECK(context->AllocatePersistentBuffer != nullptr);
-  void* data = context->AllocatePersistentBuffer(context, sizeof(OpData));
-  TFLITE_DCHECK(data != nullptr);
-  return data;
+TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
+#if ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  TFLITE_DCHECK(node->user_data != nullptr);
+  TFLITE_DCHECK(node->builtin_data != nullptr);
+
+  auto* params =
+      reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data);
+  OpData* data = static_cast<OpData*>(node->user_data);
+
+  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
+  const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
+  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+
+  const TfLiteType data_type = input->type;
+  int width = SizeOfDimension(input, 2);
+  int height = SizeOfDimension(input, 1);
+  int filter_width = SizeOfDimension(filter, 2);
+  int filter_height = SizeOfDimension(filter, 1);
+
+  // Per channel quantization is only needed for int8_t inference. For other
+  // quantized types, only a single scale and zero point is needed.
+  const int num_channels = filter->dims->data[kDepthwiseConvQuantizedDimension];
+  // Dynamically allocate per-channel quantization parameters.
+  data->per_channel_output_multiplier =
+    static_cast<int32_t*>(
+      context->AllocatePersistentBuffer(context, num_channels * sizeof(int32_t)));
+
+  TF_LITE_ENSURE(context, data->per_channel_output_multiplier != nullptr);
+  data->per_channel_output_shift =
+    static_cast<int32_t*>(
+      context->AllocatePersistentBuffer(context, num_channels * sizeof(int32_t)));
+  TF_LITE_ENSURE(context, data->per_channel_output_multiplier != nullptr);
+
+  // All per-channel quantized tensors need valid zero point and scale arrays.
+  if (input->type == kTfLiteInt8) {
+    TF_LITE_ENSURE_EQ(context, filter->quantization.type,
+                      kTfLiteAffineQuantization);
+
+    const auto* affine_quantization =
+        reinterpret_cast<TfLiteAffineQuantization*>(
+            filter->quantization.params);
+    TF_LITE_ENSURE(context, affine_quantization);
+    TF_LITE_ENSURE(context, affine_quantization->scale);
+    TF_LITE_ENSURE(context, affine_quantization->zero_point);
+    TF_LITE_ENSURE(
+        context, affine_quantization->scale->size == 1 ||
+                     affine_quantization->scale->size ==
+                         filter->dims->data[kDepthwiseConvQuantizedDimension]);
+    TF_LITE_ENSURE_EQ(context, affine_quantization->scale->size,
+                      affine_quantization->zero_point->size);
+  }
+
+  data->input_zero_point = input->params.zero_point;
+  data->filter_zero_point = filter->params.zero_point;
+  data->output_zero_point = output->params.zero_point;
+
+  const int32_t input_offset = -input->params.zero_point;
+  const int dilation_width_factor = params->dilation_width_factor;
+  const int dilation_height_factor = params->dilation_height_factor;
+
+  auto filter_shape = GetTensorShape(filter);
+
+  const int output_depth = SizeOfDimension(filter, 3);
+  // Selection structure mirrors that in Eval.   Could select a final
+  // kernel variant here...
+
+  if (filter->type == kTfLiteInt8 || filter->type == kTfLiteUInt8) {
+    const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
+    const int32_t* bias_data = GetTensorData<int32_t>(bias);
+
+    const int32_t filter_offset = -filter->params.zero_point;
+    TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
+
+    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t)*num_channels);
+    data->sum_of_filters_factor = static_cast<int32_t*>(raw);
+
+    // Precompute the sum of filters
+    if (filter->type == kTfLiteUInt8) {
+      if (filter->quantization.details.type ==
+          kTfLiteSub8BitPackedUniformDetail) {
+        PrecomputeSumOfPackedFiltersFactor(
+            bias_data, filter, data->sum_of_filters_factor, filter_shape,
+            input_offset, filter_offset,
+            *filter->quantization.details.data.custom_sub8bit_packing);
+      } else {
+        PrecomputeSumOfFiltersFactor<uint8_t>(
+            bias_data, filter, data->sum_of_filters_factor, filter_shape,
+            input_offset, filter_offset);
+      }
+    } else {
+      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter, data->sum_of_filters_factor,
+                                           filter_shape, input_offset, 0);
+    }
+  }
+
+  TF_LITE_ENSURE_STATUS(CalculateOpData(context, node, params, width, height, filter_width,
+                         filter_height, data_type, data));
+
+  // Determine which version to use
+  bool need_acc_buf = false;
+  // Check if optimized filter width is used
+  const bool use_optimized_filter_width = (GetTensorShape(filter).Dims(0) != 1);
+  const bool use_reference = ((dilation_width_factor != 1)
+      || (dilation_height_factor != 1) || use_optimized_filter_width);
+  const int input_depth = GetTensorShape(input).Dims(3);
+  const int needed_size =
+            output_depth * filter_width * filter_height * input_depth;
+  const bool use_optimized_size = ((filter_width == 8) && (input_offset == 0) &&
+      (input_depth == 1) && (needed_size <= kReshapedFilterDataSize) && input->type == kTfLiteUInt8);
+  if (!use_reference && !use_optimized_size && !(input->type==kTfLiteFloat32)) {
+    need_acc_buf = true;
+  }
+  if (need_acc_buf) {
+    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth);
+    data->acc_buf = static_cast<int32_t*>(raw);
+  }
+
+  const bool use_padding = (data->padding.height != 0 || data->padding.width != 0 ||
+      data->padding.height_offset != 0 || data->padding.width_offset != 0);
+  const bool use_packed = (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
+  if (use_packed) {
+    data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
+  }
+
+  // Set the function pointer that is used during inference here
+  switch (input->type) {  // Already know in/out types are same.
+      case kTfLiteFloat32:
+        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalFloat);
+        break;
+      case kTfLiteInt8: {
+        if (use_reference) {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8Reference);
+        } else if (use_padding) {
+          // Use the version that can handle padding
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8Padding);
+        } else {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8);
+        }
+        break;
+      }
+      case kTfLiteUInt8: {
+        if (use_packed) {
+          if (use_padding) {
+            data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(DepthwiseConvPackedFilterWithPadding);
+          } else {
+            data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(DepthwiseConvPackedFilterWithoutPadding);
+          }
+        } else if (use_reference) {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8Reference);
+        } else if (use_optimized_size) {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(DepthwiseConvOptimizedForFilterWidthEight);
+        } else if (use_padding) {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8Padding);
+        } else {
+          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8);
+        }
+        break;
+      }
+      default:
+        TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                           TfLiteTypeGetName(input->type), input->type);
+        return kTfLiteError;
+    }
+#endif
+
+  TF_LITE_MICRO_RECORD_OP_USER_DATA("depthwise_conv", static_opdata(*data, output_depth));
+
+  return kTfLiteOk;
 }
 
+
 TfLiteStatus DepthwiseConvOptimizedForFilterWidthEight(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
-  const RuntimeShape& input_shape = GetTensorShape(input);
-  const uint8_t* input_data = GetTensorData<uint8_t>(input);
-  const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const uint8_t* filter_data = GetTensorData<uint8_t>(filter);
-  const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32_t* bias_data = GetTensorData<int32_t>(bias);
-  const RuntimeShape& output_shape = GetTensorShape(output);
-  uint8_t* output_data = GetTensorData<uint8_t>(output);
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
+  const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+  const uint8_t* input_data = tflite::micro::GetTensorData<uint8_t>(input);
+  const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+  const uint8_t* filter_data = tflite::micro::GetTensorData<uint8_t>(filter);
+  const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+  const int32_t* bias_data = tflite::micro::GetTensorData<int32_t>(bias);
+  const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+  uint8_t* output_data = tflite::micro::GetTensorData<uint8_t>(output);
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
   const int pad_width = data->padding.width;
@@ -271,9 +445,9 @@ TfLiteStatus DepthwiseConvOptimizedForFilterWidthEight(
   const int depth_multiplier = params.depth_multiplier;
   const int32_t output_activation_min = data->output_activation_min;
   const int32_t output_activation_max = data->output_activation_max;
-  const int32_t input_offset = -input->params.zero_point;
-  const int32_t filter_offset = -filter->params.zero_point;
-  const int32_t output_offset = output->params.zero_point;
+  const int32_t input_offset = -data->input_zero_point;
+  const int32_t filter_offset = -data->filter_zero_point;
+  const int32_t output_offset = data->output_zero_point;
   const int32_t output_multiplier = data->output_multiplier;
   const int output_shift = -data->output_shift;
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
@@ -448,7 +622,7 @@ TfLiteStatus DepthwiseConvOptimizedForFilterWidthEight(
 
 struct DepthwiseConvPackedTraits {
   struct WithPadding {
-    WithPadding(const int32_t input_offset, const OpData* data,
+    WithPadding(const int32_t input_offset, OpData* data,
                 const int32_t* bias_data)
         : input_offset_(input_offset), bias_data_(bias_data) {}
 
@@ -466,7 +640,7 @@ struct DepthwiseConvPackedTraits {
   };
 
   struct WithoutPadding {
-    WithoutPadding(const int input_offset, const OpData* data,
+    WithoutPadding(const int input_offset, OpData* data,
                    const int32_t* bias_data)
         : sum_of_filters_factor_(data->sum_of_filters_factor) {}
 
@@ -486,20 +660,21 @@ struct DepthwiseConvPackedTraits {
 template <typename CONTAINER_T, size_t bits_per_item,
           size_t items_per_container, class PADDING_TRAIT>
 struct DepthwiseConvPacked {
-  static inline void Run(const TfLiteDepthwiseConvParams& params, const OpData* data,
-                         const TfLiteTensor* input, const TfLiteTensor* filter,
-                         const TfLiteTensor* bias, TfLiteTensor* output) {
+  static inline void Run(const TfLiteDepthwiseConvParams& params, OpData* data,
+                         const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+                         const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
 
-    const RuntimeShape& input_shape = GetTensorShape(input);
-    const uint8_t* input_data = GetTensorData<uint8_t>(input);
-    const RuntimeShape& filter_shape = GetTensorShape(filter);
-    const CONTAINER_T* filter_data = static_cast<const CONTAINER_T*>(GetTensorData<void>(filter));
-    const RuntimeShape& bias_shape = GetTensorShape(bias);
-    const int32_t* bias_data = GetTensorData<int32_t>(bias);
-    const RuntimeShape& output_shape = GetTensorShape(output);
-    uint8_t* output_data = GetTensorData<uint8_t>(output);
+    const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+    const uint8_t* input_data = tflite::micro::GetTensorData<uint8_t>(input);
+    const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+    const CONTAINER_T* filter_data = static_cast<const CONTAINER_T*>(
+        tflite::micro::GetTensorData<void>(filter));
+    const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+    const int32_t* bias_data = tflite::micro::GetTensorData<int32_t>(bias);
+    const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+    uint8_t* output_data = tflite::micro::GetTensorData<uint8_t>(output);
 
-    const PADDING_TRAIT pad_traits(-input->params.zero_point, data, bias_data);
+    const PADDING_TRAIT pad_traits(-data->input_zero_point, data, bias_data);
     const int stride_width = params.stride_width;
     const int stride_height = params.stride_height;
     const int dilation_width_factor = params.dilation_width_factor;
@@ -509,8 +684,8 @@ struct DepthwiseConvPacked {
     const int depth_multiplier = params.depth_multiplier;
     const int32_t output_activation_min = data->output_activation_min;
     const int32_t output_activation_max = data->output_activation_max;
-    const int32_t filter_offset = -filter->params.zero_point;
-    const int32_t output_offset = output->params.zero_point;
+    const int32_t filter_offset = -data->filter_zero_point;
+    const int32_t output_offset = data->output_zero_point;
     const int32_t output_multiplier = data->output_multiplier;
     const int output_shift = -data->output_shift;
     TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
@@ -642,13 +817,13 @@ struct DepthwiseConvPacked {
 
 template <class PADDING_TRAITS>
 inline TfLiteStatus DepthwiseConvPackedFilter(TfLiteContext* context,
-    const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
+    const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
 
   // We need to allocate output_depth size buffer for accumulators.
     const TfLiteCustomSub8BitPackingDetails& packing_details =
-        *filter->quantization.details.data.custom_sub8bit_packing;
+        *data->custom_sub8bit_packing;
   unsigned int bits_per_item = packing_details.bits_per_item;
   unsigned int container_bits = packing_details.container_bits;
   unsigned int packed_minor_dims = packing_details.packed_minor_dims;
@@ -682,9 +857,9 @@ inline TfLiteStatus DepthwiseConvPackedFilter(TfLiteContext* context,
 }
 
 TfLiteStatus DepthwiseConvPackedFilterWithPadding(TfLiteContext* context,
-    const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output)
+    const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output)
 {
   return DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithPadding>(
            context, params, data,
@@ -692,9 +867,9 @@ TfLiteStatus DepthwiseConvPackedFilterWithPadding(TfLiteContext* context,
 }
 
 TfLiteStatus DepthwiseConvPackedFilterWithoutPadding(TfLiteContext* context,
-    const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output)
+    const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output)
 {
   return DepthwiseConvPackedFilter<DepthwiseConvPackedTraits::WithoutPadding>(
            context, params, data,
@@ -702,17 +877,17 @@ TfLiteStatus DepthwiseConvPackedFilterWithoutPadding(TfLiteContext* context,
 }
 
 TfLiteStatus EvalUInt8Padding(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
-  const RuntimeShape& input_shape = GetTensorShape(input);
-  const uint8_t* input_data = GetTensorData<uint8_t>(input);
-  const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const uint8_t* filter_data = GetTensorData<uint8_t>(filter);
-  const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32_t* bias_data = GetTensorData<int32_t>(bias);
-  const RuntimeShape& output_shape = GetTensorShape(output);
-  uint8_t* output_data = GetTensorData<uint8_t>(output);
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
+  const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+  const uint8_t* input_data = tflite::micro::GetTensorData<uint8_t>(input);
+  const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+  const uint8_t* filter_data = tflite::micro::GetTensorData<uint8_t>(filter);
+  const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+  const int32_t* bias_data = tflite::micro::GetTensorData<int32_t>(bias);
+  const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+  uint8_t* output_data = tflite::micro::GetTensorData<uint8_t>(output);
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
   const int dilation_width_factor = params.dilation_width_factor;
@@ -724,9 +899,9 @@ TfLiteStatus EvalUInt8Padding(
   const int depth_multiplier = params.depth_multiplier;
   const int32_t output_activation_min = data->output_activation_min;
   const int32_t output_activation_max = data->output_activation_max;
-  const int32_t input_offset = -input->params.zero_point;
-  const int32_t filter_offset = -filter->params.zero_point;
-  const int32_t output_offset = output->params.zero_point;
+  const int32_t input_offset = -data->input_zero_point;
+  const int32_t filter_offset = -data->filter_zero_point;
+  const int32_t output_offset = data->output_zero_point;
   const int32_t output_multiplier = data->output_multiplier;
   const int output_shift = -data->output_shift;
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
@@ -808,16 +983,16 @@ TfLiteStatus EvalUInt8Padding(
 }
 
 TfLiteStatus EvalUInt8(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
-  const RuntimeShape& input_shape = GetTensorShape(input);
-  const uint8_t* input_data = GetTensorData<uint8_t>(input);
-  const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const uint8_t* filter_data = GetTensorData<uint8_t>(filter);
-  const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const RuntimeShape& output_shape = GetTensorShape(output);
-  uint8_t* output_data = GetTensorData<uint8_t>(output);
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
+  const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+  const uint8_t* input_data = tflite::micro::GetTensorData<uint8_t>(input);
+  const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+  const uint8_t* filter_data = tflite::micro::GetTensorData<uint8_t>(filter);
+  const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+  const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+  uint8_t* output_data = tflite::micro::GetTensorData<uint8_t>(output);
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
   const int dilation_width_factor = params.dilation_width_factor;
@@ -827,8 +1002,8 @@ TfLiteStatus EvalUInt8(
   const int depth_multiplier = params.depth_multiplier;
   const int32_t output_activation_min = data->output_activation_min;
   const int32_t output_activation_max = data->output_activation_max;
-  const int32_t filter_offset = -filter->params.zero_point;
-  const int32_t output_offset = output->params.zero_point;
+  const int32_t filter_offset = -data->filter_zero_point;
+  const int32_t output_offset = data->output_zero_point;
   const int32_t output_multiplier = data->output_multiplier;
   const int output_shift = -data->output_shift;
   TFLITE_DCHECK_EQ(input_shape.DimensionsCount(), 4);
@@ -907,9 +1082,9 @@ TfLiteStatus EvalUInt8(
 }
 
 TfLiteStatus EvalFloat(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
 
   float output_activation_min, output_activation_max;
     CalculateActivationRange(params.activation, &output_activation_min,
@@ -931,34 +1106,35 @@ TfLiteStatus EvalFloat(
   op_params.quantized_activation_max = data->output_activation_max;
   op_params.float_activation_max = output_activation_max;
   op_params.float_activation_min = output_activation_min;
-  op_params.input_offset = -input->params.zero_point;
-  op_params.weights_offset = -filter->params.zero_point;
-  op_params.output_offset = output->params.zero_point;
+  op_params.input_offset = -data->input_zero_point;
+  op_params.weights_offset = -data->filter_zero_point;
+  op_params.output_offset = data->output_zero_point;
   op_params.output_multiplier = data->output_multiplier;
   // Legacy ops used mixed left and right shifts. Now all are
   // +ve-means-left.
   op_params.output_shift = -data->output_shift;
 
   tflite::reference_ops::DepthwiseConv(
-      op_params, GetTensorShape(input), GetTensorData<float>(input),
-      GetTensorShape(filter), GetTensorData<float>(filter),
-      GetTensorShape(bias), GetTensorData<float>(bias), GetTensorShape(output),
-      GetTensorData<float>(output));
+      op_params,
+      tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<float>(input),
+      tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<float>(filter),
+      tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<float>(bias),
+      tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<float>(output));
   return kTfLiteOk;
 }
 
 TfLiteStatus EvalInt8Padding(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
-  const RuntimeShape& input_shape = GetTensorShape(input);
-  const int8_t* input_data = GetTensorData<int8_t>(input);
-  const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const int8_t* filter_data = GetTensorData<int8_t>(filter);
-  const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const int32_t* bias_data = GetTensorData<int32_t>(bias);
-  const RuntimeShape& output_shape = GetTensorShape(output);
-  int8_t* output_data = GetTensorData<int8_t>(output);
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
+  const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+  const int8_t* input_data = tflite::micro::GetTensorData<int8_t>(input);
+  const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+  const int8_t* filter_data = tflite::micro::GetTensorData<int8_t>(filter);
+  const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+  const int32_t* bias_data = tflite::micro::GetTensorData<int32_t>(bias);
+  const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+  int8_t* output_data = tflite::micro::GetTensorData<int8_t>(output);
   const int32_t* output_multiplier = data->per_channel_output_multiplier;
   const int32_t* output_shift = data->per_channel_output_shift;
 
@@ -972,8 +1148,8 @@ TfLiteStatus EvalInt8Padding(
   const int pad_width = data->padding.width;
   const int pad_height = data->padding.height;
   const int depth_multiplier = params.depth_multiplier;
-  const int32_t input_offset = -input->params.zero_point;
-  const int32_t output_offset = output->params.zero_point;
+  const int32_t input_offset = -data->input_zero_point;
+  const int32_t output_offset = data->output_zero_point;
   const int32_t output_activation_min = std::numeric_limits<int8_t>::min();
   const int32_t output_activation_max = std::numeric_limits<int8_t>::max();
 
@@ -1056,19 +1232,19 @@ TfLiteStatus EvalInt8Padding(
 }
 
 TfLiteStatus EvalInt8(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
   const int32_t* output_multiplier = data->per_channel_output_multiplier;
   const int32_t* output_shift = data->per_channel_output_shift;
 
-  const RuntimeShape& input_shape = GetTensorShape(input);
-  const int8_t* input_data = GetTensorData<int8_t>(input);
-  const RuntimeShape& filter_shape = GetTensorShape(filter);
-  const int8_t* filter_data = GetTensorData<int8_t>(filter);
-  const RuntimeShape& bias_shape = GetTensorShape(bias);
-  const RuntimeShape& output_shape = GetTensorShape(output);
-  int8_t* output_data = GetTensorData<int8_t>(output);
+  const RuntimeShape& input_shape = tflite::micro::GetTensorShape(input);
+  const int8_t* input_data = tflite::micro::GetTensorData<int8_t>(input);
+  const RuntimeShape& filter_shape = tflite::micro::GetTensorShape(filter);
+  const int8_t* filter_data = tflite::micro::GetTensorData<int8_t>(filter);
+  const RuntimeShape& bias_shape = tflite::micro::GetTensorShape(bias);
+  const RuntimeShape& output_shape = tflite::micro::GetTensorShape(output);
+  int8_t* output_data = tflite::micro::GetTensorData<int8_t>(output);
 
   const int stride_width = params.stride_width;
   const int stride_height = params.stride_height;
@@ -1078,7 +1254,7 @@ TfLiteStatus EvalInt8(
   TFLITE_DCHECK_EQ(dilation_height_factor, 1);
 
   const int depth_multiplier = params.depth_multiplier;
-  const int32_t output_offset = output->params.zero_point;
+  const int32_t output_offset = data->output_zero_point;
   const int32_t output_activation_min = std::numeric_limits<int8_t>::min();
   const int32_t output_activation_max = std::numeric_limits<int8_t>::max();
 
@@ -1159,9 +1335,9 @@ TfLiteStatus EvalInt8(
 }
 
 TfLiteStatus EvalInt8Reference(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
 
   DepthwiseParams op_params;
   op_params.padding_type = PaddingType::kSame;
@@ -1174,26 +1350,26 @@ TfLiteStatus EvalInt8Reference(
   op_params.dilation_width_factor = params.dilation_width_factor;
   op_params.dilation_height_factor = params.dilation_height_factor;
   op_params.depth_multiplier = params.depth_multiplier;
-  op_params.input_offset = -input->params.zero_point;
+  op_params.input_offset = -data->input_zero_point;
   op_params.weights_offset = 0;
-  op_params.output_offset = output->params.zero_point;
+  op_params.output_offset = data->output_zero_point;
   op_params.quantized_activation_min = std::numeric_limits<int8_t>::min();
   op_params.quantized_activation_max = std::numeric_limits<int8_t>::max();
 
   reference_integer_ops::DepthwiseConvPerChannel(
                 op_params, data->per_channel_output_multiplier,
-                data->per_channel_output_shift, GetTensorShape(input),
-                GetTensorData<int8_t>(input), GetTensorShape(filter),
-                GetTensorData<int8_t>(filter), GetTensorShape(bias),
-                GetTensorData<int32_t>(bias), GetTensorShape(output),
-                GetTensorData<int8_t>(output));
+                data->per_channel_output_shift,
+                tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<int8_t>(input),
+                tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<int8_t>(filter),
+                tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+                tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<int8_t>(output));
   return kTfLiteOk;
 }
 
 TfLiteStatus EvalUInt8Reference(
-    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, const OpData* data,
-    const TfLiteTensor* input, const TfLiteTensor* filter,
-    const TfLiteTensor* bias, TfLiteTensor* output) {
+    TfLiteContext* context, const TfLiteDepthwiseConvParams& params, OpData* data,
+    const TfLiteEvalTensor* input, const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias, TfLiteEvalTensor* output) {
 
   tflite::DepthwiseParams op_params;
   // Padding type is ignored, but still set.
@@ -1209,197 +1385,35 @@ TfLiteStatus EvalUInt8Reference(
   op_params.depth_multiplier = params.depth_multiplier;
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
-  op_params.input_offset = -input->params.zero_point;
-  op_params.weights_offset = -filter->params.zero_point;
-  op_params.output_offset = output->params.zero_point;
+  op_params.input_offset = -data->input_zero_point;
+  op_params.weights_offset = -data->filter_zero_point;
+  op_params.output_offset = data->output_zero_point;
   op_params.output_multiplier = data->output_multiplier;
   // Legacy ops used mixed left and right shifts. Now all are
   // +ve-means-left.
   op_params.output_shift = -data->output_shift;
 
   tflite::reference_ops::DepthwiseConv(
-                op_params, GetTensorShape(input), GetTensorData<uint8_t>(input),
-                GetTensorShape(filter), GetTensorData<uint8_t>(filter),
-                GetTensorShape(bias), GetTensorData<int32_t>(bias),
-                GetTensorShape(output), GetTensorData<uint8_t>(output));
-  return kTfLiteOk;
-}
-
-
-
-TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
-  TFLITE_DCHECK(node->user_data != nullptr);
-  TFLITE_DCHECK(node->builtin_data != nullptr);
-
-  auto* params =
-      reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data);
-  OpData* data = static_cast<OpData*>(node->user_data);
-
-  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-  const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
-
-  const TfLiteType data_type = input->type;
-  int width = SizeOfDimension(input, 2);
-  int height = SizeOfDimension(input, 1);
-  int filter_width = SizeOfDimension(filter, 2);
-  int filter_height = SizeOfDimension(filter, 1);
-
-  // Per channel quantization is only needed for int8_t inference. For other
-  // quantized types, only a single scale and zero point is needed.
-  const int num_channels = filter->dims->data[kDepthwiseConvQuantizedDimension];
-  // Dynamically allocate per-channel quantization parameters.
-  data->per_channel_output_multiplier = 
-    static_cast<int32_t*>(
-      context->AllocatePersistentBuffer(context, num_channels * sizeof(int32_t)));
-      
-  TF_LITE_ENSURE(context, data->per_channel_output_multiplier != nullptr);
-  data->per_channel_output_shift =
-    static_cast<int32_t*>(
-      context->AllocatePersistentBuffer(context, num_channels * sizeof(int32_t)));
-  TF_LITE_ENSURE(context, data->per_channel_output_multiplier != nullptr);
-
-  // All per-channel quantized tensors need valid zero point and scale arrays.
-  if (input->type == kTfLiteInt8) {
-    TF_LITE_ENSURE_EQ(context, filter->quantization.type,
-                      kTfLiteAffineQuantization);
-
-    const auto* affine_quantization =
-        reinterpret_cast<TfLiteAffineQuantization*>(
-            filter->quantization.params);
-    TF_LITE_ENSURE(context, affine_quantization);
-    TF_LITE_ENSURE(context, affine_quantization->scale);
-    TF_LITE_ENSURE(context, affine_quantization->zero_point);
-    TF_LITE_ENSURE(
-        context, affine_quantization->scale->size == 1 ||
-                     affine_quantization->scale->size ==
-                         filter->dims->data[kDepthwiseConvQuantizedDimension]);
-    TF_LITE_ENSURE_EQ(context, affine_quantization->scale->size,
-                      affine_quantization->zero_point->size);
-  }
-
-  const int32_t input_offset = -input->params.zero_point;
-  const int dilation_width_factor = params->dilation_width_factor;
-  const int dilation_height_factor = params->dilation_height_factor;
-
-  auto filter_shape = GetTensorShape(filter);
-
-  const int output_depth = SizeOfDimension(filter, 3);
-  // Selection structure mirrors that in Eval.   Could select a final
-  // kernel variant here...
-
-  if (filter->type == kTfLiteInt8 || filter->type == kTfLiteUInt8) {
-    const TfLiteTensor* bias = GetInput(context, node, kBiasTensor);
-    const int32_t* bias_data = GetTensorData<int32_t>(bias);
-
-    const int32_t filter_offset = -filter->params.zero_point;
-    TFLITE_DCHECK_EQ(filter_shape.DimensionsCount(), 4);
-
-    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t)*num_channels);
-    data->sum_of_filters_factor = static_cast<int32_t*>(raw);
-
-    // Precompute the sum of filters
-    if (filter->type == kTfLiteUInt8) {
-      if (filter->quantization.details.type ==
-          kTfLiteSub8BitPackedUniformDetail) {
-        PrecomputeSumOfPackedFiltersFactor(
-            bias_data, filter, data->sum_of_filters_factor, filter_shape,
-            input_offset, filter_offset,
-            *filter->quantization.details.data.custom_sub8bit_packing);
-      } else {
-        PrecomputeSumOfFiltersFactor<uint8_t>(
-            bias_data, filter, data->sum_of_filters_factor, filter_shape,
-            input_offset, filter_offset);
-      }
-    } else {
-      PrecomputeSumOfFiltersFactor<int8_t>(bias_data, filter, data->sum_of_filters_factor,
-                                           filter_shape, input_offset, 0);
-    }
-  }
-
-  TF_LITE_ENSURE_STATUS(CalculateOpData(context, node, params, width, height, filter_width,
-                         filter_height, data_type, data));
-
-  // Determine which version to use
-  bool need_acc_buf = false;
-  // Check if optimized filter width is used
-  const bool use_optimized_filter_width = (GetTensorShape(filter).Dims(0) != 1);
-  const bool use_reference = ((dilation_width_factor != 1)
-      || (dilation_height_factor != 1) || use_optimized_filter_width);
-  const int input_depth = GetTensorShape(input).Dims(3);
-  const int needed_size =
-            output_depth * filter_width * filter_height * input_depth;
-  const bool use_optimized_size = ((filter_width == 8) && (input_offset == 0) &&
-      (input_depth == 1) && (needed_size <= kReshapedFilterDataSize) && input->type == kTfLiteUInt8);
-  if (!use_reference && !use_optimized_size && !(input->type==kTfLiteFloat32)) {
-    need_acc_buf = true;
-  }
-  if (need_acc_buf) {
-    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_depth);
-    data->acc_buf = static_cast<int32_t*>(raw);
-  }
-
-#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
-  data->eval_function = recordedVariant();
-#else
-  const bool use_padding = (data->padding.height != 0 || data->padding.width != 0 ||
-      data->padding.height_offset != 0 || data->padding.width_offset != 0);
-  const bool use_packed = (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
-
-  // Set the function pointer that is used during inference here
-  switch (input->type) {  // Already know in/out types are same.
-      case kTfLiteFloat32:
-        data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalFloat);
-        break;
-      case kTfLiteInt8: {
-        if (use_reference) {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8Reference);
-        } else if (use_padding) {
-          // Use the version that can handle padding
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8Padding);
-        } else {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalInt8);
-        }
-        break;
-      }
-      case kTfLiteUInt8: {
-        if (use_packed) {
-          if (use_padding) {
-            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvPackedFilterWithPadding);
-          } else {
-            data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvPackedFilterWithoutPadding);
-          }
-        } else if (use_reference) {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8Reference);
-        } else if (use_optimized_size) {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(DepthwiseConvOptimizedForFilterWidthEight);
-        } else if (use_padding) {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8Padding);
-        } else {
-          data->eval_function = TLITE_MICRO_SELECTED_KERNEL_VARIANT(EvalUInt8);
-        }
-        break;
-      }
-      default:
-        TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
-                           TfLiteTypeGetName(input->type), input->type);
-        return kTfLiteError;
-    }
-#endif
+                op_params,
+                tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+                tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint8_t>(filter),
+                tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+                tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output));
   return kTfLiteOk;
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-  const TfLiteDepthwiseConvParams& params =
+  TfLiteDepthwiseConvParams& params =
       *(reinterpret_cast<TfLiteDepthwiseConvParams*>(node->builtin_data));
-  const OpData& data = *(static_cast<const OpData*>(node->user_data));
+  OpData* data = reinterpret_cast<OpData*>(node->user_data);
 
-  TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
-  const TfLiteTensor* input = GetInput(context, node, kInputTensor);
-  const TfLiteTensor* filter = GetInput(context, node, kFilterTensor);
-  const TfLiteTensor* bias =
-      (NumInputs(node) == 3) ? GetInput(context, node, kBiasTensor) : nullptr;
+  TfLiteEvalTensor* output = tflite::micro::GetEvalOutput(context, node, kOutputTensor);
+  const TfLiteEvalTensor* input = tflite::micro::GetEvalInput(context, node, kInputTensor);
+  const TfLiteEvalTensor* filter = tflite::micro::GetEvalInput(context, node, kFilterTensor);
+  const TfLiteEvalTensor* bias =
+      (NumInputs(node) == 3) ? tflite::micro::GetEvalInput(context, node, kBiasTensor) : nullptr;
 
-  return data.eval_function(context, params, &data, input, filter, bias, output);
+  return data->eval_function(context, params, data, input, filter, bias, output);
 }
 
 }  // namespace depthwise_conv

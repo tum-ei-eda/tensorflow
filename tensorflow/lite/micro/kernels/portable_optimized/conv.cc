@@ -28,14 +28,13 @@ limitations under the License.
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
 
-
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/common.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/quantization_util.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/padding.h"
 
 #include "tensorflow/lite/kernels/internal/reference/conv.h"
@@ -182,8 +181,10 @@ TfLiteStatus CalculateOpData(TfLiteContext* context, TfLiteNode* node,
 }
 
 template<typename T>
-inline void PrecomputeSumOfFiltersFactor(const int32_t* bias, const TfLiteTensor* filters, int32_t *sum_of_filters_factor,
-		RuntimeShape filter_shape, int32_t input_offset, int32_t filter_offset=0) {
+inline void PrecomputeSumOfFiltersFactor(const int32_t* bias, const TfLiteTensor* filters,
+                                         int32_t *sum_of_filters_factor,
+                                         RuntimeShape filter_shape, int32_t input_offset,
+                                         int32_t filter_offset=0) {
 	if (filters->type == kTfLiteInt8) {
 		// Ensure that the filter offset is 0 in the signed integer case
 		TFLITE_DCHECK_EQ(filter_offset, 0);
@@ -303,6 +304,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
   if (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail) {
     use_packed = true;
+    data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
   }
   // Set the function pointer that is used during inference here
   switch (filter->type) {

@@ -24,8 +24,8 @@ TESTS=( \
 for test in "${TESTS[@]}"
 do
   echo "----------Testing $test ----------"
-  make -s clean
+  make -s "${RECORD_KERNEL_VARIANTS[@]}" clean
   make -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_kernel_${test}_test
-  make -s clean
+  make -s "${USE_RECORDED_VARIANTS[@]}" clean
   make -s "${USE_RECORDED_VARIANTS[@]}" -j8 test_kernel_${test}_test
 done
