@@ -377,6 +377,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const bool use_packed = (filter->quantization.details.type == kTfLiteSub8BitPackedUniformDetail);
   if (use_packed) {
     data->custom_sub8bit_packing = filter->quantization.details.data.custom_sub8bit_packing;
+  } else {
+    data->custom_sub8bit_packing = nullptr;
   }
 
   // Set the function pointer that is used during inference here
