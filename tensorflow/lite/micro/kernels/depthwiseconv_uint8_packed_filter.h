@@ -76,7 +76,7 @@ struct DepthwiseConvPackedFilter {
     const int* in_dims =
           reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
-    for (int b = 0; b < batches; ++b) {
+    for (int batch = 0; batch < batches; ++batch) {
       const uint32_t input_offset0 = in_dims[1] * batch;
       for (int out_y = 0; out_y < output_height; ++out_y) {
         for (int out_x = 0; out_x < output_width; ++out_x) {
@@ -125,7 +125,7 @@ struct DepthwiseConvPackedFilter {
             acc += output_offset;
             acc = std::max(acc, output_activation_min);
             acc = std::min(acc, output_activation_max);
-            output_data[Offset(output_shape, b, out_y, out_x, oc)] =
+            output_data[Offset(output_shape, batch, out_y, out_x, oc)] =
                 static_cast<uint8_t>(acc);
           }
 
