@@ -199,7 +199,8 @@ else
   echo Skipping configure...
 fi
 
-BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate )
+# LLVM's FileCheck is a super-useful utility for checking our compiler/toolchain stuuff
+BAZEL_TARGETS=( //tensorflow/compiler/mlir/lite:tf_tfl_translate  @llvm-project//llvm:FileCheck )
 
 if [ -n "$WITH_PIP" ]
 then
@@ -228,6 +229,7 @@ then
       rm -f ${TFLITE_MICRO_ROOT}/bin/*
       echo Installing to ${TFLITE_MICRO_ROOT}/bin
       cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
+         bazel-bin/external/llvm-project/llvm/FileCheck${EXE_SUFFIX}
         ${TFLITE_MICRO_ROOT}/bin
     fi
 fi
