@@ -32,7 +32,6 @@ ifneq ($(TFLITE_U_PATH),)
     endif
     TFLITE_U_PATH:=tflite_u/
 endif
-    $(info TFLITE_U_PATH $(TFLITE_U_PATH))
 endif
 
 ifneq ($(TFLITE_U_PATH),)
