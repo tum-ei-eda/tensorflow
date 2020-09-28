@@ -92,6 +92,9 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* filter = GetInput(context, node, kWeightsTensor);
   const TfLiteTensor* bias = GetOptionalInputTensor(context, node, kBiasTensor);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
+  context->ReportError(context,"Fully_Connected Input: %d",NumDimensions(input));
+  context->ReportError(context,"Fully_Connected Ooutput: %d",NumDimensions(output));
+  TF_LITE_ENSURE_EQ(context,NumDimensions(output), 0);
 
   TF_LITE_ENSURE_EQ(context, input->type, output->type);
   TF_LITE_ENSURE_MSG(context, input->type == filter->type,

@@ -18,6 +18,7 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 
+
 #include "flatbuffers/flatbuffers.h"  // from @flatbuffers
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/core/api/error_reporter.h"
@@ -47,6 +48,8 @@ size_t AlignSizeUp(size_t size, size_t alignment) {
 
 TfLiteStatus TfLiteTypeSizeOf(TfLiteType type, size_t* size,
                               ErrorReporter* reporter) {
+  reporter->Report("Type %s IS (%d) ",
+                       TfLiteTypeGetName(type), type);
   switch (type) {
     case kTfLiteFloat32:
       *size = sizeof(float);
@@ -73,7 +76,7 @@ TfLiteStatus TfLiteTypeSizeOf(TfLiteType type, size_t* size,
       *size = sizeof(float) * 2;
       break;
     default:
-      reporter->Report("Type %s (%d) not is not supported",
+      reporter->Report("Type %s (%d) is not supported",
                        TfLiteTypeGetName(type), type);
       return kTfLiteError;
   }
@@ -91,12 +94,17 @@ TfLiteStatus BytesRequiredForTensor(const tflite::Tensor& flatbuffer_tensor,
       element_count *= flatbuffer_tensor.shape()->Get(n);
     }
   }
+  TF_LITE_REPORT_ERROR(error_reporter,"Elements: %d", element_count);
 
   TfLiteType tf_lite_type;
   TF_LITE_ENSURE_STATUS(ConvertTensorType(flatbuffer_tensor.type(),
                                           &tf_lite_type, error_reporter));
-  TF_LITE_ENSURE_STATUS(
+  if (tf_lite_type == kTfLiteString){
+    *type_size = 1;
+  }
+  else{TF_LITE_ENSURE_STATUS(
       TfLiteTypeSizeOf(tf_lite_type, type_size, error_reporter));
+      TF_LITE_REPORT_ERROR(error_reporter,"type_size:%d",type_size);}
   *bytes = element_count * (*type_size);
   return kTfLiteOk;
 }

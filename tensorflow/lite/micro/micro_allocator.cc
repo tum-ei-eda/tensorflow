@@ -208,6 +208,7 @@ TfLiteStatus AllocationInfoBuilder::Allocate() {
 TfLiteStatus AllocationInfoBuilder::AddTensors(const SubGraph* subgraph,
                                                int32_t* offline_offsets,
                                                TfLiteTensor* runtime_tensors) {
+    TF_LITE_REPORT_ERROR(reporter_,"Offline_offsets: %d",offline_offsets);                                            
   // Set up allocation info for all tensors.
   for (size_t i = 0; i < tensor_count_; ++i) {
     AllocationInfo* current = &info_[i];
@@ -224,7 +225,7 @@ TfLiteStatus AllocationInfoBuilder::AddTensors(const SubGraph* subgraph,
       current->offline_offset = kOnlinePlannedBuffer;
     }
   }
-
+  TF_LITE_REPORT_ERROR(reporter_,"subgraph->inputs()->size(): %d",subgraph->inputs()->size());  
   for (size_t i = 0; i < subgraph->inputs()->size(); ++i) {
     const int tensor_index = subgraph->inputs()->Get(i);
     AllocationInfo* current = &info_[tensor_index];
@@ -232,33 +233,48 @@ TfLiteStatus AllocationInfoBuilder::AddTensors(const SubGraph* subgraph,
   }
 
   // Mark all outputs as persistent to the end of the invocation.
+  TF_LITE_REPORT_ERROR(reporter_,"subgraph->outputs()->size(): %d",subgraph->outputs()->size());  
   for (size_t i = 0; i < subgraph->outputs()->size(); ++i) {
+    TF_LITE_REPORT_ERROR(reporter_,"subgraph->outputs()->Get(%d)/tensor_index: %d",i,subgraph->outputs()->Get(i)); 
     const int tensor_index = subgraph->outputs()->Get(i);
     AllocationInfo* current = &info_[tensor_index];
+    TF_LITE_REPORT_ERROR(reporter_,"subgraph->operators()->size(): %d",subgraph->operators()->size());
     current->last_used = subgraph->operators()->size() - 1;
+    TF_LITE_REPORT_ERROR(reporter_,"last_used %d",current->last_used);
+    TF_LITE_REPORT_ERROR(reporter_,"first_created %d",current->first_created);
   }
-
+  TF_LITE_REPORT_ERROR(reporter_,"-------");
   // Figure out when the first and last use of each tensor is.
   for (int i = (subgraph->operators()->size() - 1); i >= 0; --i) {
     const auto* op = subgraph->operators()->Get(i);
+    TF_LITE_REPORT_ERROR(reporter_,"First For %d",op->inputs()->size());
     for (size_t n = 0; n < op->inputs()->size(); ++n) {
       const int tensor_index = op->inputs()->Get(n);
       AllocationInfo* current = &info_[tensor_index];
+      TF_LITE_REPORT_ERROR(reporter_,"%d'/last_used %d",n,current->last_used);
       if (((current->last_used == -1) || (current->last_used < i))) {
         current->last_used = i;
       }
+      TF_LITE_REPORT_ERROR(reporter_,"%d /last_used %d",n,current->last_used);
     }
+    TF_LITE_REPORT_ERROR(reporter_,"Second For %d",op->outputs()->size());
     for (size_t n = 0; n < op->outputs()->size(); ++n) {
       const int tensor_index = op->outputs()->Get(n);
       AllocationInfo* current = &info_[tensor_index];
+      TF_LITE_REPORT_ERROR(reporter_,"%d'/first_created %d",n,current->first_created);
       if ((current->first_created == -1) || (current->first_created > i)) {
         current->first_created = i;
       }
+      TF_LITE_REPORT_ERROR(reporter_,"%d /first_created %d",n,current->first_created);
     }
+  TF_LITE_REPORT_ERROR(reporter_,"-----------for----");
   }
 
   // Work out which tensors need to be allocated.
+  TF_LITE_REPORT_ERROR(reporter_,"Tensor count: %d",tensor_count_);
+
   for (size_t i = 0; i < tensor_count_; ++i) {
+    TF_LITE_REPORT_ERROR(reporter_,"Tensor : %d",i);
     AllocationInfo* current = &info_[i];
     const bool is_read_only =
         (current->first_created == -1) && (current->last_used != -1);
@@ -425,6 +441,7 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
                                           &result->type, error_reporter));
   // Make sure we remember if the serialized tensor is designated as a variable.
   result->is_variable = flatbuffer_tensor.is_variable();
+//Here if type is string ==> Ok
 
   // We need to figure out where the actual contents of this tensor are stored
   // in memory. We'll check to see if there's a serialized buffer (pretty much
@@ -460,9 +477,9 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     // allocation won't happen until later.
     result->allocation_type = kTfLiteArenaRw;
   }
-
   // Figure out what the size in bytes of the buffer is and store it.
   size_t type_size;
+  TF_LITE_REPORT_ERROR(error_reporter,"HERE!2");
   TF_LITE_ENSURE_STATUS(BytesRequiredForTensor(
       flatbuffer_tensor, &result->bytes, &type_size, error_reporter));
 
@@ -488,7 +505,6 @@ TfLiteStatus InitializeTfLiteTensorFromFlatbuffer(
     result->dims = const_cast<TfLiteIntArray*>(
         reinterpret_cast<const TfLiteIntArray*>(flatbuffer_tensor.shape()));
   }
-
   // Copy the quantization information from the serialized data.
   const auto* src_quantization = flatbuffer_tensor.quantization();
   if (src_quantization && src_quantization->scale() &&
@@ -725,8 +741,9 @@ TfLiteStatus MicroAllocator::PopulateTfLiteTensorArrayFromFlatbuffer(
       return kTfLiteError;
     }
   }
+
   return kTfLiteOk;
-}
+}  // namespace tflite
 
 TfLiteStatus MicroAllocator::AllocateNodeAndRegistrations(
     const SubGraph* subgraph, NodeAndRegistration** node_and_registrations) {
@@ -760,10 +777,12 @@ TfLiteStatus MicroAllocator::PrepareNodeAndRegistrationDataFromFlatbuffer(
       return kTfLiteError;
     }
     auto* opcode = (*opcodes)[index];
+    TF_LITE_REPORT_ERROR(error_reporter_,"Op is : %s",opcode->custom_code()->c_str());//Added Oussama
+    TF_LITE_REPORT_ERROR(error_reporter_,"Op is : %s",EnumNameBuiltinOperator(opcode->builtin_code()));//Added Oussama
     status =
         GetRegistrationFromOpCode(opcode, op_resolver, error_reporter_,
                                   &(node_and_registrations[i].registration));
-    if (status != kTfLiteOk) {
+    if (status != kTfLiteOk) { 
       TF_LITE_REPORT_ERROR(error_reporter_,
                            "Failed to get registration from op code %s\n ",
                            EnumNameBuiltinOperator(opcode->builtin_code()));

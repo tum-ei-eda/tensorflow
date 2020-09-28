@@ -37,12 +37,14 @@ limitations under the License.
 
 #include "third_party/fft2d/fft.h"
 
+#include "tensorflow/lite/kernels/mem_func_helpers.cc"
+
 namespace tflite {
 namespace internal {
 
 class Spectrogram {
  public:
-  Spectrogram() : initialized_(false) {}
+  Spectrogram(TfLiteContext* context) : initialized_(false), context(context) {}
   ~Spectrogram() {}
 
   // Initializes the class with a given window length and step length
@@ -50,10 +52,13 @@ class Spectrogram {
   // function. Returns true on success, after which calls to Process()
   // are possible. window_length must be greater than 1 and step
   // length must be greater than 0.
-  bool Initialize(int window_length, int step_length);
+  bool Initialize(int window_length, int step_length, TfLiteContext* context);
 
   // Initialize with an explicit window instead of a length.
-  bool Initialize(const std::vector<double>& window, int step_length);
+  bool Initialize(
+      const std::vector<
+          double, tflite::ops::micro::ArenaBufferAllocator<double>>& window,
+      int step_length, TfLiteContext* context);
 
   // Processes an arbitrary amount of audio data (contained in input)
   // to yield complex spectrogram frames. After a successful call to
@@ -73,11 +78,19 @@ class Spectrogram {
   // (the L2 norm, or the squared magnitude) of each complex value.
   template <class InputSample, class OutputSample>
   bool ComputeSquaredMagnitudeSpectrogram(
-      const std::vector<InputSample>& input,
-      std::vector<std::vector<OutputSample>>* output);
+      const std::vector<InputSample,
+                        tflite::ops::micro::ArenaBufferAllocator<InputSample>>&
+          input,
+      std::vector<
+          std::vector<OutputSample,
+                      tflite::ops::micro::ArenaBufferAllocator<OutputSample>>,
+          tflite::ops::micro::ArenaBufferAllocator<OutputSample>>* output);
 
   // Return reference to the window function used internally.
-  const std::vector<double>& GetWindow() const { return window_; }
+  const std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>&
+  GetWindow() const {
+    return window_;
+  }
 
   // Return the number of frequency channels in the spectrogram.
   int output_frequency_channels() const { return output_frequency_channels_; }
@@ -94,14 +107,24 @@ class Spectrogram {
   int step_length_;
   bool initialized_;
   int samples_to_next_step_;
+  TfLiteContext* context;
+  void* raw_init1;
+  void* raw_init2;
+  void* raw_init3;
+  void* raw_init4;
 
-  std::vector<double> window_;
-  std::vector<double> fft_input_output_;
-  std::deque<double> input_queue_;
+  tflite::ops::micro::ArenaBufferAllocator<double> test;
+  std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>> window_;
+  std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>
+      fft_input_output_;
+  std::deque<double, tflite::ops::micro::ArenaBufferAllocator<double>>
+      input_queue_;
 
   // Working data areas for the FFT routines.
-  std::vector<int> fft_integer_working_area_;
-  std::vector<double> fft_double_working_area_;
+  std::vector<int, tflite::ops::micro::ArenaBufferAllocator<int>>
+      fft_integer_working_area_;
+  std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>
+      fft_double_working_area_;
 };
 
 // Explicit instantiations in spectrogram.cc.
@@ -120,14 +143,29 @@ extern template bool Spectrogram::ComputeComplexSpectrogram(
     std::vector<std::vector<std::complex<double>>>*);
 
 extern template bool Spectrogram::ComputeSquaredMagnitudeSpectrogram(
-    const std::vector<float>& input, std::vector<std::vector<float>>*);
+    const std::vector<float, tflite::ops::micro::ArenaBufferAllocator<float>>&
+        input,
+    std::vector<
+        std::vector<float, tflite::ops::micro::ArenaBufferAllocator<float>>,
+        tflite::ops::micro::ArenaBufferAllocator<float>>*);
 extern template bool Spectrogram::ComputeSquaredMagnitudeSpectrogram(
-    const std::vector<double>& input, std::vector<std::vector<float>>*);
+    const std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>&
+        input,
+    std::vector<
+        std::vector<float, tflite::ops::micro::ArenaBufferAllocator<float>>,
+        tflite::ops::micro::ArenaBufferAllocator<float>>*);
 extern template bool Spectrogram::ComputeSquaredMagnitudeSpectrogram(
-    const std::vector<float>& input, std::vector<std::vector<double>>*);
+    const std::vector<float, tflite::ops::micro::ArenaBufferAllocator<float>>&
+        input,
+    std::vector<
+        std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>,
+        tflite::ops::micro::ArenaBufferAllocator<double>>*);
 extern template bool Spectrogram::ComputeSquaredMagnitudeSpectrogram(
-    const std::vector<double>& input, std::vector<std::vector<double>>*);
-
+    const std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>&
+        input,
+    std::vector<
+        std::vector<double, tflite::ops::micro::ArenaBufferAllocator<double>>,
+        tflite::ops::micro::ArenaBufferAllocator<double>>*);
 }  // namespace internal
 }  // namespace tflite
 

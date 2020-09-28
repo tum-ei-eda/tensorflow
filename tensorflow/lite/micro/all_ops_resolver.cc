@@ -13,6 +13,9 @@ limitations under the License.
 #include "tensorflow/lite/micro/all_ops_resolver.h"
 
 #include "tensorflow/lite/micro/kernels/micro_ops.h"
+//#include "tensorflow/lite/kernels/audio_spectrogram.cc"
+#include "tensorflow/lite/micro/kernels/decodewav.cc"
+//#include "tensorflow/lite/kernels/mfcc.cc"
 
 namespace tflite {
 namespace ops {
@@ -20,6 +23,9 @@ namespace micro {
 namespace custom {
 TfLiteRegistration* Register_ETHOSU();
 const char* GetString_ETHOSU();
+// const char* GetString_AudioSpectrogram() { return "AudioSpectrogram"; }
+// const char* GetString_MFCC() { return "MFCC"; }
+
 }  // namespace custom
 }  // namespace micro
 }  // namespace ops
@@ -93,11 +99,22 @@ AllOpsResolver::AllOpsResolver() {
   AddBuiltin(BuiltinOperator_SVDF, tflite::ops::micro::Register_SVDF());
   AddBuiltin(BuiltinOperator_TANH, tflite::ops::micro::Register_TANH());
   AddBuiltin(BuiltinOperator_UNPACK, tflite::ops::micro::Register_UNPACK());
+  //AddCustom("AudioSpectrogram",tflite::ops::custom::Register_AUDIO_SPECTROGRAM());
+  //AddCustom("Mfcc",tflite::ops::custom::Register_MFCC());
+  AddCustom("DecodeWav",tflite::ops::micro::Register_DECODE_WAV()) ;
+
 
   TfLiteRegistration* registration =
       tflite::ops::micro::custom::Register_ETHOSU();
-  if (registration) {
+      //tflite::ops::custom::Register_AUDIO_SPECTROGRAM();
+      //tflite::ops::custom::Register_MFCC();
+  if (registration != nullptr) {
     AddCustom(tflite::ops::micro::custom::GetString_ETHOSU(), registration);
+    // AddCustom(tflite::ops::micro::custom::GetString_AudioSpectrogram(),
+    //            registration);
+    // AddCustom(tflite::ops::micro::custom::GetString_MFCC(), registration);
+  } else {
+    u_char c = 'F';
   }
 }
 

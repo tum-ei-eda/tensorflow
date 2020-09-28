@@ -25,6 +25,7 @@ const double kDefaultLowerFrequencyLimit = 20;
 const double kFilterbankFloor = 1e-12;
 const int kDefaultFilterbankChannelCount = 40;
 const int kDefaultDCTCoefficientCount = 13;
+//How are the dct and mel called ? 
 
 Mfcc::Mfcc()
     : initialized_(false),
@@ -49,7 +50,7 @@ void Mfcc::Compute(const std::vector<double>& spectrogram_frame,
     // LOG(ERROR) << "Mfcc not initialized.";
     return;
   }
-  std::vector<double> working;
+  std::vector<double> working; // One vector here !?? 
   mel_filterbank_.Compute(spectrogram_frame, &working);
   for (int i = 0; i < working.size(); ++i) {
     double val = working[i];

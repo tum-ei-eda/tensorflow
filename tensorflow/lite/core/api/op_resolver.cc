@@ -57,6 +57,7 @@ TfLiteStatus GetRegistrationFromOpCode(
     if (*registration == nullptr) {
       // Do not report error for unresolved custom op, we do the final check
       // while preparing ops.
+      TF_LITE_REPORT_ERROR(error_reporter,"NULL??");
       status = kTfLiteError;
     }
   }

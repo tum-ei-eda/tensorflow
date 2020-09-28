@@ -24,8 +24,8 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/compatibility.h"
 #include "tensorflow/lite/kernels/internal/mfcc_dct.h"
 #include "tensorflow/lite/kernels/internal/mfcc_mel_filterbank.h"
-//#include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
-//#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
+#include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
+#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
@@ -77,25 +77,21 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   const TfLiteTensor* input_rate = GetInput(context, node, kInputTensorRate);
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);
 
-  TF_LITE_ENSURE_EQ(context, NumDimensions(input_wav), 3);
-  TF_LITE_ENSURE_EQ(context, NumElements(input_rate), 1);
+  TF_LITE_ENSURE_EQ(context, NumDimensions(input_wav), 3); //Why three?
+  TF_LITE_ENSURE_EQ(context, NumElements(input_rate), 1); //NumEelements
 
   TF_LITE_ENSURE_EQ(context, output->type, kTfLiteFloat32);
   TF_LITE_ENSURE_EQ(context, input_wav->type, output->type);
   TF_LITE_ENSURE_EQ(context, input_rate->type, kTfLiteInt32);
 
-  // TfLiteIntArray* output_size = TfLiteIntArrayCreate(3);
-  // output_size->data[0] = input_wav->dims->data[0];
-  // output_size->data[1] = input_wav->dims->data[1];
-  // output_size->data[2] = params->dct_coefficient_count;
-  output->dims = TfLiteIntArrayCreate(3);
-  output->dims->data[0]=input_wav->dims->data[0];
-  output->dims->data[1] = input_wav->dims->data[1];
-  output->dims->data[2] = params->dct_coefficient_count;
-  output->bytes = 35;
-  context->ReportError(context,"Byes for output: %d",output->bytes);
-  return kTfLiteOk;
-  //return context->ResizeTensor(context, output, output_size);
+  //context->RequestScratchBufferInArena(context,size,float *x);
+
+  TfLiteIntArray* output_size = TfLiteIntArrayCreate(3);
+  output_size->data[0] = input_wav->dims->data[0];
+  output_size->data[1] = input_wav->dims->data[1];
+  output_size->data[2] = params->dct_coefficient_count;
+
+  return context->ResizeTensor(context, output, output_size);
 }
 
 // Input is a single squared-magnitude spectrogram frame. The input spectrum
@@ -105,7 +101,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 // of these values.
 template <KernelType kernel_type>
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
-  auto* params = reinterpret_cast<TfLiteMfccParams*>(node->user_data);
+  auto* params = reinterpret_cast<TfLiteMfccParams*>(node->user_data); // same as Data in Init ? user_data is current state according to TF Guide
 
   const TfLiteTensor* input_wav = GetInput(context, node, kInputTensorWav);
   const TfLiteTensor* input_rate = GetInput(context, node, kInputTensorRate);
@@ -116,6 +112,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   const int spectrogram_channels = input_wav->dims->data[2];
   const int spectrogram_samples = input_wav->dims->data[1];
   const int audio_channels = input_wav->dims->data[0];
+  Gette
 
   internal::Mfcc mfcc;
   mfcc.set_upper_frequency_limit(params->upper_frequency_limit);
