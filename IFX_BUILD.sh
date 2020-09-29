@@ -19,9 +19,9 @@ while [[ "$1" != "" && "$1" != "--" ]]
 do
     case "$1" in
     "--help"|"-?") 
-        echo "`basename $0`: [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
+        echo "`basename $0`: [--force] [--no_toco] [--no-config] [--no-build] [--no-tflite] " 1>&2
 	echo "  [--gast|--debug] [--jobs EXPR] [--remote N] [--override-llvm] [--no-download-update] " 1>&2
-	echo "  [--verbose]" 1>&2
+	echo " [--force-install] [--verbose]" 1>&2
         exit 1
         ;;
     "--no-config")
@@ -36,8 +36,8 @@ do
     "--no-download-update")
         NODOWNLOAD_UPDATE=1
         ;;
-    "--no-install")
-        NOINSTALL=1
+    "--force-install")
+        FORCE_INSTALL=1
         ;;
     "--with-pip")
 	WITH_PIP=1
@@ -223,7 +223,7 @@ then
     # 
     echo bazel build "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
     bazel build   "${BAZEL_CMDLINE_OPTIONS[@]}"  "${BAZEL_TARGETS[@]}"
-    if [ -z "$NOINSTALL" ]
+    if [ -n "$FORCE_INSTALL" -o ! -f  "${TFLITE_MICRO_ROOT}/install_ok" ]
     then
       mkdir -p ${TFLITE_MICRO_ROOT}/bin  
       rm -f ${TFLITE_MICRO_ROOT}/bin/*
@@ -231,6 +231,8 @@ then
       cp bazel-bin/tensorflow/compiler/mlir/lite/tf_tfl_translate${EXE_SUFFIX} \
          bazel-bin/external/llvm-project/llvm/FileCheck${EXE_SUFFIX} \
         ${TFLITE_MICRO_ROOT}/bin
+    else
+        echo "Skipping converter install to ${TFLITE_MICRO_ROOT} - install_ok tag already present" 
     fi
 fi
 
@@ -250,19 +252,15 @@ then
         make mrproper
     fi
     make BUILD_TYPE=debug third_party_downloads
-    #echo make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} BUILD_TYPE=debug microlite
-    #make -j 4 TARGET=ifx_riscv32_mcu ${RISCV_SETTINGS[@]} microlite
-    #echo make -j 4 BUILD_TYPE=debug test_executables
-    #make -j 4 BUILD_TYPE=debug test_executables
 
-
-    if [ -z "$NOINSTALL" ]
+    if [ -n "$FORCE_INSTALL" -o ! -f  "${TFLITE_MICRO_ROOT}/install_ok" ]
     then
         # Actual payload - installed confiured copy of tflite(u) library and makefiles
         make TARGET=ifx_riscv32_install_only ${RISCV_SETTINGS[@]} install
         # Set TAGS to use the portable_optimized kernels (by default) instead of the reference ones.
         echo 'TAGS ?= portable_optimized' >> ${TFLITE_MICRO_ROOT}/tools/make/installed_settings.inc
+    else
+        echo "Skipping tflite_u install to ${TFLITE_MICRO_ROOT} - install_ok tag already present" 
     fi
     
     # Clean up afterwards because bugs in downlaods from tflite(u)
