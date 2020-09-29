@@ -63,7 +63,7 @@ void ConvUint8PackedWeights(
   const int* in_dims = reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
 
   // Packing constants
-  const int num_packed_containers = std::ceil((float)input_depth / items_per_container);
+  const int num_packed_containers = (input_depth + (items_per_container-1)) / items_per_container;
   const int32_t mask = (1<<bits_per_item)-1;
 
   for (int batch = 0; batch < batches; ++batch) {

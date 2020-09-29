@@ -71,7 +71,7 @@ struct DepthwiseConvPackedFilter {
     TFLITE_DCHECK_EQ(output_depth, input_depth * depth_multiplier);
     TFLITE_DCHECK_EQ(bias_shape.FlatSize(), output_depth);
 
-    const int num_packed_containers = std::ceil((float)output_depth / items_per_container);
+    const int num_packed_containers = (output_depth + items_per_container-1) / items_per_container;
     const int32_t mask = (1<<bits_per_item)-1;
     const int* in_dims =
           reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
