@@ -55,3 +55,4 @@ xcuserdata
 
 #IFX Specific
 tensorflow/lite/micro/kernels/generated/*.cc
+tensorflow/lite/micro/kernels/recorded_model/static_eval_tables.cc

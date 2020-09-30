@@ -59,12 +59,24 @@ EVAL_FUNC_DECL(EvalFloat);
 EVAL_FUNC_DECL(EvalInt8Reference);
 EVAL_FUNC_DECL(EvalInt8Padding);
 EVAL_FUNC_DECL(EvalInt8);
-EVAL_FUNC_DECL(DepthwiseConvPackedFilterWithPadding);
-EVAL_FUNC_DECL(DepthwiseConvPackedFilterWithoutPadding);
 EVAL_FUNC_DECL(EvalUInt8Reference);
 EVAL_FUNC_DECL(DepthwiseConvOptimizedForFilterWidthEight);
 EVAL_FUNC_DECL(EvalUInt8Padding);
 EVAL_FUNC_DECL(EvalUInt8);
+
+template <typename CONTAINER_T, size_t bits_per_item,
+            size_t items_per_container>
+class PackedWithPadding {
+ public:
+  static EVAL_FUNC_DECL(Run);
+};
+
+template <typename CONTAINER_T, size_t bits_per_item,
+            size_t items_per_container>
+class PackedWithoutPadding {
+ public:
+  static EVAL_FUNC_DECL(Run);
+};
 
 
 #undef EVAL_FUNC_DECL
