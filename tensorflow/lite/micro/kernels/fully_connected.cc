@@ -154,7 +154,7 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
 
 
 template <typename CONTAINER_T, size_t bits_per_item, size_t items_per_container>
-inline void EvalFullyConnectedUint8PackedWeights(
+inline void EvalFullyConnectedUint8PackedWeightsReference(
         const FullyConnectedParams& params,
         const TfLiteEvalTensor* input,
         const TfLiteEvalTensor* filter, const TfLiteEvalTensor* bias,
@@ -170,7 +170,7 @@ inline void EvalFullyConnectedUint8PackedWeights(
     auto output_data = tflite::micro::GetTensorData<uint8_t>(output);
 
     // here could "Intercept" arguments for offlikne pre-interpretation
-    return FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
+    FullyConnectedUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
             params,
             input_shape, input_data,
             filter_shape, filter_data,
@@ -194,7 +194,7 @@ TfLiteStatus EvalQuantizedPacked(
         case 4: {
             if(container_bits != 8)
               break;
-            EvalFullyConnectedUint8PackedWeights<uint8_t, 4, 8 / 4>(params, input,
+            EvalFullyConnectedUint8PackedWeightsReference<uint8_t, 4, 8 / 4>(params, input,
                                                                     filter, bias,
                                                                     output);
             return kTfLiteOk;
@@ -202,7 +202,7 @@ TfLiteStatus EvalQuantizedPacked(
         case 5: {
             if(container_bits != 16)
               break;
-            EvalFullyConnectedUint8PackedWeights<uint16_t, 5, 16 / 5>(params, input,
+            EvalFullyConnectedUint8PackedWeightsReference<uint16_t, 5, 16 / 5>(params, input,
                                                                       filter, bias,
                                                                       output);
             return kTfLiteOk;
@@ -210,7 +210,7 @@ TfLiteStatus EvalQuantizedPacked(
         case 6: {
             if(container_bits != 32)
               break;
-            EvalFullyConnectedUint8PackedWeights<uint32_t, 6, 32 / 6>(params, input,
+            EvalFullyConnectedUint8PackedWeightsReference<uint32_t, 6, 32 / 6>(params, input,
                                                                       filter, bias,
                                                                       output);
             return kTfLiteOk;

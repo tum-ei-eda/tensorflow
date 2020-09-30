@@ -187,6 +187,68 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }  // namespace conv
 
+TfLiteStatus EvalConvQuantizedPacked(
+        const ConvParams &params,
+        const TfLiteEvalTensor* input,
+        const TfLiteEvalTensor* filter, const TfLiteEvalTensor* bias,
+        TfLiteEvalTensor* output,
+        TfLiteContext* context,
+        const TfLiteCustomSub8BitPackingDetails &custom) {
+
+  //TF_LITE_KERNEL_LOG(context, "Using packed implementation of convolutional layer with %d bit.", custom.bits_per_item);
+
+  unsigned int bits_per_item = custom.bits_per_item;
+  unsigned int container_bits = custom.container_bits;
+  switch (bits_per_item) {
+
+      case 4: {
+          if(container_bits != 8)
+            break;
+          ConvUint8PackedWeights<uint8_t, 4, 8 / 4>(
+              params,
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint8_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
+              );
+          return kTfLiteOk;
+      }
+      case 5: {
+          if(container_bits != 16)
+            break;
+          ConvUint8PackedWeights<uint16_t, 5, 16 / 5>(
+              params,
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint16_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
+              );
+          return kTfLiteOk;
+      }
+      case 6: {
+          if(container_bits != 32)
+            break;
+          ConvUint8PackedWeights<uint32_t, 6, 32 / 6>(
+                          params,
+              tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+              tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<uint32_t>(filter),
+              tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+              tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
+                          );
+          return kTfLiteOk;
+      }
+      default: {
+          TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
+                             bits_per_item);
+          return kTfLiteError;
+
+      }
+  }
+  TF_LITE_KERNEL_LOG(context, "Container bitwidth %d not supported for %d bit packed values",
+                     container_bits, bits_per_item);
+  return kTfLiteError;
+}
+
 void EvalQuantized(TfLiteContext* context, TfLiteNode* node,
                    TfLiteConvParams* params, const OpData& data,
                    const TfLiteEvalTensor* input,
