@@ -15,6 +15,8 @@ RECORD_KERNEL_VARIANTS=( TAGS="portable_optimized record_model autodump"
 USE_RECORDED_VARIANTS=( TAGS="portable_optimized recorded_model" \
 )
 
+USED_TARGET=( TARGET=ifx_riscv32_mcu PLATFORM_OPT_FLAGS=-funroll-loops)
+
 TESTS=( \
    kernel_conv kernel_conv_packed kernel_depthwise_conv kernel_depthwise_conv_packed
    kernel_fully_connected kernel_reduce kernel_pooling 
@@ -26,6 +28,6 @@ do
   echo "----------Testing $test ----------"
   make -s "${RECORD_KERNEL_VARIANTS[@]}" clean
   make -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_${test}_test
-  make -s "${USE_RECORDED_VARIANTS[@]}" clean
-  make -s "${USE_RECORDED_VARIANTS[@]}" -j8 test_${test}_test
+  make -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" clean
+  make -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" -j8 test_${test}_test
 done
