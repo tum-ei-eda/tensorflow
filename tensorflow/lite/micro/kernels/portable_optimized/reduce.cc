@@ -23,46 +23,67 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/micro/kernels/kernel_util.h"
-#include "tensorflow/lite/micro/kernels/pointer_collector.h"
 #include "tensorflow/lite/micro/micro_utils.h"
+#include "tensorflow/lite/micro/kernels/portable_optimized/reduce_op_data.h"
+#include "tensorflow/lite/micro/kernels/static_init_support.h"
 
 namespace tflite {
 namespace ops {
 namespace micro {
 namespace reduce {
 
-constexpr int kMaxNumberOfAxis = 4;
-constexpr int kMaxNumberOfReducedAxis = 2;
-
-struct OpData;
-
-typedef bool (*OpEvalHandler)(TfLiteContext* context, OpData* op_data,
-                              TfLiteReducerParams* params,
-                              const TfLiteEvalTensor* input,
-                              const TfLiteEvalTensor* axis,
-                              TfLiteEvalTensor* output);
-struct OpData {
-  int32_t multiplier;
-  int shift;
-  int temp_buffer_idx;
-  int input_zp;
-  float input_scale;
-  int output_zp;
-  float output_scale;
-  OpEvalHandler eval_function;
-};
-
 TFLM_COLLECT_KERNEL_INFO(
-    "reduce", "struct OpData;\n",
-    "",
+    "reduce",
+    "struct OpData;\n",
+    "#include \"tensorflow/lite/micro/kernels/portable_optimized/reduce_op_data.h\"",
     "OpData",
     "    TfLiteContext* context,\n"
     "    OpData* op_data, TfLiteReducerParams* params,\n"
     "    const TfLiteEvalTensor* input, const TfLiteEvalTensor* axis,\n"
-    "    TfLiteEvalTensor* output\n");
+    "    TfLiteEvalTensor* output\n"
+);
+
+typedef TfLiteStatus (*EvalVariantFptr)(
+    TfLiteContext* context, OpData* op_data,
+    TfLiteReducerParams* params, const TfLiteEvalTensor* input,
+    const TfLiteEvalTensor* axis, TfLiteEvalTensor* output);
+
+#if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
+
+static CppItems *static_opdata(OpData &od, size_t buf_size)
+{
+  auto init = new CppItems();
+
+  CppNamedVec<int32_t> tb("temp_buffer", "int32_t", od.temp_buffer, buf_size);
+
+  *init << od.multiplier
+       << od.shift
+       << od.temp_buffer_idx
+       << tb
+       << od.input_zp
+       << od.input_scale
+       << od.output_zp
+       << od.output_scale
+       << od.eval_function;
+
+  return init;
+}
+#endif
+
+constexpr int kMaxNumberOfAxis = 4;
+constexpr int kMaxNumberOfReducedAxis = 2;
+
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  EvalVariantFptr recordedVariant();
+  OpData *recordedStaticOpData();
+#endif
 
 void* InitMean(TfLiteContext* context, const char* buffer, size_t length) {
+#if TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
+  return recordedStaticOpData();
+#else
   return context->AllocatePersistentBuffer(context, sizeof(OpData));
+#endif
 }
 
 
@@ -78,7 +99,7 @@ void ResolveAxis(const int* axis_data, int axis_count,
   op_params->axis_count = axis_count;
 }
 
-bool ReduceFloatKeepDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceFloatKeepDims(TfLiteContext* context, OpData* op_data,
                          TfLiteReducerParams* params,
                          const TfLiteEvalTensor* input,
                          const TfLiteEvalTensor* axis,
@@ -90,10 +111,10 @@ bool ReduceFloatKeepDims(TfLiteContext* context, OpData* op_data,
                       tflite::micro::GetTensorData<float>(input),
                       tflite::micro::GetTensorShape(output),
                       tflite::micro::GetTensorData<float>(output));
-  return true;
+  return kTfLiteOk;
 }
 
-bool ReduceFloatChangeDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceFloatChangeDims(TfLiteContext* context, OpData* op_data,
                            TfLiteReducerParams* params,
                            const TfLiteEvalTensor* input,
                            const TfLiteEvalTensor* axis,
@@ -101,15 +122,16 @@ bool ReduceFloatChangeDims(TfLiteContext* context, OpData* op_data,
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
-  return reference_ops::Mean(
+  bool return_status = reference_ops::Mean(
       tflite::micro::GetTensorData<float>(input), input->dims->data,
       input->dims->size, tflite::micro::GetTensorData<float>(output),
       output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, tflite::micro::GetTensorData<float>(output));
+  return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
-bool ReduceInt8KeepDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceInt8KeepDims(TfLiteContext* context, OpData* op_data,
                         TfLiteReducerParams* params,
                         const TfLiteEvalTensor* input,
                         const TfLiteEvalTensor* axis,
@@ -123,10 +145,10 @@ bool ReduceInt8KeepDims(TfLiteContext* context, OpData* op_data,
       tflite::micro::GetTensorData<int8_t>(input), op_data->input_zp,
       tflite::micro::GetTensorShape(output),
       tflite::micro::GetTensorData<int8_t>(output), op_data->output_zp);
-  return true;
+  return kTfLiteOk;
 }
 
-bool ReduceInt8ChangeDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceInt8ChangeDims(TfLiteContext* context, OpData* op_data,
                           TfLiteReducerParams* params,
                           const TfLiteEvalTensor* input,
                           const TfLiteEvalTensor* axis,
@@ -134,17 +156,17 @@ bool ReduceInt8ChangeDims(TfLiteContext* context, OpData* op_data,
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
-  int32_t* temp_buffer = static_cast<int32_t*>(
-      context->GetScratchBuffer(context, op_data->temp_buffer_idx));
-  return reference_ops::Mean(
+  int32_t* temp_buffer = op_data->temp_buffer;
+  bool return_status = reference_ops::Mean(
       tflite::micro::GetTensorData<int8_t>(input), input->dims->data,
       input->dims->size, tflite::micro::GetTensorData<int8_t>(output),
       output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer);
+  return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
-bool ReduceInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
                                   TfLiteReducerParams* params,
                                   const TfLiteEvalTensor* input,
                                   const TfLiteEvalTensor* axis,
@@ -152,18 +174,18 @@ bool ReduceInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
-  int32_t* temp_buffer = static_cast<int32_t*>(
-      context->GetScratchBuffer(context, op_data->temp_buffer_idx));
-  return reference_ops::QuantizedMeanOrSum(
+  int32_t* temp_buffer = op_data->temp_buffer;
+  bool return_status = reference_ops::QuantizedMeanOrSum(
       tflite::micro::GetTensorData<int8_t>(input), op_data->input_zp,
       op_data->input_scale, input->dims->data, input->dims->size,
       tflite::micro::GetTensorData<int8_t>(output), op_data->output_zp,
       op_data->output_scale, output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer, false);
+  return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
-bool ReduceUInt8KeepDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceUInt8KeepDims(TfLiteContext* context, OpData* op_data,
                          TfLiteReducerParams* params,
                          const TfLiteEvalTensor* input,
                          const TfLiteEvalTensor* axis,
@@ -177,10 +199,10 @@ bool ReduceUInt8KeepDims(TfLiteContext* context, OpData* op_data,
                       tflite::micro::GetTensorShape(output),
                       tflite::micro::GetTensorData<uint8_t>(output),
                       op_data->output_zp, op_data->output_scale);
-  return true;
+  return kTfLiteOk;
 }
 
-bool ReduceUInt8ChangeDims(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceUInt8ChangeDims(TfLiteContext* context, OpData* op_data,
                            TfLiteReducerParams* params,
                            const TfLiteEvalTensor* input,
                            const TfLiteEvalTensor* axis,
@@ -188,17 +210,17 @@ bool ReduceUInt8ChangeDims(TfLiteContext* context, OpData* op_data,
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
-  int32_t* temp_buffer = static_cast<int32_t*>(
-      context->GetScratchBuffer(context, op_data->temp_buffer_idx));
-  return reference_ops::Mean(
+  int32_t* temp_buffer = op_data->temp_buffer;
+  bool return_status = reference_ops::Mean(
       tflite::micro::GetTensorData<uint8_t>(input), input->dims->data,
       input->dims->size, tflite::micro::GetTensorData<uint8_t>(output),
       output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer);
+  return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
-bool ReduceUInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
+TfLiteStatus ReduceUInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
                                    TfLiteReducerParams* params,
                                    const TfLiteEvalTensor* input,
                                    const TfLiteEvalTensor* axis,
@@ -206,15 +228,15 @@ bool ReduceUInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_data,
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
-  int32_t* temp_buffer = static_cast<int32_t*>(
-      context->GetScratchBuffer(context, op_data->temp_buffer_idx));
-  return reference_ops::QuantizedMeanOrSum(
+  int32_t* temp_buffer = op_data->temp_buffer;
+  bool return_status = reference_ops::QuantizedMeanOrSum(
       tflite::micro::GetTensorData<uint8_t>(input), op_data->input_zp,
       op_data->input_scale, input->dims->data, input->dims->size,
       tflite::micro::GetTensorData<uint8_t>(output), op_data->output_zp,
       op_data->output_scale, output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer, false);
+  return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
 TfLiteStatus PrepareSimple(TfLiteContext* context, TfLiteNode* node) {
@@ -236,6 +258,7 @@ TfLiteStatus PrepareSimple(TfLiteContext* context, TfLiteNode* node) {
 }
 
 TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
+#if ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   const TfLiteTensor* input = GetInput(context, node, 0);
   OpData* op_data = reinterpret_cast<OpData*>(node->user_data);
   const TfLiteTensor* output = GetOutput(context, node, 0);
@@ -247,8 +270,8 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
 
   int output_size = NumElements(output);
   if (input->type == kTfLiteInt8 || input->type == kTfLiteUInt8) {
-    context->RequestScratchBufferInArena(context, output_size * sizeof(int32_t),
-                                         &op_data->temp_buffer_idx);
+    void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_size);
+    op_data->temp_buffer = reinterpret_cast<int32_t*>(raw);
     op_data->input_zp = input->params.zero_point;
     op_data->input_scale = input->params.scale;
     op_data->output_zp = output->params.zero_point;
@@ -279,36 +302,36 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
       // Defer to specialized implementation for 4D Mean across axes 1 & 2.
       if (params->keep_dims) {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceFloatKeepDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceFloatKeepDims);
       } else {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceFloatChangeDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceFloatChangeDims);
       }
     } break;
     case kTfLiteInt8: {
       if (params->keep_dims) {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceInt8KeepDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceInt8KeepDims);
       } else if (op_data->input_zp == op_data->output_zp &&
                  op_data->input_scale == op_data->output_scale) {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceInt8ChangeDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceInt8ChangeDims);
       } else {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceInt8ChangeDimsAndQuant);
+            TFLM_SET_KERNEL_VARIANT(ReduceInt8ChangeDimsAndQuant);
       }
     } break;
     case kTfLiteUInt8: {
       if (params->keep_dims) {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceUInt8KeepDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceUInt8KeepDims);
       } else if (op_data->input_zp == op_data->output_zp &&
                  op_data->input_scale == op_data->output_scale) {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceUInt8ChangeDims);
+            TFLM_SET_KERNEL_VARIANT(ReduceUInt8ChangeDims);
       } else {
         op_data->eval_function =
-            TLITE_MICRO_SELECTED_KERNEL_VARIANT(ReduceInt8ChangeDimsAndQuant);
+            TFLM_SET_KERNEL_VARIANT(ReduceInt8ChangeDimsAndQuant);
       }
     } break;
     default:
@@ -317,6 +340,9 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
                          "Currently, only float32, int8 or uint8 input type "
                          "is supported.");
   }
+
+  TFLM_RECORD_OP_USER_DATA("reduce", static_opdata(*op_data, static_cast<size_t>(output_size)));
+#endif
   return kTfLiteOk;
 }
 
@@ -329,10 +355,7 @@ TfLiteStatus EvalMean(TfLiteContext* context, TfLiteNode* node) {
       reinterpret_cast<TfLiteReducerParams*>(node->builtin_data);
   OpData* op_data = reinterpret_cast<OpData*>(node->user_data);
 
-  auto eval_ok =
-      op_data->eval_function(context, op_data, params, input, axis, output);
-  TF_LITE_ENSURE_MSG(context, eval_ok, "Evaluation failed.");
-  return kTfLiteOk;
+  return op_data->eval_function(context, op_data, params, input, axis, output);
 }
 }  // namespace reduce
 

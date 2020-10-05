@@ -35,7 +35,6 @@ limitations under the License.
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/fully_connected.h"
 #include "tensorflow/lite/micro/kernels/fully_connected_packed_weights.h"
 #include "tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h"
-#include "tensorflow/lite/micro/kernels/pointer_collector.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
 
