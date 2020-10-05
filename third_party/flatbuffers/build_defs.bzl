@@ -319,6 +319,7 @@ def _gen_flatbuffer_srcs_impl(ctx):
                 "--gen-object-api",
                 src.path,
             ],
+			use_default_shell_env = True,
             progress_message = "Generating flatbuffer files for {}:".format(src),
         )
     return [

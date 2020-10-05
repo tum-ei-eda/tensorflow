@@ -2,6 +2,9 @@
 
 set -e
 
+cd `dirname "$BASH_SOURCE"`
+
+
 # IMPORTANT: can only compile/test a SINGLE test as recording of sequence of kernel
 # variants selected for each op corresponds to the prepare sequence for single Invoke or
 # series of tests.
@@ -26,8 +29,8 @@ TESTS=( \
 for test in "${TESTS[@]}"
 do
   echo "----------Testing $test ----------"
-  make -s "${RECORD_KERNEL_VARIANTS[@]}" clean
-  make -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_${test}_test
-  make -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" clean
-  make -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" -j8 test_${test}_test
+  make -C .. -s "${RECORD_KERNEL_VARIANTS[@]}" clean
+  make -C .. -s "${RECORD_KERNEL_VARIANTS[@]}" -j8 test_${test}_test
+  make -C .. -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" clean
+  make -C .. -s "${USE_RECORDED_VARIANTS[@]}" "${USED_TARGET[@]}" -j8 test_${test}_test
 done

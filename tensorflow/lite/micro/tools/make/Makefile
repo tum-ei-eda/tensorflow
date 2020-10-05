@@ -15,6 +15,25 @@ MAKEFILE_DIR := tensorflow/lite/micro/tools/make
 PARSE_THIRD_PARTY := 
 
 
+ifeq ($(OS),Windows_NT)
+	# Houston we have a problem - our MSYS2 toolchain uses elderly CRT
+	# that doesn't support long pathnames.  260 chars is it and
+	# our paths to tflite_u sources include  
+	# $(TFLITE_U_PATH)tensorflow/lite/micro/kernels/<TAG> already!
+	# Workaround - shortcut
+ifneq ($(TFLITE_U_PATH),)
+    -include short_cut_tflite_u.mk
+    ifneq ($(TFLITE_U_PATH)$(wildcard tflite_u),$(TFLITE_U_SHORTCUT_PATH)tflite_u)
+        # Path has changed.  Rebuild directory join
+        IGNORE:=$(shell rm -f tflite_u))
+        WIN_TFLITE_U:=$(shell cygpath -w $(TFLITE_U_PATH))
+        IGNORE:=$(shell cmd //c mklink //j tflite_u '$(WIN_TFLITE_U)')
+        $(file >short_cut_tflite_u.mk,TFLITE_U_SHORTCUT_PATH=$(TFLITE_U_PATH))
+    endif
+    TFLITE_U_PATH:=tflite_u/
+endif
+endif
+
 ifneq ($(TFLITE_U_PATH),)
     TFLITE_INCLUDE := $(TFLITE_U_PATH)
     MAKEFILE_DIR := $(TFLITE_U_PATH)tools/make
