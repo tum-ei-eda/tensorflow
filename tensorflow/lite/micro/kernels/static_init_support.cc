@@ -8,6 +8,7 @@
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
 #include <cstddef>
+#include <iostream>
 #include <fstream>
 #include <set>
 
@@ -47,7 +48,7 @@ CppItems &CppItems::operator<<(const CppPODStructInitializer &substruct) {
 //
 // Implementation of pointer collector (will be owned) by
 // PointerCollectors singleton.
-class PointerCollector::Implementation {
+class KernelVariantCollector::Implementation {
  public:
   void addPointer(const std::string &pointer) { pointers_.push_back(pointer); }
 
@@ -55,7 +56,7 @@ class PointerCollector::Implementation {
                  const char *signature);
 
  protected:
-  friend class PointerCollectors;
+  friend class BaseCollector;
   friend class CppInitializerCollector;
 
   // Vector that stores all the pointers to the used kernels
@@ -71,13 +72,13 @@ class PointerCollector::Implementation {
 // on static object destruction ordering.
 //
 
-class PointerCollectors {
+class BaseCollector {
  public:
-  PointerCollectors() {}
+  BaseCollector() {}
 
-  void addPointerCollector(PointerCollector::Implementation *collector) {
+  void addKernelVariantCollector(KernelVariantCollector::Implementation *collector) {
     collectors_.push_back(
-        std::unique_ptr<PointerCollector::Implementation>(collector));
+        std::unique_ptr<KernelVariantCollector::Implementation>(collector));
   }
 
   void writeInvokeRecordedCppFunctions(std::ostream &os);
@@ -96,13 +97,13 @@ class PointerCollectors {
   }
 
  protected:
-  std::vector<std::unique_ptr<PointerCollector::Implementation>> collectors_;
+  std::vector<std::unique_ptr<KernelVariantCollector::Implementation>> collectors_;
   // LUT to find name for pointer (mainly intendded for function pointers)
   std::map<void *, std::string> pointer_literals_;
   std::string output_path_;
 };
 
-void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
+void BaseCollector::writeInvokeRecordedCppFunctions(std::ostream &os) {
   os << "namespace tflite {\n"
         "namespace ops {\n"
         "namespace micro {\n\n";
@@ -156,7 +157,7 @@ void PointerCollectors::writeInvokeRecordedCppFunctions(std::ostream &os) {
         "} // namespace tflite\n";
 }
 
-class CppInitializerCollector : public PointerCollectors {
+class CppInitializerCollector : public BaseCollector {
  public:
   static CppInitializerCollector &instance();
 
@@ -171,10 +172,8 @@ class CppInitializerCollector : public PointerCollectors {
 
   ~CppInitializerCollector() {
 #if TF_LITE_MICRO_AUTO_DUMP_POINTER_TABLES
-    std::ofstream myfile;
-    myfile.open(
-        "tensorflow/lite/micro/kernels/recorded_model/static_eval_tables.cc",
-        std::fstream::out);
+    std::fstream myfile(
+        "tensorflow/lite/micro/kernels/recorded_model/static_eval_tables.cc", std::fstream::out | std::fstream::trunc);
     myfile << "#include \"tensorflow/lite/c/common.h\"\n"
               "#include \"tensorflow/lite/c/builtin_op_data.h\"\n"
               "\n";
@@ -269,22 +268,22 @@ void CppInitializerCollector::writeStaticOpDataDefinitions(std::ostream &os) {
         "} // namespace tflite\n";
 }
 
-PointerCollector::Implementation::Implementation(
+KernelVariantCollector::Implementation::Implementation(
     const char *kernel_name, const char *local_argtype_decls,
     const char *signature)
     : kernel_name_(kernel_name),
       signature_(signature),
       local_argtype_decls_(local_argtype_decls) {}
 
-PointerCollector::PointerCollector(const char *kernel_name,
+KernelVariantCollector::KernelVariantCollector(const char *kernel_name,
                                    const char *local_argtype_decls,
                                    const char *signature)
-    : impl_(new PointerCollector::Implementation(
+    : impl_(new KernelVariantCollector::Implementation(
           kernel_name, local_argtype_decls, signature)) {
-  CppInitializerCollector::instance().addPointerCollector(impl_);
+  CppInitializerCollector::instance().addKernelVariantCollector(impl_);
 }
 
-void PointerCollector::addPointer(const std::string &literal, void *ptr) {
+void KernelVariantCollector::addPointer(const std::string &literal, void *ptr) {
   impl_->addPointer(literal);
   CppInitializerCollector::instance().recordLiteralForPointer(ptr, literal);
 }

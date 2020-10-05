@@ -54,7 +54,7 @@ namespace ops {
 namespace micro {
 namespace depthwise_conv {
 
-KERNEL_VARIANT_COLLECT_INFO(
+TFLM_COLLECT_KERNEL_INFO(
     "depthwise_conv", "struct OpData;\n",
     "#include "
     "\"tensorflow/lite/micro/kernels/portable_optimized/"
@@ -1387,17 +1387,17 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   // Set the function pointer that is used during inference here
   switch (input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
-      data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalFloat);
+      data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalFloat);
       break;
     case kTfLiteInt8: {
       if (use_reference) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8Reference);
+            TFLM_SET_KERNEL_VARIANT(EvalInt8Reference);
       } else if (use_padding) {
         // Use the version that can handle padding
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8Padding);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalInt8Padding);
       } else {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalInt8);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalInt8);
       }
       break;
     }
@@ -1410,13 +1410,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           switch (bits_per_item) {
               case 4: {
                   if(container_bits == 8) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithPadding<uint8_t, 4, 8/4>::Run));
                   } else if (container_bits == 16) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithPadding<uint16_t, 4, 16/4>::Run));
                   } else if (container_bits == 32) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithPadding<uint32_t, 4, 32/4>::Run));
                   } else {
                     TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1426,10 +1426,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 5: {
                 if (container_bits == 16) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithPadding<uint16_t, 5, 16/5>::Run));
                 } else if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithPadding<uint32_t, 5, 32/5>::Run));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1439,7 +1439,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 6: {
                 if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithPadding<uint32_t, 6, 32/6>::Run));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1460,13 +1460,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
           switch (bits_per_item) {
               case 4: {
                   if(container_bits == 8) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithoutPadding<uint8_t, 4, 8/4>::Run));
                   } else if (container_bits == 16) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithoutPadding<uint16_t, 4, 16/4>::Run));
                   } else if (container_bits == 32) {
-                    data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                    data->eval_function = TFLM_SET_KERNEL_VARIANT(
                         (PackedWithoutPadding<uint32_t, 4, 32/4>::Run));
                   } else {
                     TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1476,10 +1476,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 5: {
                 if (container_bits == 16) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithoutPadding<uint16_t, 5, 16/5>::Run));
                 } else if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithoutPadding<uint32_t, 5, 32/5>::Run));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1489,7 +1489,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 6: {
                 if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedWithoutPadding<uint32_t, 6, 32/6>::Run));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -1506,14 +1506,14 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
         }
       } else if (use_reference) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8Reference);
+            TFLM_SET_KERNEL_VARIANT(EvalUInt8Reference);
       } else if (use_optimized_size) {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(
             DepthwiseConvOptimizedForFilterWidthEight);
       } else if (use_padding) {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8Padding);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalUInt8Padding);
       } else {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalUInt8);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalUInt8);
       }
       break;
     }
@@ -1524,7 +1524,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
 #endif
 
-  TF_LITE_MICRO_RECORD_OP_USER_DATA("depthwise_conv",
+  TFLM_RECORD_OP_USER_DATA("depthwise_conv",
                                     static_opdata(*data, output_depth));
 
   return kTfLiteOk;

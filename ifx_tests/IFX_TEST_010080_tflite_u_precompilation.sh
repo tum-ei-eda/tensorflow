@@ -15,11 +15,11 @@ RECORD_KERNEL_VARIANTS=( TAGS="portable_optimized record_model autodump"
 USE_RECORDED_VARIANTS=( TAGS="portable_optimized recorded_model" \
 )
 
-USED_TARGET=( TARGET=ifx_riscv32_mcu PLATFORM_OPT_FLAGS=-funroll-loops)
+USED_TARGET=( TARGET=ifx_riscv32_mcu)
 
 TESTS=( \
    kernel_conv kernel_conv_packed kernel_depthwise_conv kernel_depthwise_conv_packed
-   kernel_fully_connected kernel_reduce kernel_pooling 
+   kernel_fully_connected kernel_pooling 
    hello_world person_detection micro_speech
 )
 

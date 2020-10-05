@@ -52,7 +52,7 @@ struct OpData {
   OpEvalHandler eval_function;
 };
 
-KERNEL_VARIANT_COLLECT_INFO(
+TFLM_COLLECT_KERNEL_INFO(
     "reduce", "struct OpData;\n",
     "",
     "OpData",

@@ -50,7 +50,7 @@ namespace ops {
 namespace micro {
 namespace fully_connected {
 
-KERNEL_VARIANT_COLLECT_INFO(
+TFLM_COLLECT_KERNEL_INFO(
   "fully_connected", 
   "struct OpData;\n",
   "#include \"tensorflow/lite/micro/kernels/portable_optimized/fully_connected_op_data.h\"",
@@ -385,12 +385,12 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
 
   switch (weights->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
-      data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalFloat);
+      data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalFloat);
       break;
     case kTfLiteInt8:
       switch (output->type) {
         case kTfLiteInt8:
-          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedInt8);
+          data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalQuantizedInt8);
           break;
         default:
           TF_LITE_KERNEL_LOG(context, "Quantized int8 _t expects output int8");
@@ -410,13 +410,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
             switch (bits_per_item) {
               case 4: {
                 if (container_bits == 8) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint8_t, 4, 8/4>::EvalUint8PackedWeights));
                 } else if (container_bits == 16) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint16_t, 4, 16/4>::EvalUint8PackedWeights));
                 } else if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint32_t, 4, 32/4>::EvalUint8PackedWeights));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -426,10 +426,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 5: {
                 if (container_bits == 16) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint16_t, 5, 16/5>::EvalUint8PackedWeights));
                 } else if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint32_t, 5, 32/5>::EvalUint8PackedWeights));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -439,7 +439,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
               }
               case 6: {
                 if (container_bits == 32) {
-                  data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
                       (PackedFullyConnected<uint32_t, 6, 32/6>::EvalUint8PackedWeights));
                 } else {
                   TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
@@ -455,11 +455,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
             }
 
           } else {
-            data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedUInt8);
+            data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalQuantizedUInt8);
           }
           break;
         case kTfLiteInt16:
-          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalQuantizedUint8WithOutputInt16);
+          data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalQuantizedUint8WithOutputInt16);
           break;
         default:
           TF_LITE_KERNEL_LOG(context,
@@ -473,7 +473,7 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
       return kTfLiteError;
   }
 
-  TF_LITE_MICRO_RECORD_OP_USER_DATA("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
+  TFLM_RECORD_OP_USER_DATA("fully_connected", static_opdata(*data, static_cast<size_t>(rows)));
 
 #endif // ! TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   return kTfLiteOk;

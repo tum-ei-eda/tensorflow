@@ -24,7 +24,7 @@ limitations under the License.
 // via PointerCollect API.
 // TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 //   When set prepare phase kernel variant selection code is dropped with 
-// the eval functions recorded in tflite::micro::kernels::conv::eval_functions used instead.
+// the eval functions recorded in tflite::micro::kernels::pooling::eval_functions used instead.
 //
 // Benefits smaller binary, used unnecessary eval function variants are not lnked.
 
@@ -33,7 +33,6 @@ limitations under the License.
 
 
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/c/builtin_op_data.h"
 
 
 namespace tflite {
@@ -74,8 +73,6 @@ struct OpData {
 
 
 }  // namespace pooling
-
-
 }  // namespace micro
 }  // namespace ops
 }  // namespace tflite

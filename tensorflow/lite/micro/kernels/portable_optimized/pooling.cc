@@ -13,7 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/internal/reference/pooling.h"
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
@@ -29,7 +28,7 @@ namespace ops {
 namespace micro {
 namespace pooling {
 
-KERNEL_VARIANT_COLLECT_INFO(
+TFLM_COLLECT_KERNEL_INFO(
     "pooling", "struct OpData;\n",
     "#include "
     "\"tensorflow/lite/micro/kernels/portable_optimized/pooling_op_data.h\"",
@@ -232,6 +231,7 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node,
                      PoolingType pooling_type) {
+
 #if !TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
   TFLITE_DCHECK(node->builtin_data != nullptr);
   auto* params = reinterpret_cast<TfLitePoolParams*>(node->builtin_data);
@@ -259,15 +259,15 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node,
       switch (input->type) {
         case kTfLiteFloat32:
           data->eval_function =
-              TT_LITE_MICRO_EVAL_VARIANT_FPTR(AverageEvalFloat);
+              TFLM_SET_KERNEL_VARIANT(AverageEvalFloat);
           break;
         case kTfLiteUInt8:
           data->eval_function =
-              TT_LITE_MICRO_EVAL_VARIANT_FPTR(AverageEvalQuantizedUInt8);
+              TFLM_SET_KERNEL_VARIANT(AverageEvalQuantizedUInt8);
           break;
         case kTfLiteInt8:
           data->eval_function =
-              TT_LITE_MICRO_EVAL_VARIANT_FPTR(AverageEvalQuantizedInt8);
+              TFLM_SET_KERNEL_VARIANT(AverageEvalQuantizedInt8);
           break;
         default:
           TF_LITE_KERNEL_LOG(context,
@@ -280,15 +280,15 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node,
     case PoolingType::Max:
       switch (input->type) {
         case kTfLiteFloat32:
-          data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(MaxEvalFloat);
+          data->eval_function = TFLM_SET_KERNEL_VARIANT(MaxEvalFloat);
           break;
         case kTfLiteUInt8:
           data->eval_function =
-              TT_LITE_MICRO_EVAL_VARIANT_FPTR(MaxEvalQuantizedUInt8);
+              TFLM_SET_KERNEL_VARIANT(MaxEvalQuantizedUInt8);
           break;
         case kTfLiteInt8:
           data->eval_function =
-              TT_LITE_MICRO_EVAL_VARIANT_FPTR(MaxEvalQuantizedInt8);
+              TFLM_SET_KERNEL_VARIANT(MaxEvalQuantizedInt8);
           break;
         default:
           TF_LITE_KERNEL_LOG(context, "Type %s not currently supported.",
@@ -298,9 +298,10 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node,
   }
 #endif
 
-  TF_LITE_MICRO_RECORD_OP_USER_DATA("pooling", static_opdata(*data));
+  TFLM_RECORD_OP_USER_DATA("pooling", static_opdata(*data));
+
   return kTfLiteOk;
-}  // namespace pooling
+}
 
 TfLiteStatus PrepareAverage(TfLiteContext* context, TfLiteNode* node) {
   return Prepare(context, node, PoolingType::Average);
