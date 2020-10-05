@@ -31,7 +31,6 @@ limitations under the License.
 // lnked.
 
 #include "tensorflow/lite/kernels/internal/reference/conv.h"
-
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/common.h"
@@ -46,6 +45,7 @@ limitations under the License.
 #include "tensorflow/lite/micro/kernels/static_data_utils.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
+
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 
@@ -54,7 +54,7 @@ namespace ops {
 namespace micro {
 namespace conv {
 
-KERNEL_VARIANT_COLLECT_INFO(
+TFLM_COLLECT_KERNEL_INFO(
     "conv", "struct OpData;\n",
     "#include "
     "\"tensorflow/lite/micro/kernels/portable_optimized/conv_op_data.h\"",
@@ -302,33 +302,80 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   // Set the function pointer that is used during inference here
   switch (filter->type) {
     case kTfLiteFloat32: {
-      data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvFloat);
+      data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalConvFloat);
       break;
     }
     case kTfLiteInt8: {
       if (use_reference) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvInt8Reference);
+            TFLM_SET_KERNEL_VARIANT(EvalConvInt8Reference);
       } else if (use_padding) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvInt8Padding);
+            TFLM_SET_KERNEL_VARIANT(EvalConvInt8Padding);
       } else {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvInt8);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalConvInt8);
       }
       break;
     }
     case kTfLiteUInt8: {
       if (use_packed) {
-        data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvUInt8Packed);
+        const TfLiteCustomSub8BitPackingDetails &custom = *data->custom_sub8bit_packing;
+        unsigned int bits_per_item = custom.bits_per_item;
+        unsigned int container_bits = custom.container_bits;
+        switch (bits_per_item) {
+            case 4: {
+                if(container_bits == 8) {
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                      (PackedConv<uint8_t, 4, 8/4>::EvalUint8PackedWeights));
+                } else if (container_bits == 16) {
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                      (PackedConv<uint16_t, 4, 16/4>::EvalUint8PackedWeights));
+                } else if (container_bits == 32) {
+                  data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                      (PackedConv<uint32_t, 4, 32/4>::EvalUint8PackedWeights));
+                } else {
+                  TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
+                  return kTfLiteError;
+                }
+                break;
+            }
+            case 5: {
+              if (container_bits == 16) {
+                data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                    (PackedConv<uint16_t, 5, 16/5>::EvalUint8PackedWeights));
+              } else if (container_bits == 32) {
+                data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                    (PackedConv<uint32_t, 5, 32/5>::EvalUint8PackedWeights));
+              } else {
+                TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
+                return kTfLiteError;
+              }
+              break;
+            }
+            case 6: {
+              if (container_bits == 32) {
+                data->eval_function = TFLM_SET_KERNEL_VARIANT(
+                    (PackedConv<uint32_t, 6, 32/6>::EvalUint8PackedWeights));
+              } else {
+                TF_LITE_KERNEL_LOG(context, " Packed Implementation not supported.");
+                return kTfLiteError;
+              }
+              break;
+            }
+            default: {
+                TF_LITE_KERNEL_LOG(context, " Packed Weight bitwidth (%d) not supported.",
+                                   bits_per_item);
+                return kTfLiteError;
+            }
+          }
       } else if (use_reference) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvUInt8Reference);
+            TFLM_SET_KERNEL_VARIANT(EvalConvUInt8Reference);
       } else if (use_padding) {
         data->eval_function =
-            TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvUInt8Padding);
+            TFLM_SET_KERNEL_VARIANT(EvalConvUInt8Padding);
       } else {
-        data->eval_function = TT_LITE_MICRO_EVAL_VARIANT_FPTR(EvalConvUInt8);
+        data->eval_function = TFLM_SET_KERNEL_VARIANT(EvalConvUInt8);
       }
       break;
     }
@@ -340,19 +387,22 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   }
 #endif
 
-  TF_LITE_MICRO_RECORD_OP_USER_DATA("conv", static_opdata(*data, output_depth));
+  TFLM_RECORD_OP_USER_DATA("conv", static_opdata(*data, output_depth));
 
   return kTfLiteOk;
 }
 
 void Free(TfLiteContext* context, void* buffer) {}
 
-TfLiteStatus EvalConvUInt8Packed(TfLiteConvParams* params, OpData* data,
-                                 const TfLiteEvalTensor* input,
-                                 const TfLiteEvalTensor* filter,
-                                 const TfLiteEvalTensor* bias,
-                                 TfLiteEvalTensor* output,
-                                 TfLiteContext* context) {
+template <typename CONTAINER_T, size_t bits_per_item,
+              size_t items_per_container>
+TfLiteStatus PackedConv<CONTAINER_T, bits_per_item, items_per_container>::EvalUint8PackedWeights(
+    TfLiteConvParams* params, OpData* data,
+    const TfLiteEvalTensor* input,
+    const TfLiteEvalTensor* filter,
+    const TfLiteEvalTensor* bias,
+    TfLiteEvalTensor* output,
+    TfLiteContext* context) {
   ConvParams op_params;
   op_params.padding_type = RuntimePaddingType(params->padding);
   op_params.padding_values.width = data->padding.width;
@@ -370,12 +420,33 @@ TfLiteStatus EvalConvUInt8Packed(TfLiteConvParams* params, OpData* data,
   op_params.output_shift = -data->output_shift;
   op_params.quantized_activation_min = data->output_activation_min;
   op_params.quantized_activation_max = data->output_activation_max;
-
-  tflite::ops::micro::conv::EvalConvQuantizedPacked(
-      op_params, input, filter, bias, output, context,
-      *data->custom_sub8bit_packing);
-  return kTfLiteOk;
+  ConvUint8PackedWeights<CONTAINER_T, bits_per_item, items_per_container>(
+        op_params,
+        tflite::micro::GetTensorShape(input), tflite::micro::GetTensorData<uint8_t>(input),
+        tflite::micro::GetTensorShape(filter), tflite::micro::GetTensorData<CONTAINER_T>(filter),
+        tflite::micro::GetTensorShape(bias), tflite::micro::GetTensorData<int32_t>(bias),
+        tflite::micro::GetTensorShape(output), tflite::micro::GetTensorData<uint8_t>(output)
+        );
+    return kTfLiteOk;
 }
+
+template
+class PackedConv<uint8_t, 4, 8/4>;
+
+template
+class PackedConv<uint16_t, 4, 16/4>;
+
+template
+class PackedConv<uint32_t, 4, 32/4>;
+
+template
+class PackedConv<uint16_t, 5, 16/5>;
+
+template
+class PackedConv<uint32_t, 5, 32/5>;
+
+template
+class PackedConv<uint32_t, 6, 32/6>;
 
 TfLiteStatus EvalConvUInt8Reference(TfLiteConvParams* params, OpData* data,
                                     const TfLiteEvalTensor* input,

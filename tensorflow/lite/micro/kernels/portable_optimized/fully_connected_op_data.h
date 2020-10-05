@@ -52,9 +52,16 @@ template <typename T>
 EVAL_FUNC(EvalQuantized);
 EVAL_FUNC(EvalQuantizedInt8);
 EVAL_FUNC(EvalQuantizedUint8WithOutputInt16);
-EVAL_FUNC(EvalQuantizedPacked);
 EVAL_FUNC(EvalQuantizedUInt8);
 EVAL_FUNC(EvalFloat);
+template <typename CONTAINER_T, size_t bits_per_item,
+            size_t items_per_container>
+class PackedFullyConnected {
+ public:
+  static EVAL_FUNC(EvalUint8PackedWeights);
+};
+
+
 
 #undef EVAL_FUNC
 

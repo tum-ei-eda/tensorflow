@@ -8,12 +8,11 @@
 #ifndef TENSORFLOW_LITE_MICRO_KERNELS_STATIC_INIT_SUPPORT_H_
 #define TENSORFLOW_LITE_MICRO_KERNELS_STATIC_INIT_SUPPORT_H_
 
+
 #if TF_LITE_MICRO_RECORD_STATIC_KERNEL_VARIANT
 
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/op_macros.h"
-
-
 
 #include <string>
 #include <deque>
@@ -23,60 +22,47 @@
 #include <type_traits>
 #include <vector>
 
-#define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
-  (pointer_collector.addPointer(#funptr_name, reinterpret_cast<void*>(&funptr_name)), &funptr_name)
 
-#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
+#define TFLM_SET_KERNEL_VARIANT(funptr_name) \
   (recordLiteralForPointer(#funptr_name, reinterpret_cast<void*>(&funptr_name)), &funptr_name)
 
-
-#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature) \
-tflite::ops::micro::PointerCollector pointer_collector( \
-    kernel_name, \
-    type_decls, \
-    funptr_signature \
-); \
+#define TFLM_COLLECT_KERNEL_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature) \
+tflite::ops::micro::KernelVariantCollector kernel_variant_collector(kernel_name, type_decls, funptr_signature); \
 tflite::ops::micro::DefineStaticOpDataHeaders op_data_info( \
   kernel_name, \
   headers, \
   op_data_type \
 );
 
-#define TF_LITE_MICRO_RECORD_OP_USER_DATA(kernel_name, op_data) \
+#define TFLM_RECORD_OP_USER_DATA(kernel_name, op_data) \
   recordStaticOpdata(kernel_name, op_data)
 
 namespace tflite {
 namespace ops {
 namespace micro {
 
-class PointerCollectors;
+class BaseCollector;
 
-class PointerCollector  {
+
+class KernelVariantCollector  {
  public:
 
-  /*
-   * Constructor 
-   */
-  PointerCollector(const char *kernel_name, const char *local_argtype_decls, const char *signature);
+  KernelVariantCollector(const char *kernel_name, const char *local_argtype_decls, const char *signature);
 
-
-
-  /*
-   * Method that is used to add a pointer to the pointer list
-   */
   void addPointer(const std::string &pointer, void *ptr);
 
   static void setOutputPath(const std::string &output_path);
 
  protected:
-  friend class PointerCollectors;
+  friend class BaseCollector;
   class Implementation;
 
   Implementation *impl_;
 
 private:
-  PointerCollector(const PointerCollector &);
+  KernelVariantCollector(const KernelVariantCollector &);
 };
+
 
 class CppNamedStruct;
 class CppPODStructInitializer;
@@ -412,26 +398,20 @@ class DefineStaticOpDataHeaders {
 
 #elif TF_LITE_MICRO_USE_RECORDED_KERNEL_VARIANTS
 
-#define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
+#define TFLM_SET_KERNEL_VARIANT(funptr_name) \
   &funptr_name
 
-#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
-  &funptr_name
+#define TFLM_COLLECT_KERNEL_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature)
 
-#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature)
-
-#define TF_LITE_MICRO_RECORD_OP_USER_DATA(kernel_name, op_data)
+#define TFLM_RECORD_OP_USER_DATA(kernel_name, op_data)
 
 #else
-#define TLITE_MICRO_SELECTED_KERNEL_VARIANT(funptr_name) \
-  &funptr_name
-
-#define TT_LITE_MICRO_EVAL_VARIANT_FPTR(funptr_name) \
+#define TFLM_SET_KERNEL_VARIANT(funptr_name) \
   &funptr_name
   
-#define KERNEL_VARIANT_COLLECT_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature)
+#define TFLM_COLLECT_KERNEL_INFO(kernel_name, type_decls, headers, op_data_type, funptr_signature)
 
-#define TF_LITE_MICRO_RECORD_OP_USER_DATA(kernel_name, op_data)
+#define TFLM_RECORD_OP_USER_DATA(kernel_name, op_data)
 
 #endif
 

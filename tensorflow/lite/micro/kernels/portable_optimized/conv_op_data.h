@@ -63,7 +63,12 @@ EVAL_FUNC_DECL(EvalConvUInt8Packed);
 EVAL_FUNC_DECL(EvalConvUInt8Padding);
 EVAL_FUNC_DECL(EvalConvUInt8Reference);
 EVAL_FUNC_DECL(EvalConvUInt8);
-
+template <typename CONTAINER_T, size_t bits_per_item,
+            size_t items_per_container>
+class PackedConv {
+ public:
+  static EVAL_FUNC_DECL(EvalUint8PackedWeights);
+};
 
 #undef EVAL_FUNC_DECL
 
