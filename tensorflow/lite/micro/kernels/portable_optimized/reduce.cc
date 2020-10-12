@@ -198,12 +198,17 @@ inline void Mean(const tflite::MeanParams& op_params, OpData* op_data,
   TFLITE_CHECK_EQ(output_height, 1);
   TFLITE_CHECK_EQ(output_width, 1);
 
+  const int* in_dims =
+          reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+
   for (int out_b = 0; out_b < output_batch; ++out_b) {
+    uint32_t offset0 = out_b * in_dims[1];
     for (int out_d = 0; out_d < output_depth; ++out_d) {
       int32_t value = 0;
       for (int in_h = 0; in_h < input_height; ++in_h) {
+        uint32_t offset1 = (offset0 + in_h) * in_dims[2];
         for (int in_w = 0; in_w < input_width; ++in_w) {
-          value += input_data[Offset(input_shape, out_b, in_h, in_w, out_d)];
+          value += input_data[((offset1 + in_w) * in_dims[3] + out_d)];
         }
       }
       output_data[Offset(output_shape, out_b, 0, 0, out_d)] =
@@ -235,6 +240,9 @@ inline void Mean<float>(const tflite::MeanParams& op_params, OpData* op_data,
   const int input_height = input_shape.Dims(1);
   const int input_width = input_shape.Dims(2);
 
+  const int* in_dims =
+        reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+
   TFLITE_CHECK_EQ(op_params.axis_count, 2);
   TFLITE_CHECK((op_params.axis[0] == 1 && op_params.axis[1] == 2) ||
                (op_params.axis[0] == 2 && op_params.axis[1] == 1));
@@ -242,11 +250,13 @@ inline void Mean<float>(const tflite::MeanParams& op_params, OpData* op_data,
   TFLITE_CHECK_EQ(output_width, 1);
 
   for (int out_b = 0; out_b < output_batch; ++out_b) {
+    uint32_t offset0 = out_b * in_dims[1];
     for (int out_d = 0; out_d < output_depth; ++out_d) {
       float value = 0;
       for (int in_h = 0; in_h < input_height; ++in_h) {
+        uint32_t offset1 = (offset0 + in_h) * in_dims[2];
         for (int in_w = 0; in_w < input_width; ++in_w) {
-          value += input_data[Offset(input_shape, out_b, in_h, in_w, out_d)];
+          value += input_data[((offset1 + in_w) * in_dims[3]) + out_d];
         }
       }
       output_data[Offset(output_shape, out_b, 0, 0, out_d)] =
@@ -344,12 +354,17 @@ inline void MeanUInt8(const tflite::MeanParams& op_params, OpData* op_data,
       output_zp -
       MultiplyByQuantizedMultiplier(input_zp, op_data->multiplier, op_data->shift);
 
+  const int* in_dims =
+          reinterpret_cast<const int*>(input_shape.DimsDataUpTo5D());
+
   for (int out_b = 0; out_b < output_batch; ++out_b) {
+    uint32_t offset0 = out_b * in_dims[1];
     for (int out_d = 0; out_d < output_depth; ++out_d) {
       int32_t acc = 0;
       for (int in_h = 0; in_h < input_height; ++in_h) {
+        uint32_t offset1 = (offset0 + in_h) * in_dims[2];
         for (int in_w = 0; in_w < input_width; ++in_w) {
-          acc += input_data[Offset(input_shape, out_b, in_h, in_w, out_d)];
+          acc += input_data[((offset1 + in_w) * in_dims[3] + out_d)];
         }
       }
       acc = MultiplyByQuantizedMultiplier(acc, op_data->mean_multiplier, op_data->mean_shift);
@@ -577,7 +592,7 @@ TfLiteStatus PrepareSimple(TfLiteContext* context, TfLiteNode* node) {
 
   // Validate axis type
   const TfLiteTensor* axis = GetInput(context, node, 1);
-  TF_LITE_ENSURE_TYPES_EQ(context, axis->type, kTfLiteInt32);
+  TF_LITE_ENSURE_EQ(context, axis->type, kTfLiteInt32);
   return kTfLiteOk;
 }
 
