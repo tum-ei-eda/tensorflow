@@ -31,13 +31,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_DEPTHWISE_CONV_OP_DATA_H_
 #define TENSORFLOW_LITE_MICRO_KERNELS_PORTABLE_OPTIMIZED_DEPTHWISE_CONV_OP_DATA_H_
 
-
 #include "tensorflow/lite/c/common.h"
-
-
-#define MAX(A,B) ((A) > (B) ? (A) : (B))
-#define MIN(A,B) ((A) < (B) ? (A) : (B))
-
 
 namespace tflite {
 namespace ops {

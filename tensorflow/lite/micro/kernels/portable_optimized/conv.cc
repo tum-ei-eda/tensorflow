@@ -45,10 +45,6 @@ limitations under the License.
 #include "tensorflow/lite/micro/kernels/static_data_utils.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
-
-#define MAX(A, B) ((A) > (B) ? (A) : (B))
-#define MIN(A, B) ((A) < (B) ? (A) : (B))
-
 namespace tflite {
 namespace ops {
 namespace micro {
@@ -581,13 +577,13 @@ TfLiteStatus EvalConvUInt8(TfLiteConvParams* params, OpData* data,
           const int in_y_origin = out_y * stride_height;
           int32_t acc = 0;
 
-          const int32_t ker_y_start = MAX(0, -in_y_origin);
-          const int32_t ker_x_start = MAX(0, -in_x_origin);
+          const int32_t ker_y_start = std::max(0, -in_y_origin);
+          const int32_t ker_x_start = std::max(0, -in_x_origin);
 
           const int32_t ker_y_end =
-              MIN(filter_height, input_height - in_y_origin);
+              std::min(filter_height, input_height - in_y_origin);
           const int32_t ker_x_end =
-              MIN(filter_width, input_width - in_x_origin);
+              std::min(filter_width, input_width - in_x_origin);
 
           for (int filter_y = ker_y_start; filter_y < ker_y_end; ++filter_y) {
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
@@ -683,13 +679,13 @@ TfLiteStatus EvalConvUInt8Padding(TfLiteConvParams* params, OpData* data,
 
           int32_t acc = 0;
 
-          const int32_t ker_y_start = MAX(0, -in_y_origin);
-          const int32_t ker_x_start = MAX(0, -in_x_origin);
+          const int32_t ker_y_start = std::max(0, -in_y_origin);
+          const int32_t ker_x_start = std::max(0, -in_x_origin);
 
           const int32_t ker_y_end =
-              MIN(filter_height, input_height - in_y_origin);
+              std::min(filter_height, input_height - in_y_origin);
           const int32_t ker_x_end =
-              MIN(filter_width, input_width - in_x_origin);
+              std::min(filter_width, input_width - in_x_origin);
 
           for (int filter_y = ker_y_start; filter_y < ker_y_end; ++filter_y) {
             const int in_y = in_y_origin + dilation_height_factor * filter_y;
@@ -785,13 +781,13 @@ TfLiteStatus EvalConvInt8(TfLiteConvParams* params, OpData* data,
           const int in_y_origin = (out_y * stride_height) - pad_height;
           uint32_t offset_filter0 = out_channel * fi_dims[1];
 
-          const int32_t ker_y_start = MAX(0, -in_y_origin);
-          const int32_t ker_x_start = MAX(0, -in_x_origin);
+          const int32_t ker_y_start = std::max(0, -in_y_origin);
+          const int32_t ker_x_start = std::max(0, -in_x_origin);
 
           const int32_t ker_y_end =
-              MIN(filter_height, input_height - in_y_origin);
+              std::min(filter_height, input_height - in_y_origin);
           const int32_t ker_x_end =
-              MIN(filter_width, input_width - in_x_origin);
+              std::min(filter_width, input_width - in_x_origin);
 
           int32_t acc = 0;
 
@@ -889,13 +885,13 @@ TfLiteStatus EvalConvInt8Padding(TfLiteConvParams* params, OpData* data,
           const int in_y_origin = (out_y * stride_height) - pad_height;
           uint32_t offset_filter0 = out_channel * fi_dims[1];
 
-          const int32_t ker_y_start = MAX(0, -in_y_origin);
-          const int32_t ker_x_start = MAX(0, -in_x_origin);
+          const int32_t ker_y_start = std::max(0, -in_y_origin);
+          const int32_t ker_x_start = std::max(0, -in_x_origin);
 
           const int32_t ker_y_end =
-              MIN(filter_height, input_height - in_y_origin);
+              std::min(filter_height, input_height - in_y_origin);
           const int32_t ker_x_end =
-              MIN(filter_width, input_width - in_x_origin);
+              std::min(filter_width, input_width - in_x_origin);
 
           int32_t acc = 0;
 

@@ -46,9 +46,6 @@ limitations under the License.
 #include "tensorflow/lite/micro/kernels/static_data_utils.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
-#define MAX(A, B) ((A) > (B) ? (A) : (B))
-#define MIN(A, B) ((A) < (B) ? (A) : (B))
-
 namespace tflite {
 namespace ops {
 namespace micro {
@@ -758,13 +755,13 @@ TfLiteStatus EvalUInt8Padding(TfLiteContext* context,
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
       const int in_y_origin = (out_y * stride_height) - pad_height;
-      const int32_t ker_y_start = MAX(0, -in_y_origin);
-      const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+      const int32_t ker_y_start = std::max(0, -in_y_origin);
+      const int32_t ker_y_end = std::min(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
         const int in_x_origin = (out_x * stride_width) - pad_width;
-        const int32_t ker_x_start = MAX(0, -in_x_origin);
-        const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+        const int32_t ker_x_start = std::max(0, -in_x_origin);
+        const int32_t ker_x_end = std::min(filter_width, input_width - in_x_origin);
 
         for (int i = 0; i < output_depth; ++i) {
           acc_buf[i] = 0;
@@ -862,13 +859,13 @@ TfLiteStatus EvalUInt8(TfLiteContext* context,
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
       const int in_y_origin = (out_y * stride_height);
-      const int32_t ker_y_start = MAX(0, -in_y_origin);
-      const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+      const int32_t ker_y_start = std::max(0, -in_y_origin);
+      const int32_t ker_y_end = std::min(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
         const int in_x_origin = (out_x * stride_width);
-        const int32_t ker_x_start = MAX(0, -in_x_origin);
-        const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+        const int32_t ker_x_start = std::max(0, -in_x_origin);
+        const int32_t ker_x_end = std::min(filter_width, input_width - in_x_origin);
 
         for (int i = 0; i < output_depth; ++i) {
           acc_buf[i] = 0;
@@ -1017,13 +1014,13 @@ TfLiteStatus EvalInt8Padding(TfLiteContext* context,
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
       const int in_y_origin = (out_y * stride_height) - pad_height;
-      const int32_t ker_y_start = MAX(0, -in_y_origin);
-      const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+      const int32_t ker_y_start = std::max(0, -in_y_origin);
+      const int32_t ker_y_end = std::min(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
         const int in_x_origin = (out_x * stride_width) - pad_width;
-        const int32_t ker_x_start = MAX(0, -in_x_origin);
-        const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+        const int32_t ker_x_start = std::max(0, -in_x_origin);
+        const int32_t ker_x_end = std::min(filter_width, input_width - in_x_origin);
 
         for (int i = 0; i < output_depth; ++i) {
           acc_buf[i] = 0;
@@ -1123,13 +1120,13 @@ TfLiteStatus EvalInt8(TfLiteContext* context,
     const uint32_t input_offset0 = in_dims[1] * batch;
     for (int out_y = 0; out_y < output_height; ++out_y) {
       const int in_y_origin = (out_y * stride_height);
-      const int32_t ker_y_start = MAX(0, -in_y_origin);
-      const int32_t ker_y_end = MIN(filter_height, input_height - in_y_origin);
+      const int32_t ker_y_start = std::max(0, -in_y_origin);
+      const int32_t ker_y_end = std::min(filter_height, input_height - in_y_origin);
 
       for (int out_x = 0; out_x < output_width; ++out_x) {
         const int in_x_origin = (out_x * stride_width);
-        const int32_t ker_x_start = MAX(0, -in_x_origin);
-        const int32_t ker_x_end = MIN(filter_width, input_width - in_x_origin);
+        const int32_t ker_x_start = std::max(0, -in_x_origin);
+        const int32_t ker_x_end = std::min(filter_width, input_width - in_x_origin);
 
         for (int i = 0; i < output_depth; ++i) {
           acc_buf[i] = 0;
