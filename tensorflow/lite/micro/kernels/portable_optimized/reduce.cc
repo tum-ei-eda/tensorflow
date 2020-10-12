@@ -25,8 +25,6 @@ limitations under the License.
 #include "tensorflow/lite/micro/kernels/portable_optimized/reduce_op_data.h"
 #include "tensorflow/lite/micro/kernels/static_init_support.h"
 
-#define MAX(A, B) ((A) > (B) ? (A) : (B))
-#define MIN(A, B) ((A) < (B) ? (A) : (B))
 
 namespace tflite {
 namespace ops {
@@ -341,7 +339,7 @@ inline void MeanUInt8(const tflite::MeanParams& op_params, OpData* op_data,
 
   constexpr int32_t kMinValue = std::numeric_limits<uint8_t>::min();
   constexpr int32_t kMaxValue = std::numeric_limits<uint8_t>::max();
-
+  // TODO(ifx/krusejakob) Can this be folded or shifted into the coding space to only have one multiplication?
   int32_t bias =
       output_zp -
       MultiplyByQuantizedMultiplier(input_zp, op_data->multiplier, op_data->shift);
@@ -367,13 +365,12 @@ inline void MeanUInt8(const tflite::MeanParams& op_params, OpData* op_data,
 // It does so in two stages, first calculates the sum of elements along the axis
 // then divides it by the number of element in axis for quantized values.
 template <typename T, typename U>
-inline bool QuantizedMeanOrSum(OpData* op_data, const T* input_data,  const int* input_dims,
+inline bool QuantizedMean(OpData* op_data, const T* input_data,  const int* input_dims,
                                const int input_num_dims, T* output_data,
                                const int* output_dims,
                                const int output_num_dims, const int* axis,
                                const int num_axis_dimensions, bool keep_dims,
-                               int* temp_index, int* resolved_axis, U* temp_sum,
-                               bool compute_sum) {
+                               int* temp_index, int* resolved_axis, U* temp_sum) {
 
   int32_t input_zp = op_data->input_zp;
   int32_t output_zp = op_data->output_zp;
@@ -417,26 +414,14 @@ inline bool QuantizedMeanOrSum(OpData* op_data, const T* input_data,  const int*
   }
 
   if (num_elements_in_axis > 0) {
-
-    if (compute_sum) {
-      // TODO(b/116341117): Eliminate float and do this completely in 8bit.
-      const int32_t bias = MultiplyByQuantizedMultiplier(
-          static_cast<int32_t>(-input_zp*num_elements_in_axis), op_data->multiplier, op_data->shift);
-      for (size_t idx = 0; idx < num_outputs; ++idx) {
-        const int32_t value =
-            static_cast<int32_t>(MultiplyByQuantizedMultiplier(temp_sum[idx] , op_data->multiplier, op_data->shift) + bias) +
-            output_zp;
-        output_data[idx] = static_cast<T>(value);
-      }
-    } else {
-      const int32_t bias = MultiplyByQuantizedMultiplier(
-                static_cast<int32_t>(-input_zp), op_data->multiplier, op_data->shift);
-      for (size_t idx = 0; idx < num_outputs; ++idx) {
-        int32_t result = MIN((MultiplyByQuantizedMultiplier(temp_sum[idx],op_data->mean_multiplier, op_data->mean_shift) + bias) + output_zp,
-            std::numeric_limits<T>::max());
-        result = MAX(result, std::numeric_limits<T>::min());
-        output_data[idx] = static_cast<T>(result);
-      }
+    const int32_t bias = MultiplyByQuantizedMultiplier(
+              static_cast<int32_t>(-input_zp), op_data->multiplier, op_data->shift);
+    for (size_t idx = 0; idx < num_outputs; ++idx) {
+      int32_t result = std::min
+          ((MultiplyByQuantizedMultiplier(temp_sum[idx],op_data->mean_multiplier, op_data->mean_shift) + bias) + output_zp,
+          static_cast<int32_t>(std::numeric_limits<T>::max()));
+      result = std::max(result, static_cast<int32_t>(std::numeric_limits<T>::min()));
+      output_data[idx] = static_cast<T>(result);
     }
   }
   return true;
@@ -518,13 +503,13 @@ TfLiteStatus ReduceInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_dat
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
   int32_t* temp_buffer = op_data->temp_buffer;
-  bool return_status = QuantizedMeanOrSum(
+  bool return_status = QuantizedMean(
       op_data, tflite::micro::GetTensorData<int8_t>(input),
       input->dims->data, input->dims->size,
       tflite::micro::GetTensorData<int8_t>(output),
       output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
-      temp_index, resolved_axis, temp_buffer, false);
+      temp_index, resolved_axis, temp_buffer);
   return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
@@ -570,11 +555,11 @@ TfLiteStatus ReduceUInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_da
   int temp_index[kMaxNumberOfAxis];
   int resolved_axis[kMaxNumberOfReducedAxis];
   int32_t* temp_buffer = op_data->temp_buffer;
-  bool return_status = QuantizedMeanOrSum(
+  bool return_status = QuantizedMean(
       op_data, tflite::micro::GetTensorData<uint8_t>(input), input->dims->data, input->dims->size,
       tflite::micro::GetTensorData<uint8_t>(output), output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
-      temp_index, resolved_axis, temp_buffer, false);
+      temp_index, resolved_axis, temp_buffer);
   return return_status == true ? kTfLiteOk : kTfLiteError;
 }
 
@@ -623,7 +608,6 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
   }
 
   TF_LITE_ENSURE_OK(context, PrepareSimple(context, node));
-  // TODO(b/144955155): Support uint8_t(b/144955155) and int8_t(b/144955018)
 
   const TfLiteEvalTensor* axis = tflite::micro::GetEvalInput(context, node, 1);
   int axis_count = static_cast<int>(ElementCount(*axis->dims));
