@@ -339,7 +339,7 @@ inline void MeanUInt8(const tflite::MeanParams& op_params, OpData* op_data,
 
   constexpr int32_t kMinValue = std::numeric_limits<uint8_t>::min();
   constexpr int32_t kMaxValue = std::numeric_limits<uint8_t>::max();
-  // TODO(ifx/krusejakob) Can this be folded or shifted into the coding space to only have one multiplication?
+
   int32_t bias =
       output_zp -
       MultiplyByQuantizedMultiplier(input_zp, op_data->multiplier, op_data->shift);
