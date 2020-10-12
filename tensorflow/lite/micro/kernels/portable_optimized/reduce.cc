@@ -375,11 +375,6 @@ inline bool QuantizedMeanOrSum(OpData* op_data, const T* input_data,  const int*
                                int* temp_index, int* resolved_axis, U* temp_sum,
                                bool compute_sum) {
 
-  /*
-   * WARNING: This function is entirely untested by tensorflow
-   * TODO(ifx/krusejakob): Write tests for this function
-   */
-
   int32_t input_zp = op_data->input_zp;
   int32_t output_zp = op_data->output_zp;
   // Reset output data.
