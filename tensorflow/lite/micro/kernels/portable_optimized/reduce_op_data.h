@@ -66,9 +66,9 @@ struct OpData {
   int temp_buffer_idx;
   int32_t* temp_buffer;
   int input_zp;
-  float input_scale;
+  int32_t mean_multiplier;
+  int mean_shift;
   int output_zp;
-  float output_scale;
   EvalVariantFptr eval_function;
 };
 

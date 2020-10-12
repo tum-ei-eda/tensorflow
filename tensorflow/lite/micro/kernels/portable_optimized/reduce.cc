@@ -62,9 +62,9 @@ static CppItems *static_opdata(OpData &od, size_t buf_size)
        << od.temp_buffer_idx
        << tb
        << od.input_zp
-       << od.input_scale
+       << od.mean_multiplier
+       << od.mean_shift
        << od.output_zp
-       << od.output_scale
        << od.eval_function;
 
   return init;
@@ -172,10 +172,53 @@ inline bool ReduceSumImpl(const In* input_data, const int* input_dims,
 }
 
 template <typename T>
-inline void Mean(const tflite::MeanParams& op_params,
+inline void Mean(const tflite::MeanParams& op_params, OpData* op_data,
                  const RuntimeShape& unextended_input_shape,
                  const T* input_data,
                  const RuntimeShape& unextended_output_shape, T* output_data) {
+
+  // Current implementation only supports dimension equals 4 and simultaneous
+  // reduction over width and height.
+  TFLITE_CHECK_EQ(unextended_input_shape.DimensionsCount(), 4);
+  TFLITE_CHECK_LE(unextended_output_shape.DimensionsCount(), 4);
+  const RuntimeShape input_shape =
+      RuntimeShape::ExtendedShape(4, unextended_input_shape);
+  const RuntimeShape output_shape =
+      RuntimeShape::ExtendedShape(4, unextended_output_shape);
+
+  const int output_batch = output_shape.Dims(0);
+  const int output_height = output_shape.Dims(1);
+  const int output_width = output_shape.Dims(2);
+  const int output_depth = output_shape.Dims(3);
+
+  const int input_height = input_shape.Dims(1);
+  const int input_width = input_shape.Dims(2);
+
+  TFLITE_CHECK_EQ(op_params.axis_count, 2);
+  TFLITE_CHECK((op_params.axis[0] == 1 && op_params.axis[1] == 2) ||
+               (op_params.axis[0] == 2 && op_params.axis[1] == 1));
+  TFLITE_CHECK_EQ(output_height, 1);
+  TFLITE_CHECK_EQ(output_width, 1);
+
+  for (int out_b = 0; out_b < output_batch; ++out_b) {
+    for (int out_d = 0; out_d < output_depth; ++out_d) {
+      int32_t value = 0;
+      for (int in_h = 0; in_h < input_height; ++in_h) {
+        for (int in_w = 0; in_w < input_width; ++in_w) {
+          value += input_data[Offset(input_shape, out_b, in_h, in_w, out_d)];
+        }
+      }
+      output_data[Offset(output_shape, out_b, 0, 0, out_d)] =
+          MultiplyByQuantizedMultiplier(value, op_data->multiplier, op_data->shift);
+    }
+  }
+}
+
+template<>
+inline void Mean<float>(const tflite::MeanParams& op_params, OpData* op_data,
+                 const RuntimeShape& unextended_input_shape,
+                 const float* input_data,
+                 const RuntimeShape& unextended_output_shape, float* output_data) {
 
   // Current implementation only supports dimension equals 4 and simultaneous
   // reduction over width and height.
@@ -268,12 +311,10 @@ inline bool Mean(const T* input_data, const int* input_dims,
   return true;
 }
 
-inline void MeanUInt8(const tflite::MeanParams& op_params,
+inline void MeanUInt8(const tflite::MeanParams& op_params, OpData* op_data,
                  const RuntimeShape& unextended_input_shape,
-                 const uint8_t* input_data, int32_t input_zero_point,
-                 float input_scale, const RuntimeShape& unextended_output_shape,
-                 uint8_t* output_data, int32_t output_zero_point,
-                 float output_scale) {
+                 const uint8_t* input_data,  const RuntimeShape& unextended_output_shape,
+                 uint8_t* output_data) {
 
   // Current implementation only supports dimension equals 4 and simultaneous
   // reduction over width and height.
@@ -289,7 +330,8 @@ inline void MeanUInt8(const tflite::MeanParams& op_params,
   const int output_depth = output_shape.Dims(3);
   const int input_height = input_shape.Dims(1);
   const int input_width = input_shape.Dims(2);
-  const float num_elements_in_axis = input_width * input_height;
+  int32_t input_zp = op_data->input_zp;
+  int32_t output_zp = op_data->output_zp;
 
   TFLITE_CHECK_EQ(op_params.axis_count, 2);
   TFLITE_CHECK((op_params.axis[0] == 1 && op_params.axis[1] == 2) ||
@@ -301,14 +343,9 @@ inline void MeanUInt8(const tflite::MeanParams& op_params,
   constexpr int32_t kMaxValue = std::numeric_limits<uint8_t>::max();
 
   int32_t bias =
-      output_zero_point -
-      static_cast<int32_t>(input_zero_point * input_scale / output_scale);
-  double real_scale =
-      static_cast<double>(input_scale / (num_elements_in_axis * output_scale));
+      output_zp -
+      MultiplyByQuantizedMultiplier(input_zp, op_data->multiplier, op_data->shift);
 
-  int32_t multiplier;
-  int shift;
-  QuantizeMultiplier(real_scale, &multiplier, &shift);
   for (int out_b = 0; out_b < output_batch; ++out_b) {
     for (int out_d = 0; out_d < output_depth; ++out_d) {
       int32_t acc = 0;
@@ -317,7 +354,7 @@ inline void MeanUInt8(const tflite::MeanParams& op_params,
           acc += input_data[Offset(input_shape, out_b, in_h, in_w, out_d)];
         }
       }
-      acc = MultiplyByQuantizedMultiplier(acc, multiplier, shift);
+      acc = MultiplyByQuantizedMultiplier(acc, op_data->mean_multiplier, op_data->mean_shift);
       acc += bias;
       acc = std::min(std::max(acc, kMinValue), kMaxValue);
       output_data[Offset(output_shape, out_b, 0, 0, out_d)] =
@@ -330,16 +367,21 @@ inline void MeanUInt8(const tflite::MeanParams& op_params,
 // It does so in two stages, first calculates the sum of elements along the axis
 // then divides it by the number of element in axis for quantized values.
 template <typename T, typename U>
-inline bool QuantizedMeanOrSum(const T* input_data, int32_t input_zero_point,
-                               float input_scale, const int* input_dims,
+inline bool QuantizedMeanOrSum(OpData* op_data, const T* input_data,  const int* input_dims,
                                const int input_num_dims, T* output_data,
-                               int32_t output_zero_point, float output_scale,
                                const int* output_dims,
                                const int output_num_dims, const int* axis,
                                const int num_axis_dimensions, bool keep_dims,
                                int* temp_index, int* resolved_axis, U* temp_sum,
                                bool compute_sum) {
 
+  /*
+   * WARNING: This function is entirely untested by tensorflow
+   * TODO(ifx/krusejakob): Write tests for this function
+   */
+
+  int32_t input_zp = op_data->input_zp;
+  int32_t output_zp = op_data->output_zp;
   // Reset output data.
   size_t num_outputs = 1;
   for (int idx = 0; idx < output_num_dims; ++idx) {
@@ -380,27 +422,24 @@ inline bool QuantizedMeanOrSum(const T* input_data, int32_t input_zero_point,
   }
 
   if (num_elements_in_axis > 0) {
-    const float scale = input_scale / output_scale;
+
     if (compute_sum) {
       // TODO(b/116341117): Eliminate float and do this completely in 8bit.
-      const float bias =
-          -input_zero_point * scale * num_elements_in_axis + 0.5f;
+      const int32_t bias = MultiplyByQuantizedMultiplier(
+          static_cast<int32_t>(-input_zp*num_elements_in_axis), op_data->multiplier, op_data->shift);
       for (size_t idx = 0; idx < num_outputs; ++idx) {
-        const U value =
-            static_cast<U>(TfLiteRound(temp_sum[idx] * scale + bias)) +
-            output_zero_point;
+        const int32_t value =
+            static_cast<int32_t>(MultiplyByQuantizedMultiplier(temp_sum[idx] , op_data->multiplier, op_data->shift) + bias) +
+            output_zp;
         output_data[idx] = static_cast<T>(value);
       }
     } else {
-      const float bias = -input_zero_point * scale + 0.5f;
+      const int32_t bias = MultiplyByQuantizedMultiplier(
+                static_cast<int32_t>(-input_zp), op_data->multiplier, op_data->shift);
       for (size_t idx = 0; idx < num_outputs; ++idx) {
-        float float_mean = static_cast<float>(temp_sum[idx]) /
-                           static_cast<float>(num_elements_in_axis);
-        float result = MIN(
-            std::round(float_mean * scale + bias) + output_zero_point,
-            static_cast<float>(std::numeric_limits<T>::max()));
-        result = MAX(result,
-                           static_cast<float>(std::numeric_limits<T>::min()));
+        int32_t result = MIN((MultiplyByQuantizedMultiplier(temp_sum[idx],op_data->mean_multiplier, op_data->mean_shift) + bias) + output_zp,
+            std::numeric_limits<T>::max());
+        result = MAX(result, std::numeric_limits<T>::min());
         output_data[idx] = static_cast<T>(result);
       }
     }
@@ -416,7 +455,7 @@ TfLiteStatus ReduceFloatKeepDims(TfLiteContext* context, OpData* op_data,
   tflite::MeanParams op_params;
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   ResolveAxis(tflite::micro::GetTensorData<int>(axis), num_axis, &op_params);
-  Mean(op_params, tflite::micro::GetTensorShape(input),
+  Mean(op_params, op_data, tflite::micro::GetTensorShape(input),
                       tflite::micro::GetTensorData<float>(input),
                       tflite::micro::GetTensorShape(output),
                       tflite::micro::GetTensorData<float>(output));
@@ -485,10 +524,10 @@ TfLiteStatus ReduceInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_dat
   int resolved_axis[kMaxNumberOfReducedAxis];
   int32_t* temp_buffer = op_data->temp_buffer;
   bool return_status = QuantizedMeanOrSum(
-      tflite::micro::GetTensorData<int8_t>(input), op_data->input_zp,
-      op_data->input_scale, input->dims->data, input->dims->size,
-      tflite::micro::GetTensorData<int8_t>(output), op_data->output_zp,
-      op_data->output_scale, output->dims->data, output->dims->size,
+      op_data, tflite::micro::GetTensorData<int8_t>(input),
+      input->dims->data, input->dims->size,
+      tflite::micro::GetTensorData<int8_t>(output),
+      output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer, false);
   return return_status == true ? kTfLiteOk : kTfLiteError;
@@ -502,12 +541,10 @@ TfLiteStatus ReduceUInt8KeepDims(TfLiteContext* context, OpData* op_data,
   tflite::MeanParams op_params;
   int num_axis = static_cast<int>(ElementCount(*axis->dims));
   ResolveAxis(tflite::micro::GetTensorData<int>(axis), num_axis, &op_params);
-  MeanUInt8(op_params, tflite::micro::GetTensorShape(input),
+  MeanUInt8(op_params, op_data, tflite::micro::GetTensorShape(input),
                       tflite::micro::GetTensorData<uint8_t>(input),
-                      op_data->input_zp, op_data->input_scale,
                       tflite::micro::GetTensorShape(output),
-                      tflite::micro::GetTensorData<uint8_t>(output),
-                      op_data->output_zp, op_data->output_scale);
+                      tflite::micro::GetTensorData<uint8_t>(output));
   return kTfLiteOk;
 }
 
@@ -539,10 +576,8 @@ TfLiteStatus ReduceUInt8ChangeDimsAndQuant(TfLiteContext* context, OpData* op_da
   int resolved_axis[kMaxNumberOfReducedAxis];
   int32_t* temp_buffer = op_data->temp_buffer;
   bool return_status = QuantizedMeanOrSum(
-      tflite::micro::GetTensorData<uint8_t>(input), op_data->input_zp,
-      op_data->input_scale, input->dims->data, input->dims->size,
-      tflite::micro::GetTensorData<uint8_t>(output), op_data->output_zp,
-      op_data->output_scale, output->dims->data, output->dims->size,
+      op_data, tflite::micro::GetTensorData<uint8_t>(input), input->dims->data, input->dims->size,
+      tflite::micro::GetTensorData<uint8_t>(output), output->dims->data, output->dims->size,
       tflite::micro::GetTensorData<int>(axis), num_axis, params->keep_dims,
       temp_index, resolved_axis, temp_buffer, false);
   return return_status == true ? kTfLiteOk : kTfLiteError;
@@ -582,9 +617,14 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
     void* raw = context->AllocatePersistentBuffer(context, sizeof(int32_t) * output_size);
     op_data->temp_buffer = reinterpret_cast<int32_t*>(raw);
     op_data->input_zp = input->params.zero_point;
-    op_data->input_scale = input->params.scale;
+    auto input_shape = tflite::micro::GetTensorShape(tflite::micro::GetEvalInput(context, node, 0));
+    const int input_height = input_shape.Dims(1);
+    const int input_width = input_shape.Dims(2);
+    const float num_elements_in_axis = input_width * input_height;
+    double real_scale =
+          static_cast<double>(input->params.scale / (num_elements_in_axis * output->params.scale));
+    QuantizeMultiplier(real_scale, &op_data->mean_multiplier, &op_data->mean_shift);
     op_data->output_zp = output->params.zero_point;
-    op_data->output_scale = output->params.scale;
   }
 
   TF_LITE_ENSURE_OK(context, PrepareSimple(context, node));
@@ -622,7 +662,7 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
         op_data->eval_function =
             TFLM_SET_KERNEL_VARIANT(ReduceInt8KeepDims);
       } else if (op_data->input_zp == op_data->output_zp &&
-                 op_data->input_scale == op_data->output_scale) {
+          input->params.scale == output->params.scale) {
         op_data->eval_function =
             TFLM_SET_KERNEL_VARIANT(ReduceInt8ChangeDims);
       } else {
@@ -635,7 +675,7 @@ TfLiteStatus PrepareMeanOrSum(TfLiteContext* context, TfLiteNode* node) {
         op_data->eval_function =
             TFLM_SET_KERNEL_VARIANT(ReduceUInt8KeepDims);
       } else if (op_data->input_zp == op_data->output_zp &&
-                 op_data->input_scale == op_data->output_scale) {
+          input->params.scale == output->params.scale) {
         op_data->eval_function =
             TFLM_SET_KERNEL_VARIANT(ReduceUInt8ChangeDims);
       } else {
