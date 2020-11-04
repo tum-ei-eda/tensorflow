@@ -298,23 +298,17 @@ TfLiteStatus EvalQuantizedPerChannel(
 
   // arm_convolve_wrapper_s8 dispatches the optimized kernel accordingly with
   // the parameters passed
-  riscv_status status = riscv_convolve_s8(&ctx, 
-                                          &conv_params, 
-                                          &quant_params, 
-                                          &input_dims,
-                                          GetTensorData<int8_t>(input), 
-                                          &filter_dims, 
-                                          GetTensorData<int8_t>(filter),
-                                          &bias_dims, 
-                                          GetTensorData<int32>(bias), 
-                                          &output_dims,
-                                          GetTensorData<int8_t>(output));
-
-  if (status == RISCV_MATH_SUCCESS) {
-    return kTfLiteOk;
-  } else {
-    return kTfLiteError;
-  }
+  riscv_convolve_s8(&ctx, 
+                    &conv_params, 
+                    &quant_params, 
+                    &input_dims,
+                    GetTensorData<int8_t>(input), 
+                    &filter_dims, 
+                    GetTensorData<int8_t>(filter),
+                    &bias_dims, 
+                    GetTensorData<int32>(bias), 
+                    &output_dims,
+                    GetTensorData<int8_t>(output));
 
   return kTfLiteOk;
 }

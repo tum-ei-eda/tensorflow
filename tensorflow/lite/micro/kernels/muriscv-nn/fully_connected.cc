@@ -125,16 +125,13 @@ TfLiteStatus EvalQuantizedInt8(TfLiteContext* context, TfLiteNode* node,
     buf = reinterpret_cast<int16_t*>(raw);
   }
 
-  TF_LITE_ENSURE_EQ(
-      context,
       riscv_fully_connected_s8(
           GetTensorData<int8_t>(input), GetTensorData<int8_t>(filter),
           accum_depth, output_depth, batches, -input->params.zero_point,
           -filter->params.zero_point, data->output_multiplier,
           -data->output_shift, output->params.zero_point,
           GetTensorData<int32_t>(bias), GetTensorData<int8_t>(output),
-          data->output_activation_min, data->output_activation_max, buf),
-      RISCV_MATH_SUCCESS);
+          data->output_activation_min, data->output_activation_max, buf);
 #else
 #pragma message( \
     "CMSIS-NN optimization for fully_connected not available for this target. Using reference kernel.")

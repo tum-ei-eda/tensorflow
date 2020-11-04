@@ -134,14 +134,11 @@ TfLiteStatus AverageEvalInt8(TfLiteContext* context, const TfLiteNode* node,
     scratch_buffer = reinterpret_cast<int16_t*>(raw);
   }
 
-  TF_LITE_ENSURE_EQ(
-      context,
       riscv_avgpool_s8(input_height, input_width, output_height, output_width,
                      stride_height, stride_width, filter_height, filter_width,
                      padding_height, padding_width, activation_min,
                      activation_max, depth, GetTensorData<int8_t>(input),
-                     scratch_buffer, GetTensorData<int8_t>(output)),
-      RISCV_MATH_SUCCESS);
+                     scratch_buffer, GetTensorData<int8_t>(output));
   return kTfLiteOk;
 }
 
@@ -224,15 +221,12 @@ TfLiteStatus MaxEvalInt8(TfLiteContext* context, const TfLiteNode* node,
     scratch_buffer = reinterpret_cast<int16_t*>(raw);
   }
 
-  TF_LITE_ENSURE_EQ(
-      context,
       riscv_max_pool_s8(input_height, input_width, output_height,
                           output_width, stride_height, stride_width,
                           filter_height, filter_width, padding_height,
                           padding_width, activation_min, activation_max, depth,
                           GetTensorData<int8_t>(input), scratch_buffer,
-                          GetTensorData<int8_t>(output)),
-      RISCV_MATH_SUCCESS);
+                          GetTensorData<int8_t>(output));
   return kTfLiteOk;
 }
 
