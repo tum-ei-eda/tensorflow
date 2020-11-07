@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 #include "tensorflow/lite/kernels/internal/reference/pooling.h"
 
-// These are headers from the RISCV CMSIS-NN library.
 #include "riscv_nnfunctions.hpp"  // NOLINT
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/kernels/internal/reference/integer_ops/pooling.h"
@@ -269,7 +268,6 @@ TfLiteStatus AverageEval(TfLiteContext* context, TfLiteNode* node) {
   auto* params = reinterpret_cast<TfLitePoolParams*>(node->builtin_data);
   OpData data;
 
-  // Todo: make 'input' const once CMSIS-reuse is fixed
   TfLiteTensor* input = &context->tensors[flatbuffers::EndianScalar(
       node->inputs->data[kInputTensor])];
   TfLiteTensor* output = GetOutput(context, node, kOutputTensor);

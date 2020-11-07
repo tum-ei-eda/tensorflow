@@ -291,13 +291,8 @@ TfLiteStatus EvalQuantizedPerChannel(
   auto* buffer_idx = reinterpret_cast<int*>(node->user_data);
   if (*buffer_idx > -1) {
     ctx.buf = context->GetScratchBuffer(context, *buffer_idx);
-    // Note: ctx.size is currently not used in riscv-nn.
-    // The buffer should be allocated in the Prepare function through
-    // arm_convolve_wrapper_s8_get_buffer_size
   }
 
-  // arm_convolve_wrapper_s8 dispatches the optimized kernel accordingly with
-  // the parameters passed
   riscv_convolve_s8(&ctx, 
                     &conv_params, 
                     &quant_params, 
