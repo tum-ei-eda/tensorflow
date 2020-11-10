@@ -301,7 +301,7 @@ TfLiteStatus EvalQuantizedPerChannel(
                     &filter_dims, 
                     GetTensorData<int8_t>(filter),
                     &bias_dims, 
-                    GetTensorData<int32>(bias), 
+                    GetTensorData<int32_t>(bias), 
                     &output_dims,
                     GetTensorData<int8_t>(output));
 
