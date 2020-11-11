@@ -57,24 +57,13 @@ cc_library(
     ],
     deps = [
         ":tfjs_inc_gen",
-        "@llvm-project//llvm:support",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Dialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:SideEffects",
         "@llvm-project//mlir:StandardOps",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
-    ],
-    alwayslink = 1,
-)
-
-cc_library(
-    name = "tensorflow_js_dialect_registration",
-    srcs = [
-        "ir/dialect_registration.cc",
-    ],
-    deps = [
-        ":tensorflow_js",
     ],
     alwayslink = 1,
 )
@@ -107,9 +96,8 @@ cc_library(
     ],
     deps = [
         ":tensorflow_js",
-        ":tensorflow_js_dialect_registration",
         "//tensorflow/compiler/mlir/tensorflow",
-        "@llvm-project//llvm:support",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Analysis",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
@@ -129,9 +117,9 @@ cc_library(
         ":tfjs_optimize",
         "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/mlir/tensorflow:decode_constant_pass",
-        "//tensorflow/compiler/mlir/tensorflow:tensorflow_dialect_registration",
         "//tensorflow/compiler/mlir/tensorflow:tensorflow_passes",
         "//tensorflow/compiler/mlir/tensorflow:tf_graph_optimization_pass",
+        "//tensorflow/compiler/mlir/tensorflow:tf_saved_model_passes",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Transforms",
@@ -148,12 +136,10 @@ cc_library(
     ],
     deps = [
         ":tensorflow_js",
-        ":tensorflow_js_dialect_registration",
         "//tensorflow/compiler/mlir/tensorflow",
         "//tensorflow/compiler/mlir/tensorflow:convert_graphdef",
         "//tensorflow/compiler/mlir/tensorflow:export_utils",
         "//tensorflow/compiler/mlir/tensorflow:mlir_roundtrip_flags",
-        "//tensorflow/compiler/mlir/tensorflow:tensorflow_dialect_registration",
         "//tensorflow/compiler/xla:statusor",
         "//tensorflow/core:framework",
         "//tensorflow/core:graph",
@@ -190,8 +176,8 @@ cc_library(
         "//tensorflow/stream_executor/lib",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@llvm-project//llvm:support",
-        "@llvm-project//mlir:AllPassesAndDialects",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:AllPassesAndDialectsNoRegistration",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Pass",
@@ -229,9 +215,26 @@ tf_cc_binary(
         "//tensorflow/core/platform:errors",
         "//tensorflow/stream_executor/lib",
         "@com_google_absl//absl/strings",
-        "@llvm-project//llvm:support",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:Support",
+    ],
+)
+
+tf_cc_binary(
+    name = "tfjs-opt",
+    srcs = [
+        "tfjs_opt.cc",
+    ],
+    deps = [
+        ":tensorflow_js",
+        ":tensorflow_js_passes",
+        "//tensorflow/compiler/mlir:init_mlir",
+        "//tensorflow/compiler/mlir/lite:tensorflow_lite_legalize_tf",
+        "//tensorflow/compiler/mlir/tensorflow",
+        "@llvm-project//mlir:AllPassesAndDialectsNoRegistration",
+        "@llvm-project//mlir:MlirOptLib",
+        "@llvm-project//mlir:StandardOps",
     ],
 )

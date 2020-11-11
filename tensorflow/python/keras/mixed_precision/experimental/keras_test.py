@@ -29,6 +29,7 @@ from tensorflow.python.distribute import mirrored_strategy
 from tensorflow.python.eager import backprop
 from tensorflow.python.eager import context
 from tensorflow.python.eager import def_function
+from tensorflow.python.framework import config as tf_config
 from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import dtypes
 from tensorflow.python.keras import backend
@@ -98,7 +99,7 @@ default_strategy_fn = distribution_strategy_context.get_strategy
 
 def create_mirrored_strategy():
   """Create a MirroredStrategy, using a GPU if it is available."""
-  if context.num_gpus() >= 1:
+  if tf_config.list_logical_devices('GPU'):
     return mirrored_strategy.MirroredStrategy(['cpu:0', 'gpu:0'])
   else:
     return mirrored_strategy.MirroredStrategy(['cpu:0'])
@@ -106,7 +107,8 @@ def create_mirrored_strategy():
 
 def create_central_storage_strategy():
   """Create a CentralStorageStrategy, using a GPU if it is available."""
-  compute_devices = ['cpu:0', 'gpu:0'] if context.num_gpus() >= 1 else ['cpu:0']
+  compute_devices = ['cpu:0', 'gpu:0'] if (
+      tf_config.list_logical_devices('GPU')) else ['cpu:0']
   return central_storage_strategy.CentralStorageStrategy(
       compute_devices, parameter_device='cpu:0')
 
@@ -227,9 +229,9 @@ class KerasLayerTest(keras_parameterized.TestCase):
         self.assertEqual(layer.v.dtype, dtypes.float64)
 
   def test_error_passing_policy_string_to_layer(self):
-    with self.assertRaisesRegexp(
+    with self.assertRaisesRegex(
         TypeError, "Cannot convert value 'mixed_float16' to a "
-                   "TensorFlow DType"):
+        'TensorFlow DType'):
       # This is not allowed, as otherwise a "mixed_float16" policy could be
       # created without an API call that has the name "experimental" in it.
       mp_test_util.MultiplyLayer(dtype='mixed_float16')
@@ -413,12 +415,12 @@ class KerasLayerTest(keras_parameterized.TestCase):
 
   def test_unsupported_strategy(self):
     strategy = create_central_storage_strategy()
-    with strategy.scope(), self.assertRaisesRegexp(
+    with strategy.scope(), self.assertRaisesRegex(
         ValueError, 'Mixed precision is not supported with the '
-                    'tf.distribute.Strategy: CentralStorageStrategy. Either '
-                    'stop using mixed precision by removing the use of the '
-                    '"mixed_float16" policy or use a different Strategy, e.g. '
-                    'a MirroredStrategy.'):
+        'tf.distribute.Strategy: CentralStorageStrategy. Either '
+        'stop using mixed precision by removing the use of the '
+        '"mixed_float16" policy or use a different Strategy, e.g. '
+        'a MirroredStrategy.'):
       mp_test_util.MultiplyLayer(dtype=policy.Policy('mixed_float16'))
     # Non-mixed policies are fine
     mp_test_util.MultiplyLayer(dtype=policy.Policy('float64'))
@@ -851,7 +853,7 @@ class KerasModelTest(keras_parameterized.TestCase):
         error_msg = 'Use a `tf.keras` Optimizer instead'
       else:
         error_msg = 'optimizer" must be an instance of '
-      with self.assertRaisesRegexp(ValueError, error_msg):
+      with self.assertRaisesRegex(ValueError, error_msg):
         model.compile(optimizers.SGD(1.), 'mse')
 
   @combinations.generate(combinations.combine(mode=['graph', 'eager']))

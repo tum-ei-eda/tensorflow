@@ -17,6 +17,7 @@ load("//tensorflow:tensorflow.bzl", "tf_grpc_cc_dependency")  # buildifier: disa
 load(
     "//tensorflow/core/platform:build_config.bzl",
     "tf_kernel_tests_linkstatic",
+    "tf_protos_profiler_service",
 )
 load(
     "//tensorflow/core/platform:build_config_root.bzl",
@@ -315,6 +316,7 @@ cc_library(
         ":grpc_worker_cache",
         ":grpc_worker_service",
         ":rpc_rendezvous_mgr",
+        "//tensorflow/core/nccl:collective_communicator",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
@@ -335,9 +337,10 @@ cc_library(
         "//tensorflow/core/distributed_runtime:worker_cache_wrapper",
         "//tensorflow/core/distributed_runtime:worker_env",
         "//tensorflow/core/distributed_runtime/rpc/eager:grpc_eager_service_impl",
+        "//tensorflow/core/profiler/rpc:profiler_service_impl",
         tf_grpc_dependency(),
         tf_grpc_cc_dependency(),
-    ],
+    ] + tf_protos_profiler_service(),
     alwayslink = 1,
 )
 

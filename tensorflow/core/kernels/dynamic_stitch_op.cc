@@ -147,11 +147,11 @@ void DynamicStitchGPUImpl(const Eigen::GpuDevice& gpu_device,
       const int32 first_dim_size,                                 \
       const GpuDeviceArrayStruct<int32>& input_indices,           \
       const GpuDeviceArrayStruct<const T*>& input_ptrs, T* output);
-TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
-TF_CALL_complex64(REGISTER_GPU);
-TF_CALL_complex128(REGISTER_GPU);
-TF_CALL_int64(REGISTER_GPU);
+
 TF_CALL_int32(REGISTER_GPU);
+TF_CALL_int64(REGISTER_GPU);
+TF_CALL_GPU_NUMBER_TYPES(REGISTER_GPU);
+TF_CALL_COMPLEX_TYPES(REGISTER_GPU);
 #undef REGISTER_GPU
 
 template <class T>
@@ -357,33 +357,12 @@ TF_CALL_QUANTIZED_TYPES(REGISTER_DYNAMIC_STITCH);
                               .HostMemory("merged"),     \
                           ParallelDynamicStitchOpCPU<type>)
 
-TF_CALL_GPU_NUMBER_TYPES(REGISTER_DYNAMIC_STITCH_GPU);
-TF_CALL_complex64(REGISTER_DYNAMIC_STITCH_GPU);
-TF_CALL_complex128(REGISTER_DYNAMIC_STITCH_GPU);
-TF_CALL_int64(REGISTER_DYNAMIC_STITCH_GPU);
 TF_CALL_int32(REGISTER_DYNAMIC_STITCH_GPU);
+TF_CALL_int64(REGISTER_DYNAMIC_STITCH_GPU);
+TF_CALL_GPU_NUMBER_TYPES(REGISTER_DYNAMIC_STITCH_GPU);
+TF_CALL_COMPLEX_TYPES(REGISTER_DYNAMIC_STITCH_GPU);
 #undef REGISTER_DYNAMIC_STITCH_GPU
 
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 
-#ifdef TENSORFLOW_USE_SYCL
-#define REGISTER_DYNAMIC_STITCH_SYCL(type)               \
-  REGISTER_KERNEL_BUILDER(Name("DynamicStitch")          \
-                              .Device(DEVICE_SYCL)       \
-                              .TypeConstraint<type>("T") \
-                              .HostMemory("indices")     \
-                              .HostMemory("data")        \
-                              .HostMemory("merged"),     \
-                          DynamicStitchOpCPU<type>)      \
-  REGISTER_KERNEL_BUILDER(Name("ParallelDynamicStitch")  \
-                              .Device(DEVICE_SYCL)       \
-                              .TypeConstraint<type>("T") \
-                              .HostMemory("indices")     \
-                              .HostMemory("data")        \
-                              .HostMemory("merged"),     \
-                          ParallelDynamicStitchOpCPU<type>)
-
-TF_CALL_POD_STRING_TYPES(REGISTER_DYNAMIC_STITCH_SYCL);
-#undef REGISTER_DYNAMIC_STITCH_SYCL
-#endif  // TENSORFLOW_USE_SYCL
 }  // namespace tensorflow

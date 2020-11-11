@@ -22,6 +22,7 @@ import collections
 import re
 
 from tensorflow.core.framework import function_pb2
+from tensorflow.core.protobuf import saved_object_graph_pb2
 from tensorflow.python.eager import def_function
 from tensorflow.python.eager import function as function_lib
 from tensorflow.python.framework import func_graph as func_graph_lib
@@ -141,9 +142,18 @@ def _deserialize_function_spec_as_nonmethod(function_spec_proto, coder):
       kwonlydefaults=typeless_fullargspec.kwonlydefaults,
       annotations=typeless_fullargspec.annotations)
   input_signature = coder.decode_proto(function_spec_proto.input_signature)
+
+  # See `tf.function` and the ExperimentalCompile proto for details.
+  experimental_compile = {
+      saved_object_graph_pb2.ExperimentalCompile.NONE: None,
+      saved_object_graph_pb2.ExperimentalCompile.TRUE: True,
+      saved_object_graph_pb2.ExperimentalCompile.FALSE: False,
+  }.get(function_spec_proto.experimental_compile)
+
   return function_lib.FunctionSpec(fullargspec=fullargspec,
                                    is_method=False,
-                                   input_signature=input_signature)
+                                   input_signature=input_signature,
+                                   experimental_compile=experimental_compile)
 
 
 # TODO(allenl): The fact that we can't derive ConcreteFunction calling
@@ -176,7 +186,8 @@ class RestoredFunction(def_function.Function):
   def __init__(self, python_function, name, function_spec, concrete_functions):
     # TODO(mdan): We may enable autograph once exceptions are supported.
     super(RestoredFunction, self).__init__(
-        python_function, name, autograph=False)
+        python_function, name, autograph=False,
+        experimental_compile=function_spec.experimental_compile)
     self.concrete_functions = concrete_functions
     self._function_spec = function_spec
 
@@ -400,8 +411,11 @@ def fix_node_def(node_def, functions, shared_name_suffix, debug_name):
   if node_def.op in functions:
     node_def.op = functions[node_def.op].name
   for _, attr_value in node_def.attr.items():
-    if attr_value.func.name:
+    if attr_value.WhichOneof("value") == "func":
       attr_value.func.name = functions[attr_value.func.name].name
+    elif attr_value.WhichOneof("value") == "list":
+      for fn in attr_value.list.func:
+        fn.name = functions[fn.name].name
 
   # Fix old table creation bug.
   if node_def.op == "HashTableV2":
@@ -471,6 +485,10 @@ def _list_function_deps(fdef, library_function_names):
       for _, attr_value in node_def.attr.items():
         if attr_value.WhichOneof("value") == "func":
           deps.add(attr_value.func.name)
+        elif attr_value.WhichOneof("value") == "list":
+          for fn in attr_value.list.func:
+            deps.add(fn.name)
+
   return deps
 
 

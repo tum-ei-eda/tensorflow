@@ -47,9 +47,9 @@ namespace toco {
 
 void PopulateConversionLogHelper(const toco::ModelFlags& model_flags,
                                  toco::TocoFlags* toco_flags,
-                                 const string& input_contents_txt,
-                                 const string& output_file_contents_txt,
-                                 const string& error_message,
+                                 const std::string& input_contents_txt,
+                                 const std::string& output_file_contents_txt,
+                                 const std::string& error_message,
                                  GraphVizDumpOptions* dump_options) {
   // Make sure the graphviz file will be dumped under the same folder.
   dump_options->dump_graphviz = toco_flags->conversion_summary_dir();
@@ -118,11 +118,6 @@ PyObject* TocoConvert(PyObject* model_flags_proto_txt_raw,
     PyErr_SetString(PyExc_ValueError, "Toco flags are invalid.");
     return nullptr;
   }
-  std::string input_contents_txt = ConvertArg(input_contents_txt_raw, &error);
-  if (error) {
-    PyErr_SetString(PyExc_ValueError, "Input GraphDef is invalid.");
-    return nullptr;
-  }
 
   // Use TOCO to produce new outputs.
   toco::ModelFlags model_flags;
@@ -153,10 +148,18 @@ PyObject* TocoConvert(PyObject* model_flags_proto_txt_raw,
   }
 
   tensorflow::GraphDef graph_def;
-  if (!graph_def.ParseFromString(input_contents_txt)) {
-    PyErr_SetString(PyExc_ValueError,
-                    "Failed to convert GraphDef to Python String.");
-    return nullptr;
+  std::string input_contents_txt;
+  if (model_flags.saved_model_dir().empty()) {
+    input_contents_txt = ConvertArg(input_contents_txt_raw, &error);
+    if (error) {
+      PyErr_SetString(PyExc_ValueError, "Input GraphDef is invalid.");
+      return nullptr;
+    }
+    if (!graph_def.ParseFromString(input_contents_txt)) {
+      PyErr_SetString(PyExc_ValueError,
+                      "Failed to convert GraphDef to Python String.");
+      return nullptr;
+    }
   }
 
   auto& dump_options = *GraphVizDumpOptions::singleton();
@@ -167,7 +170,7 @@ PyObject* TocoConvert(PyObject* model_flags_proto_txt_raw,
     dump_options.dump_graphviz_video = toco_flags.dump_graphviz_include_video();
   }
 
-  string output_file_contents_txt;
+  std::string output_file_contents_txt;
   tensorflow::Status status;
   int64 arithmetic_ops_count;
 
@@ -221,7 +224,7 @@ PyObject* TocoGetPotentiallySupportedOps() {
   std::vector<std::string> supported_ops = toco::GetPotentiallySupportedOps();
   PyObject* list = PyList_New(supported_ops.size());
   for (size_t i = 0; i < supported_ops.size(); ++i) {
-    const string& op = supported_ops[i];
+    const std::string& op = supported_ops[i];
     PyObject* op_dict = PyDict_New();
     PyDict_SetItemString(op_dict, "op", PyUnicode_FromString(op.c_str()));
     PyList_SetItem(list, i, op_dict);

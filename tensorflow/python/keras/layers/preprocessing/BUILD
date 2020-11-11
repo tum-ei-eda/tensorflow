@@ -18,6 +18,12 @@ package(
 
 exports_files(["LICENSE"])
 
+filegroup(
+    name = "all_py_srcs",
+    srcs = glob(["*.py"]),
+    visibility = ["//tensorflow/python/keras/google/private_tf_api_test:__pkg__"],
+)
+
 py_library(
     name = "preprocessing",
     srcs = [
@@ -46,8 +52,10 @@ py_library(
     ],
     srcs_version = "PY2AND3",
     deps = [
+        "//tensorflow/python:boosted_trees_ops",
         "//tensorflow/python:math_ops",
         "//tensorflow/python/keras/engine:base_layer",
+        "//tensorflow/python/ops/parallel_for:control_flow_ops",
     ],
 )
 
@@ -326,6 +334,7 @@ tf_py_test(
 distribute_py_test(
     name = "category_encoding_distribution_test",
     srcs = ["category_encoding_distribution_test.py"],
+    disable_mlir_bridge = False,
     main = "category_encoding_distribution_test.py",
     python_version = "PY3",
     tags = [
@@ -353,6 +362,23 @@ distribute_py_test(
     tpu_tags = [
         "no_oss",  # b/155502591
     ],
+    deps = [
+        ":category_crossing",
+        "//tensorflow/python/distribute:combinations",
+        "//tensorflow/python/distribute:strategy_combinations",
+        "//tensorflow/python/keras",
+    ],
+)
+
+distribute_py_test(
+    name = "image_preprocessing_distribution_test",
+    srcs = ["image_preprocessing_distribution_test.py"],
+    main = "image_preprocessing_distribution_test.py",
+    python_version = "PY3",
+    tags = [
+        "multi_and_single_gpu",
+    ],
+    tpu_tags = ["no_oss"],
     deps = [
         ":category_crossing",
         "//tensorflow/python/distribute:combinations",
@@ -406,6 +432,7 @@ cuda_py_test(
 tpu_py_test(
     name = "hashing_distribution_test",
     srcs = ["hashing_distribution_test.py"],
+    disable_mlir_bridge = False,
     main = "hashing_distribution_test.py",
     python_version = "PY3",
     tags = ["multi_and_single_gpu"],
@@ -436,6 +463,7 @@ tf_py_test(
 tpu_py_test(
     name = "index_lookup_distribution_test",
     srcs = ["index_lookup_distribution_test.py"],
+    disable_mlir_bridge = False,
     main = "index_lookup_distribution_test.py",
     python_version = "PY3",
     tags = ["no_oss"],
@@ -456,6 +484,7 @@ cuda_py_test(
     deps = [
         ":image_preprocessing",
         "//tensorflow/python:client_testlib",
+        "//tensorflow/python/keras:testing_utils",
         "//third_party/py/numpy",
         "@absl_py//absl/testing:parameterized",
     ],
@@ -524,6 +553,9 @@ tf_py_test(
     srcs = ["text_vectorization_test.py"],
     python_version = "PY3",
     shard_count = 4,
+    tags = [
+        "noasan",  #TODO(b/161376526): Enable when bug fix lands.
+    ],
     deps = [
         ":preprocessing_test_utils",
         ":text_vectorization",
@@ -571,6 +603,9 @@ tf_py_test(
     size = "medium",
     srcs = ["string_lookup_test.py"],
     python_version = "PY3",
+    tags = [
+        "notsan",  #b/168758821
+    ],
     deps = [
         ":preprocessing_test_utils",
         ":string_lookup",

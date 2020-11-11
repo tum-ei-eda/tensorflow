@@ -79,9 +79,9 @@ tf_cc_test(
     deps = [
         ":message_wrappers",
         "//tensorflow/core:protos_all_cc",
-        "//tensorflow/core:tensor_testutil",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
+        "//tensorflow/core/framework:tensor_testutil",
     ],
 )
 
@@ -105,6 +105,7 @@ cc_library(
         "//tensorflow/core:lib_internal",
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:worker_proto_cc",
+        "@com_google_absl//absl/types:optional",
     ],
 )
 
@@ -262,10 +263,10 @@ tf_cc_test(
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
-        "//tensorflow/core:tensor_testutil",
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:worker_proto_cc",
+        "//tensorflow/core/framework:tensor_testutil",
     ],
 )
 
@@ -439,7 +440,8 @@ cc_library(
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:worker_proto_cc",
         "//tensorflow/core/debug",
-        "//tensorflow/core/profiler/lib:traceme",
+        "//tensorflow/core/profiler/lib:connected_traceme",
+        "//tensorflow/core/profiler/lib:traceme_encode",
     ],
 )
 
@@ -520,6 +522,7 @@ tf_cc_test(
         "//tensorflow/core:test",
         "//tensorflow/core:test_main",
         "//tensorflow/core:worker_proto_cc",
+        "//tensorflow/core/nccl:collective_communicator",
     ],
 )
 
@@ -536,6 +539,7 @@ cc_library(
         "//tensorflow/core:lib_internal",  # protobuf::Any
         "//tensorflow/core:protos_all_cc",
         "//tensorflow/core:worker_proto_cc",
+        "@com_google_absl//absl/memory",
     ],
 )
 
@@ -568,7 +572,10 @@ cc_library(
         ":device_resolver_distributed",
         ":worker_cache",
         "//tensorflow/core:core_cpu_internal",
+        "//tensorflow/core:framework",
         "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core/platform:errors",
+        "//tensorflow/core/platform:status",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -603,6 +610,7 @@ tf_cc_test(
         "//tensorflow/core:test_main",
         "//tensorflow/core:testlib",
         "//tensorflow/core/kernels:collective_ops",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 
@@ -615,6 +623,8 @@ cc_library(
         "//tensorflow/core:core_cpu_internal",
         "//tensorflow/core:framework",
         "//tensorflow/core:protos_all_cc",
+        "//tensorflow/core/platform:errors",
+        "//tensorflow/core/platform:status",
         "@com_google_absl//absl/container:flat_hash_map",
     ],
 )

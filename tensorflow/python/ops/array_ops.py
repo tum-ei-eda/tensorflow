@@ -505,16 +505,20 @@ setdiff1d.__doc__ = gen_array_ops.list_diff.__doc__
 def broadcast_dynamic_shape(shape_x, shape_y):
   """Computes the shape of a broadcast given symbolic shapes.
 
-  When shape_x and shape_y are Tensors representing shapes (i.e. the result of
-  calling tf.shape on another Tensor) this computes a Tensor which is the shape
-  of the result of a broadcasting op applied in tensors of shapes shape_x and
-  shape_y.
-
-  For example, if shape_x is [1, 2, 3] and shape_y is [5, 1, 3], the result is a
-  Tensor whose value is [5, 2, 3].
+  When `shape_x` and `shape_y` are Tensors representing shapes (i.e. the result
+  of calling tf.shape on another Tensor) this computes a Tensor which is the
+  shape of the result of a broadcasting op applied in tensors of shapes
+  `shape_x` and `shape_y`.
 
   This is useful when validating the result of a broadcasting operation when the
   tensors do not have statically known shapes.
+
+  Example:
+
+  >>> shape_x = (1, 2, 3)
+  >>> shape_y = (5, 1, 3)
+  >>> tf.broadcast_dynamic_shape(shape_x, shape_y)
+  <tf.Tensor: shape=(3,), dtype=int32, numpy=array([5, 2, 3], ...>
 
   Args:
     shape_x: A rank 1 integer `Tensor`, representing the shape of x.
@@ -522,6 +526,10 @@ def broadcast_dynamic_shape(shape_x, shape_y):
 
   Returns:
     A rank 1 integer `Tensor` representing the broadcasted shape.
+
+  Raises:
+    InvalidArgumentError: If the two shapes are incompatible for
+    broadcasting.
   """
   return gen_array_ops.broadcast_args(shape_x, shape_y)
 
@@ -531,15 +539,23 @@ def broadcast_dynamic_shape(shape_x, shape_y):
 def broadcast_static_shape(shape_x, shape_y):
   """Computes the shape of a broadcast given known shapes.
 
-  When shape_x and shape_y are fully known TensorShapes this computes a
-  TensorShape which is the shape of the result of a broadcasting op applied in
-  tensors of shapes shape_x and shape_y.
+  When `shape_x` and `shape_y` are fully known `TensorShape`s this computes a
+  `TensorShape` which is the shape of the result of a broadcasting op applied in
+  tensors of shapes `shape_x` and `shape_y`.
 
-  For example, if shape_x is [1, 2, 3] and shape_y is [5, 1, 3], the result is a
-  TensorShape whose value is [5, 2, 3].
+  For example, if shape_x is `TensorShape([1, 2, 3])` and shape_y is
+  `TensorShape([5, 1, 3])`, the result is a TensorShape whose value is
+  `TensorShape([5, 2, 3])`.
 
   This is useful when validating the result of a broadcasting operation when the
   tensors have statically known shapes.
+
+  Example:
+
+  >>> shape_x = tf.TensorShape([1, 2, 3])
+  >>> shape_y = tf.TensorShape([5, 1 ,3])
+  >>> tf.broadcast_static_shape(shape_x, shape_y)
+  TensorShape([5, 2, 3])
 
   Args:
     shape_x: A `TensorShape`
@@ -558,13 +574,18 @@ def broadcast_static_shape(shape_x, shape_y):
 @dispatch.add_dispatch_support
 def shape_v2(input, out_type=dtypes.int32, name=None):
   # pylint: disable=redefined-builtin
-  """Returns the shape of a tensor.
-  
+  """Returns a tensor containing the shape of the input tensor.
+
   See also `tf.size`, `tf.rank`.
 
   `tf.shape` returns a 1-D integer tensor representing the shape of `input`.
+  For a scalar input, the tensor returned has a shape of (0,) and its value is
+  the empty vector (i.e. []).
 
   For example:
+
+  >>> tf.shape(1.)
+  <tf.Tensor: shape=(0,), dtype=int32, numpy=array([], dtype=int32)>
 
   >>> t = tf.constant([[[1, 1, 1], [2, 2, 2]], [[3, 3, 3], [4, 4, 4]]])
   >>> tf.shape(t)
@@ -575,13 +596,13 @@ def shape_v2(input, out_type=dtypes.int32, name=None):
 
   >>> a = tf.keras.layers.Input((None, 10))
   >>> tf.shape(a)
-  <tf.Tensor ... shape=(3,) dtype=int32>
+  <... shape=(3,) dtype=int32...>
 
   In these cases, using `tf.Tensor.shape` will return more informative results.
 
   >>> a.shape
   TensorShape([None, None, 10])
-  
+
   (The first `None` represents the as yet unknown batch size.)
 
   `tf.shape` and `Tensor.shape` should be identical in eager mode.  Within
@@ -869,6 +890,8 @@ def _is_undefined_dimension(d):
   return isinstance(d, tensor_shape.Dimension) and d.value is None
 
 
+@tf_export("__operators__.getitem", v1=[])
+@dispatch.add_dispatch_support
 def _slice_helper(tensor, slice_spec, var=None):
   """Overload for Tensor.__getitem__.
 
@@ -914,6 +937,15 @@ def _slice_helper(tensor, slice_spec, var=None):
     - An implicit ellipsis is placed at the end of the `slice_spec`
     - NumPy advanced indexing is currently not supported.
 
+  Purpose in the API:
+
+    This method is exposed in TensorFlow's API so that library developers
+    can register dispatching for `Tensor.__getitem__` to allow it to handle
+    custom composite tensors & other custom objects.
+
+    The API symbol is not intended to be called by users directly and does
+    appear in TensorFlow's generated documentation.
+
   Args:
     tensor: An ops.Tensor object.
     slice_spec: The arguments to Tensor.__getitem__.
@@ -928,6 +960,8 @@ def _slice_helper(tensor, slice_spec, var=None):
     TypeError: If the slice indices aren't int, slice, ellipsis,
       tf.newaxis or scalar int32/int64 tensors.
   """
+  tensor = ops.convert_to_tensor(tensor)
+
   if isinstance(slice_spec, bool) or \
   (isinstance(slice_spec, ops.Tensor) and slice_spec.dtype == dtypes.bool) or \
   (isinstance(slice_spec, np.ndarray) and slice_spec.dtype == bool):
@@ -1650,13 +1684,6 @@ def boolean_mask(tensor, mask, name="boolean_mask", axis=None):
 
   Numpy equivalent is `tensor[mask]`.
 
-  ```python
-  # 1-D example
-  tensor = [0, 1, 2, 3]
-  mask = np.array([True, False, True, False])
-  boolean_mask(tensor, mask)  # [0, 2]
-  ```
-
   In general, `0 < dim(mask) = K <= dim(tensor)`, and `mask`'s shape must match
   the first K dimensions of `tensor`'s shape.  We then have:
     `boolean_mask(tensor, mask)[i, j1,...,jd] = tensor[i1,...,iK,j1,...,jd]`
@@ -1669,9 +1696,23 @@ def boolean_mask(tensor, mask, name="boolean_mask", axis=None):
   ragged tensors, and can be used if you need to preserve the masked dimensions
   of `tensor` (rather than flattening them, as `tf.boolean_mask` does).
 
+  Examples:
+
+  ```python
+  # 1-D example
+  tensor = [0, 1, 2, 3]
+  mask = np.array([True, False, True, False])
+  tf.boolean_mask(tensor, mask)  # [0, 2]
+
+  # 2-D example
+  tensor = [[1, 2], [3, 4], [5, 6]]
+  mask = np.array([True, False, True])
+  tf.boolean_mask(tensor, mask)  # [[1, 2], [5, 6]]
+  ```
+
   Args:
-    tensor:  N-D tensor.
-    mask:  K-D boolean tensor, K <= N and K must be known statically.
+    tensor:  N-D Tensor.
+    mask:  K-D boolean Tensor, K <= N and K must be known statically.
     name:  A name for this operation (optional).
     axis:  A 0-D int Tensor representing the axis in `tensor` to mask from. By
       default, axis is 0 which will mask from the first dimension. Otherwise K +
@@ -1683,15 +1724,6 @@ def boolean_mask(tensor, mask, name="boolean_mask", axis=None):
 
   Raises:
     ValueError:  If shapes do not conform.
-
-  Examples:
-
-  ```python
-  # 2-D example
-  tensor = [[1, 2], [3, 4], [5, 6]]
-  mask = np.array([True, False, True])
-  boolean_mask(tensor, mask)  # [[1, 2], [5, 6]]
-  ```
   """
 
   def _apply_mask_1d(reshaped_tensor, mask, axis=None):
@@ -1746,13 +1778,6 @@ def boolean_mask_v2(tensor, mask, axis=None, name="boolean_mask"):
 
   Numpy equivalent is `tensor[mask]`.
 
-  ```python
-  # 1-D example
-  tensor = [0, 1, 2, 3]
-  mask = np.array([True, False, True, False])
-  boolean_mask(tensor, mask)  # [0, 2]
-  ```
-
   In general, `0 < dim(mask) = K <= dim(tensor)`, and `mask`'s shape must match
   the first K dimensions of `tensor`'s shape.  We then have:
     `boolean_mask(tensor, mask)[i, j1,...,jd] = tensor[i1,...,iK,j1,...,jd]`
@@ -1765,9 +1790,23 @@ def boolean_mask_v2(tensor, mask, axis=None, name="boolean_mask"):
   ragged tensors, and can be used if you need to preserve the masked dimensions
   of `tensor` (rather than flattening them, as `tf.boolean_mask` does).
 
+  Examples:
+
+  >>> tensor = [0, 1, 2, 3]  # 1-D example
+  >>> mask = np.array([True, False, True, False])
+  >>> tf.boolean_mask(tensor, mask)
+  <tf.Tensor: shape=(2,), dtype=int32, numpy=array([0, 2], dtype=int32)>
+
+  >>> tensor = [[1, 2], [3, 4], [5, 6]] # 2-D example
+  >>> mask = np.array([True, False, True])
+  >>> tf.boolean_mask(tensor, mask)
+  <tf.Tensor: shape=(2, 2), dtype=int32, numpy=
+  array([[1, 2],
+         [5, 6]], dtype=int32)>
+
   Args:
-    tensor:  N-D tensor.
-    mask:  K-D boolean tensor, K <= N and K must be known statically.
+    tensor:  N-D Tensor.
+    mask:  K-D boolean Tensor, K <= N and K must be known statically.
     axis:  A 0-D int Tensor representing the axis in `tensor` to mask from. By
       default, axis is 0 which will mask from the first dimension. Otherwise K +
       axis <= N.
@@ -2438,7 +2477,6 @@ def matrix_diag(diagonal,
 @tf_export("linalg.diag_part", v1=["linalg.diag_part", "matrix_diag_part"])
 @dispatch.add_dispatch_support
 @deprecation.deprecated_endpoints("matrix_diag_part")
-@dispatch.add_dispatch_support
 def matrix_diag_part(
     input,  # pylint:disable=redefined-builtin
     name="diag_part",
@@ -2574,6 +2612,51 @@ def matrix_diag_part(
 
   return gen_array_ops.matrix_diag_part_v3(
       input=input, k=k, padding_value=padding_value, align=align, name=name)
+
+
+@tf_export(
+    "linalg.tensor_diag_part", v1=["linalg.tensor_diag_part", "diag_part"])
+@dispatch.add_dispatch_support
+@deprecation.deprecated_endpoints("diag_part")
+def tensor_diag_part(
+    input,  # pylint:disable=redefined-builtin
+    name=None):
+  """Returns the diagonal part of the tensor.
+
+  This operation returns a tensor with the `diagonal` part
+  of the `input`. The `diagonal` part is computed as follows:
+
+  Assume `input` has dimensions `[D1,..., Dk, D1,..., Dk]`, then the output is a
+  tensor of rank `k` with dimensions `[D1,..., Dk]` where:
+
+  `diagonal[i1,..., ik] = input[i1, ..., ik, i1,..., ik]`.
+
+  For a rank 2 tensor, `linalg.diag_part` and `linalg.tensor_diag_part`
+  produce the same result. For rank 3 and higher, linalg.diag_part extracts
+  the diagonal of each inner-most matrix in the tensor. An example where
+  they differ is given below.
+
+  >>> x = [[[[1111,1112],[1121,1122]],
+  ...       [[1211,1212],[1221,1222]]],
+  ...      [[[2111, 2112], [2121, 2122]],
+  ...       [[2211, 2212], [2221, 2222]]]
+  ...      ]
+  >>> tf.linalg.tensor_diag_part(x)
+  <tf.Tensor: shape=(2, 2), dtype=int32, numpy=
+  array([[1111, 1212],
+         [2121, 2222]], dtype=int32)>
+  >>> tf.linalg.diag_part(x).shape
+  TensorShape([2, 2, 2])
+
+  Args:
+    input: A `Tensor` with rank `2k`.
+    name: A name for the operation (optional).
+
+  Returns:
+    A Tensor containing diagonals of `input`. Has the same type as `input`, and
+    rank `k`.
+  """
+  return gen_array_ops.diag_part(input=input, name=name)
 
 
 @tf_export("linalg.set_diag", v1=["linalg.set_diag", "matrix_set_diag"])
@@ -2772,6 +2855,8 @@ def zeros(shape, dtype=dtypes.float32, name=None):
       zero = False
     elif dtype == dtypes.string:
       zero = ""
+    elif dtype.is_quantized:
+      zero = np.zeros([]).astype(dtype.as_numpy_dtype)
     else:
       zero = 0
 
@@ -3021,7 +3106,12 @@ def ones(shape, dtype=dtypes.float32, name=None):
   """
   dtype = dtypes.as_dtype(dtype).base_dtype
   with ops.name_scope(name, "ones", [shape]) as name:
-    one = True if dtype == dtypes.bool else 1
+    if dtype == dtypes.bool:
+      one = True
+    elif dtype.is_quantized:
+      one = np.ones([]).astype(dtype.as_numpy_dtype)
+    else:
+      one = 1
     if not isinstance(shape, ops.Tensor):
       try:
         if not context.executing_eagerly():
@@ -3173,6 +3263,7 @@ def sparse_placeholder(dtype, shape=None, name=None):
       # `SparseTensor`
       dense_shape_default = tensor_shape.TensorShape(
           tuple(None if dim == -1 else dim for dim in shape))
+      shape = tuple(tensor_shape.dimension_value(dim) for dim in shape)
       shape = tuple(-1 if dim is None else dim for dim in shape)
       shape = ops.convert_to_tensor(
           shape, dtype=dtypes.int64, name=default_shape_name)
@@ -3536,7 +3627,37 @@ def edit_distance(hypothesis, truth, normalize=True, name="edit_distance"):
   You can normalize the edit distance by length of `truth` by setting
   `normalize` to true.
 
-  For example, given the following input:
+  For example:
+
+  Given the following input,
+  * `hypothesis` is a `tf.SparseTensor` of shape `[2, 1, 1]`
+  * `truth` is a `tf.SparseTensor` of shape `[2, 2, 2]`
+
+  >>> hypothesis = tf.SparseTensor(
+  ...   [[0, 0, 0],
+  ...    [1, 0, 0]],
+  ...   ["a", "b"],
+  ...   (2, 1, 1))
+  >>> truth = tf.SparseTensor(
+  ...   [[0, 1, 0],
+  ...    [1, 0, 0],
+  ...    [1, 0, 1],
+  ...    [1, 1, 0]],
+  ...    ["a", "b", "c", "a"],
+  ...    (2, 2, 2))
+  >>> tf.edit_distance(hypothesis, truth, normalize=True)
+  <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+  array([[inf, 1. ],
+         [0.5, 1. ]], dtype=float32)>
+
+  The operaton returns a dense Tensor of shape `[2, 2]` with
+  edit distances normalized by `truth` lengths.
+
+  **Note**: It is possible to calculate edit distance between two
+  sparse tensors with variable-length values. However, attempting to create
+  them while eager execution is enabled will result in a `ValueError`.
+
+  For the following  inputs,
 
   ```python
   # 'hypothesis' is a tensor of shape `[2, 1]` with variable-length values:
@@ -3562,15 +3683,10 @@ def edit_distance(hypothesis, truth, normalize=True, name="edit_distance"):
       (2, 2, 2))
 
   normalize = True
-  ```
 
-  This operation would return the following:
-
-  ```python
-  # 'output' is a tensor of shape `[2, 2]` with edit distances normalized
-  # by 'truth' lengths.
-  output ==> [[inf, 1.0],  # (0,0): no truth, (0,1): no hypothesis
-             [0.5, 1.0]]  # (1,0): addition, (1,1): no hypothesis
+  # The output would be a dense Tensor of shape `(2,)`, with edit distances
+  noramlized by 'truth' lengths.
+  # output => array([0., 0.5], dtype=float32)
   ```
 
   Args:
@@ -4185,8 +4301,7 @@ def sequence_mask(lengths, maxlen=None, dtype=dtypes.bool, name=None):
     # authoritative type. Whenever maxlen fits into tf.int32, so do the lengths.
     matrix = gen_math_ops.cast(expand_dims(lengths, -1), maxlen.dtype)
     result = row_vector < matrix
-
-    if dtype is None or result.dtype.base_dtype == dtype.base_dtype:
+    if dtype is None or result.dtype.is_compatible_with(dtype):
       return result
     else:
       return gen_math_ops.cast(result, dtype)
@@ -4400,7 +4515,7 @@ def where_v2(condition, x=None, y=None, name=None):
 
   The `condition` tensor acts as a mask that chooses whether the corresponding
   element / row in the output should be taken from `x`
-  (if the element in `condition is True) or `y` (if it is false).
+  (if the element in `condition` is True) or `y` (if it is false).
 
   >>> tf.where([True, False, False, True], [1,2,3,4], [100,200,300,400])
   <tf.Tensor: shape=(4,), dtype=int32, numpy=array([  1, 200, 300,   4],
@@ -4422,11 +4537,28 @@ def where_v2(condition, x=None, y=None, name=None):
   <tf.Tensor: shape=(4,), dtype=int32, numpy=array([100, 100, 100, 100],
   dtype=int32)>
 
+  Note that if the gradient of either branch of the tf.where generates
+  a NaN, then the gradient of the entire tf.where will be NaN.
+  A workaround is to use an inner tf.where to ensure the function has
+  no asymptote, and to avoid computing a value whose gradient is NaN by
+  replacing dangerous inputs with safe inputs.
+
+  Instead of this,
+
+  >>> y = tf.constant(-1, dtype=tf.float32)
+  >>> tf.where(y > 0, tf.sqrt(y), y)
+  <tf.Tensor: shape=(), dtype=float32, numpy=-1.0>
+
+  Use this
+
+  >>> tf.where(y > 0, tf.sqrt(tf.where(y > 0, y, 1)), y)
+  <tf.Tensor: shape=(), dtype=float32, numpy=-1.0>
+
   Args:
     condition: A `tf.Tensor` of type `bool`
     x: If provided, a Tensor which is of the same type as `y`, and has a shape
       broadcastable with `condition` and `y`.
-    y: If provided, a Tensor which is of the same type as `y`, and has a shape
+    y: If provided, a Tensor which is of the same type as `x`, and has a shape
       broadcastable with `condition` and `x`.
     name: A name of the operation (optional).
 
@@ -4524,6 +4656,46 @@ def reverse_sequence_v2(input,
                         seq_axis=None,
                         batch_axis=None,
                         name=None):
+  """Reverses variable length slices.
+
+  This op first slices `input` along the dimension `batch_axis`, and for
+  each slice `i`, reverses the first `seq_lengths[i]` elements along the
+  dimension `seq_axis`.
+
+  The elements of `seq_lengths` must obey `seq_lengths[i] <=
+  input.dims[seq_axis]`, and `seq_lengths` must be a vector of length
+  `input.dims[batch_axis]`.
+
+  The output slice `i` along dimension `batch_axis` is then given by
+  input slice `i`, with the first `seq_lengths[i]` slices along
+  dimension `seq_axis` reversed.
+
+  Example usage:
+
+  >>> seq_lengths = [7, 2, 3, 5]
+  >>> input = [[1, 2, 3, 4, 5, 0, 0, 0], [1, 2, 0, 0, 0, 0, 0, 0],
+  ...          [1, 2, 3, 4, 0, 0, 0, 0], [1, 2, 3, 4, 5, 6, 7, 8]]
+  >>> output = tf.reverse_sequence(input, seq_lengths, seq_axis=1, batch_axis=0)
+  >>> output
+  <tf.Tensor: shape=(4, 8), dtype=int32, numpy=
+  array([[0, 0, 5, 4, 3, 2, 1, 0],
+         [2, 1, 0, 0, 0, 0, 0, 0],
+         [3, 2, 1, 4, 0, 0, 0, 0],
+         [5, 4, 3, 2, 1, 6, 7, 8]], dtype=int32)>
+
+  Args:
+    input: A `Tensor`. The input to reverse.
+    seq_lengths: A `Tensor`. Must be one of the following types: `int32`,
+      `int64`. 1-D with length `input.dims(batch_axis)` and `max(seq_lengths) <=
+      input.dims(seq_axis)`
+    seq_axis: An `int`. The dimension which is partially reversed.
+    batch_axis: An optional `int`. Defaults to `0`. The dimension along which
+      reversal is performed.
+    name: A name for the operation (optional).
+
+  Returns:
+    A Tensor. Has the same type as input.
+  """
   return gen_array_ops.reverse_sequence(
       input=input,
       seq_lengths=seq_lengths,
@@ -4531,7 +4703,6 @@ def reverse_sequence_v2(input,
       batch_dim=batch_axis,
       name=name)
 
-reverse_sequence_v2.__doc__ = reverse_sequence.__doc__
 # pylint: enable=redefined-builtin
 
 
@@ -5396,9 +5567,9 @@ def extract_image_patches_v2(images, sizes, strides, rates, padding, name=None):
   ```
 
   Args:
-    images: A 4-D Tensor with shape `[batch, in_rows, in_cols, depth]
-    sizes: The size of the extracted patches. Must be [1, size_rows, size_cols,
-      1].
+    images: A 4-D Tensor with shape `[batch, in_rows, in_cols, depth]`.
+    sizes: The size of the extracted patches. Must be
+      `[1, size_rows, size_cols, 1]`.
     strides: A 1-D Tensor of length 4. How far the centers of two consecutive
       patches are in the images. Must be: `[1, stride_rows, stride_cols, 1]`.
     rates: A 1-D Tensor of length 4. Must be: `[1, rate_rows, rate_cols, 1]`.

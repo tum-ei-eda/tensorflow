@@ -23,6 +23,7 @@ import atexit
 import collections
 import contextlib
 import enum  # pylint: disable=g-bad-import-order
+import gzip
 import inspect
 import os
 from typing import List, Sequence, Tuple, Union
@@ -112,16 +113,17 @@ def _get_local_backends():
 
   _local_backends = collections.OrderedDict()
   for name, factory in _local_backend_factories.items():
-    logging.vlog(2, "Initializing backend '%s'" % name)
+    logging.vlog(1, "Initializing backend '%s'" % name)
     try:
       backend = factory()
-    except RuntimeError:
+    except RuntimeError as err:
       if name == 'cpu':
         # We always expect CPU to initialize successfully.
         raise
       else:
         # If the backend isn't built into the binary, or if it has no devices,
         # we expect a RuntimeError.
+        logging.vlog(1, "Error initializing backend '%s': %s" % (name, err))
         continue
     _local_backends[name] = backend
   return _local_backends
@@ -303,6 +305,7 @@ def computation_count():
 Device = _xla.Device
 CompileOptions = _xla.CompileOptions
 
+HostBufferSemantics = _xla.HostBufferSemantics
 
 # An Executable is a C++ class that duck types with the following API:
 # class Executable(object):
@@ -408,7 +411,7 @@ def window_padding_type_to_pad_values(padding_type, lhs_dims, rhs_dims,
 XlaBuilder = _xla.XlaBuilder
 XlaComputation = _xla.XlaComputation
 FftType = _xla.FftType
-Client = _xla.LocalClient
+Client = _xla.Client
 Buffer = _xla.Buffer
 Executable = _xla.Executable
 
@@ -680,6 +683,11 @@ def tracebacks(enabled=True):
     yield
   finally:
     Traceback.enabled = saved
+
+
+def heap_profile(client: Client) -> str:
+  """Returns a gzipped pprof protocol buffer containing a heap profile."""
+  return gzip.compress(client.heap_profile())
 
 
 # Perform one last garbage collection of deferred Python references. This is
