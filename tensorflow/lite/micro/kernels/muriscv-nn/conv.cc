@@ -123,6 +123,7 @@ void* Init(TfLiteContext* context, const char* buffer, size_t length) {
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
+#if defined(USE_PEXT) || (USE_VEXT)
   int32_t buf_size = 0;
 
   TFLITE_DCHECK(node->user_data != nullptr);
@@ -157,6 +158,8 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   output_dims.w = output->dims->data[2];
   output_dims.c = output_shape.Dims(3);
 
+  int* buffer_idx = reinterpret_cast<int*>(node->user_data);
+
   TF_LITE_ENSURE_STATUS(CalculateOpData(
       context, node, params, input_dims.w, input_dims.h, filter_dims.w,
       filter_dims.h, output_dims.w, output_dims.h, input->type, data));
@@ -182,13 +185,13 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
     buf_size = riscv_convolve_s8_get_buffer_size(
         &conv_params, &input_dims, &filter_dims, &output_dims);
   }
-
+  node->user_data = buffer_idx;
   if (buf_size > 0) {
-    TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(
-        context, buf_size, &data->buffer_idx));
+    TF_LITE_ENSURE_STATUS(context->RequestScratchBufferInArena(context, buf_size, buffer_idx));
   } else {
-    data->buffer_idx = -1;
+    *buffer_idx = -1;
   }
+#endif
   return kTfLiteOk;
 }
 
@@ -304,9 +307,12 @@ TfLiteStatus EvalQuantizedPerChannel(
   ctx.buf = nullptr;
   ctx.size = 0;
 
-  if (data.buffer_idx > -1) {
-    ctx.buf = context->GetScratchBuffer(context, data.buffer_idx);
+#if defined(USE_PEXT) || (USE_VEXT)
+  auto* buffer_idx = reinterpret_cast<int*>(node->user_data);
+  if (*buffer_idx > -1) {
+    ctx.buf = context->GetScratchBuffer(context, *buffer_idx);
   }
+#endif
 
     riscv_convolve_s8(
       &ctx, &conv_params, &quant_params, &input_dims,
